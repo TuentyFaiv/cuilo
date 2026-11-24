@@ -74,6 +74,7 @@ fn react_project() -> Result<tempfile::TempDir, Box<dyn Error>> {
 
 /// A pack cache for `--verify`, which keeps its copies there: below the build folder, since a cache
 /// in the shared temp folder is refused.
+#[cfg(unix)]
 fn private_cache() -> Result<tempfile::TempDir, Box<dyn Error>> {
 	Ok(tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR"))?)
 }

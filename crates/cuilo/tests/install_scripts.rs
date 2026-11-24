@@ -5,7 +5,7 @@
 use std::error::Error;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::Command;
 
 use cuilo_core::brand;
 use cuilo_core::model::Digest;
@@ -66,6 +66,7 @@ fn release(dir: &Path, binary: &str, served: &Served) -> Result<PathBuf, Box<dyn
 #[cfg(unix)]
 mod shell {
 	use std::os::unix::fs::PermissionsExt as _;
+	use std::process::Output;
 
 	use super::*;
 

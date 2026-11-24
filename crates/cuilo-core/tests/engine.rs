@@ -11,6 +11,7 @@ use cuilo_core::history::HistoryError;
 use cuilo_core::model::{Glob, Permissions};
 use cuilo_core::patch::{Patch, PatchError, PatchKind, Patched, Patcher};
 use cuilo_core::plan::{Action, ProblemKind};
+#[cfg(unix)]
 use cuilo_core::workspace::ExternalPatcher;
 use cuilo_core::{Engine, EngineError, Event, MemoryFs, Pack, PieceRequest, RelPath, UserConfig, Value, Values};
 
