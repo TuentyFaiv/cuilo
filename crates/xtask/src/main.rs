@@ -1,5 +1,7 @@
 //! Repository automation: `cargo xtask <task>`, running the same checks as CI.
 
+mod release;
+
 use std::env;
 use std::fmt;
 use std::process::{Command, ExitCode};
@@ -15,7 +17,16 @@ Tasks:
   deny    Check dependencies with cargo-deny (requires cargo-deny)
   js      Check JS/JSON formatting and lints with Biome (requires bun)
   ci      Run fmt, lint, doc, test, deny and js in order
-  schema  Regenerate the JSON Schemas in schemas/";
+  schema  Regenerate the JSON Schemas in schemas/
+
+Release tasks:
+  version                   Print the version every channel ships
+  release-check             Check that every channel agrees, and nothing still blocks a release
+  download-url              Print the download host the channels fetch from
+  channels <latest> <pre>   Print the channel files this version moves forward, given the
+                            versions they name now (empty for none)
+  npm <binaries> <out>      Write the npm packages from the release binaries
+  formula <SHA256SUMS>      Print the Homebrew formula for this version";
 
 /// Repository task made of one or more commands.
 #[derive(Clone, Copy, Debug)]
@@ -62,7 +73,7 @@ impl Task {
 				Step::cargo(&[
 					"clippy",
 					"--package",
-					"tfverse-packs",
+					"cuilo-packs",
 					"--all-targets",
 					"--no-default-features",
 					"--locked",
@@ -79,8 +90,8 @@ impl Task {
 			Self::Deny => vec![Step::cargo(&["deny", "--all-features", "check"])],
 			Self::Js => vec![Step::new("bunx", &["biome", "ci", "."])],
 			Self::Schema => vec![
-				Step::cargo(&["test", "--package", "tfverse-core", "--lib", "--locked", "schema::"])
-					.env("TFVERSE_UPDATE_SCHEMAS", "1"),
+				Step::cargo(&["test", "--package", "cuilo-core", "--lib", "--locked", "schema::"])
+					.env("CUILO_UPDATE_SCHEMAS", "1"),
 			],
 			Self::Ci => [Self::Fmt, Self::Lint, Self::Doc, Self::Test, Self::Deny, Self::Js]
 				.into_iter()
@@ -160,11 +171,68 @@ impl fmt::Display for StepError {
 	}
 }
 
+/// Runs a release task, or returns `None` when `name` is not one.
+fn release_task(name: &str, args: &[String]) -> Option<Result<(), String>> {
+	let path = |index: usize| {
+		args
+			.get(index)
+			.map(std::path::PathBuf::from)
+			.ok_or_else(|| format!("`{name}` needs more arguments\n\n{USAGE}"))
+	};
+	Some(match name {
+		"version" => {
+			println!("{}", release::VERSION);
+			Ok(())
+		}
+		"release-check" => release::check().and_then(|mut problems| {
+			problems.extend(release::blockers()?);
+			if problems.is_empty() {
+				Ok(())
+			} else {
+				Err(problems.join("\n"))
+			}
+		}),
+		"download-url" => release::download_url().map(|url| println!("{url}")),
+		"channels" => {
+			let current = |index: usize| args.get(index).map_or("", String::as_str);
+			release::channels(current(0), current(1)).map(|moved| {
+				for channel in moved {
+					println!("{channel}");
+				}
+			})
+		}
+		"npm" => path(0).and_then(|binaries| {
+			for dir in release::npm(&binaries, &path(1)?)? {
+				println!("{}", dir.display());
+			}
+			Ok(())
+		}),
+		"formula" => path(0).and_then(|sums| {
+			let text =
+				std::fs::read_to_string(&sums).map_err(|error| format!("could not read {}: {error}", sums.display()))?;
+			print!("{}", release::formula(&text)?);
+			Ok(())
+		}),
+		_ => return None,
+	})
+}
+
 fn main() -> ExitCode {
-	let Some(name) = env::args().nth(1) else {
+	let args: Vec<String> = env::args().skip(1).collect();
+	let Some(name) = args.first().cloned() else {
 		eprintln!("{USAGE}");
 		return ExitCode::FAILURE;
 	};
+
+	if let Some(result) = release_task(&name, &args[1..]) {
+		return match result {
+			Ok(()) => ExitCode::SUCCESS,
+			Err(error) => {
+				eprintln!("✗ {error}");
+				ExitCode::FAILURE
+			}
+		};
+	}
 
 	let Some(task) = Task::parse(&name) else {
 		eprintln!("unknown task `{name}`\n\n{USAGE}");
@@ -200,7 +268,7 @@ mod tests {
 			[
 				"fmt --all --check",
 				"clippy --workspace --all-targets --all-features --locked -- -D warnings",
-				"clippy --package tfverse-packs --all-targets --no-default-features --locked -- -D warnings",
+				"clippy --package cuilo-packs --all-targets --no-default-features --locked -- -D warnings",
 				"doc --workspace --all-features --no-deps --locked",
 				"test --workspace --all-features --locked",
 				"deny --all-features check",

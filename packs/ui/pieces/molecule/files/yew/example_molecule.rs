@@ -1,16 +1,16 @@
 use yew::prelude::*;
 
-// @tfverse if stack.tailwind
-const ROOT: &str = "grid gap-2";
+// @cuilo if stack.tailwind
+const ROOT: &str = "grid min-w-0 gap-2";
 const LABEL: &str = "text-sm font-semibold";
 const DESCRIPTION: &str = "text-sm text-zinc-500";
 const CONTENT: &str = "flex flex-wrap items-center gap-2";
-// @tfverse else
+// @cuilo else
 const ROOT: &str = "example-molecule";
 const LABEL: &str = "example-molecule__label";
 const DESCRIPTION: &str = "example-molecule__description";
 const CONTENT: &str = "example-molecule__content";
-// @tfverse end
+// @cuilo end
 
 /// Props of [`ExampleMolecule`].
 #[derive(Properties, PartialEq)]
@@ -34,9 +34,8 @@ pub fn ExampleMolecule(props: &ExampleMoleculeProps) -> Html {
 	let description_id = props.description.as_ref().map(|_| format!("{}-description", props.id));
 
 	html! {
-		<div
+		<fieldset
 			id={props.id.clone()}
-			role="group"
 			aria-labelledby={label_id.clone()}
 			aria-describedby={description_id.clone()}
 			class={ROOT}
@@ -46,6 +45,6 @@ pub fn ExampleMolecule(props: &ExampleMoleculeProps) -> Html {
 				<p id={description_id} class={DESCRIPTION}>{ description }</p>
 			}
 			<div class={CONTENT}>{ props.children.clone() }</div>
-		</div>
+		</fieldset>
 	}
 }

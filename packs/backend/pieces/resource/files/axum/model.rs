@@ -8,7 +8,7 @@ const MAX_NAME_LEN: usize = 120;
 
 /// An example item as stored and returned by the API.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[derive(sqlx::FromRow)] // @tfverse if stack.sqlx
+#[derive(sqlx::FromRow)] // @cuilo if stack.sqlx
 #[serde(rename_all = "camelCase")]
 pub struct ExampleItem {
 	pub id: Uuid,

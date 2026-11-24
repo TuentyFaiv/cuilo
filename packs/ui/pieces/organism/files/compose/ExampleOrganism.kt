@@ -14,9 +14,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-// @tfverse if !stack.compose-multiplatform
+// @cuilo if !stack.compose-multiplatform
 import androidx.compose.ui.tooling.preview.Preview
-// @tfverse end
+// @cuilo end
 import androidx.compose.ui.unit.dp
 
 /** A distinct, labelled region of the screen, built from molecules. */
@@ -41,7 +41,7 @@ fun ExampleOrganism(
         }
     }
 }
-// @tfverse if !stack.compose-multiplatform
+// @cuilo if !stack.compose-multiplatform
 
 @Preview
 @Composable
@@ -52,4 +52,4 @@ private fun ExampleOrganismPreview() {
         }
     }
 }
-// @tfverse end
+// @cuilo end

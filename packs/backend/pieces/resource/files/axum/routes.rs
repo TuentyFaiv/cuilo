@@ -67,7 +67,7 @@ async fn remove<R: ExampleItemRepository>(State(service): Service<R>, Path(id): 
 	service.delete(id).await?;
 	Ok(StatusCode::NO_CONTENT)
 }
-// @tfverse if tests
+// @cuilo if tests
 
 #[cfg(test)]
 mod tests {
@@ -115,4 +115,4 @@ mod tests {
 		assert_eq!(response.status(), StatusCode::NOT_FOUND);
 	}
 }
-// @tfverse end
+// @cuilo end

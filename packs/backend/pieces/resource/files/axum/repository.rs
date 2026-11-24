@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::sync::{PoisonError, RwLock};
 
-// @tfverse if stack.sqlx
+// @cuilo if stack.sqlx
 use sqlx::PgPool;
-// @tfverse end
+// @cuilo end
 use uuid::Uuid;
 
 use super::ExampleItem;
@@ -59,7 +59,7 @@ impl ExampleItemRepository for InMemoryExampleItemRepository {
 		Ok(self.items.write().unwrap_or_else(PoisonError::into_inner).remove(&id).is_some())
 	}
 }
-// @tfverse if stack.sqlx
+// @cuilo if stack.sqlx
 
 /// Stores example items in the PostgreSQL table `example_items`.
 #[derive(Clone, Debug)]
@@ -124,4 +124,4 @@ impl ExampleItemRepository for PgExampleItemRepository {
 		Ok(result.rows_affected() > 0)
 	}
 }
-// @tfverse end
+// @cuilo end

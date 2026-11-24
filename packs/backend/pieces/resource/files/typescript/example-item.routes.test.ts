@@ -1,10 +1,10 @@
-// @tfverse if stack.express
+// @cuilo if stack.express
 import type { AddressInfo } from "node:net";
 
 import express from "express";
-// @tfverse else
+// @cuilo else
 import { Hono } from "hono";
-// @tfverse end
+// @cuilo end
 import { describe, expect, it } from "vitest";
 
 import { errorHandler } from "../../shared/error-handler";
@@ -14,7 +14,7 @@ import { ExampleItemService } from "./example-item.service";
 
 type Send = (path: string, init?: RequestInit) => Promise<Response>;
 
-// @tfverse if stack.express
+// @cuilo if stack.express
 async function withApi(run: (send: Send) => Promise<void>) {
 	const app = express()
 		.use(express.json())
@@ -28,14 +28,14 @@ async function withApi(run: (send: Send) => Promise<void>) {
 		server.close();
 	}
 }
-// @tfverse else
+// @cuilo else
 async function withApi(run: (send: Send) => Promise<void>) {
 	const app = new Hono()
 		.route("/example-items", exampleItemRoutes(new ExampleItemService(new InMemoryExampleItemRepository())))
 		.onError(errorHandler);
 	await run((path, init) => Promise.resolve(app.request(`/example-items${path}`, init)));
 }
-// @tfverse end
+// @cuilo end
 
 const json = { "Content-Type": "application/json" };
 

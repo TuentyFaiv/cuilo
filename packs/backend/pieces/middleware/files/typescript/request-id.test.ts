@@ -1,15 +1,15 @@
-// @tfverse if stack.express
+// @cuilo if stack.express
 import type { AddressInfo } from "node:net";
 
 import express from "express";
-// @tfverse else
+// @cuilo else
 import { Hono } from "hono";
-// @tfverse end
+// @cuilo end
 import { describe, expect, it } from "vitest";
 
 import { REQUEST_ID_HEADER, requestId } from "./request-id";
 
-// @tfverse if stack.express
+// @cuilo if stack.express
 async function send(headers: Record<string, string> = {}) {
 	const app = express()
 		.use(requestId)
@@ -24,13 +24,13 @@ async function send(headers: Record<string, string> = {}) {
 		server.close();
 	}
 }
-// @tfverse else
+// @cuilo else
 const app = new Hono().use(requestId).get("/", (c) => c.text(c.get("requestId")));
 
 function send(headers: Record<string, string> = {}) {
 	return Promise.resolve(app.request("/", { headers }));
 }
-// @tfverse end
+// @cuilo end
 
 describe("requestId", () => {
 	it("reuses a valid incoming id", async () => {

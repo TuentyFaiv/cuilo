@@ -6,11 +6,11 @@ let nextId = 0;
 @Component({
 	selector: "ui-example-molecule",
 	templateUrl: "./example-molecule.html",
-	styleUrl: "./example-molecule.css", // @tfverse if !stack.tailwind
+	styleUrl: "./example-molecule.css", // @cuilo if !stack.tailwind
 	changeDetection: ChangeDetectionStrategy.OnPush,
 	host: {
 		role: "group",
-		class: "grid gap-2", // @tfverse if stack.tailwind
+		class: "grid gap-2", // @cuilo if stack.tailwind
 		"[attr.aria-labelledby]": "labelId",
 		"[attr.aria-describedby]": "description() ? descriptionId : null",
 	},

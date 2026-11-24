@@ -5,13 +5,13 @@ import (
 	"net/http"
 	"strconv"
 
-// @tfverse if stack.echo
+// @cuilo if stack.echo
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
-// @tfverse else
+// @cuilo else
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-// @tfverse end
+// @cuilo end
 
 	"example.com/app/internal/apperror"
 )
@@ -31,7 +31,7 @@ type Handler struct {
 func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
-// @tfverse if stack.echo
+// @cuilo if stack.echo
 
 // Register adds the routes to g, e.g. app.Group("/example-items"); set apperror.Handler as the HTTPErrorHandler.
 func (h *Handler) Register(g *echo.Group) {
@@ -104,7 +104,7 @@ func (h *Handler) delete(c echo.Context) error {
 	}
 	return c.NoContent(http.StatusNoContent)
 }
-// @tfverse else
+// @cuilo else
 
 // Routes returns the routes; mount them with r.Mount("/example-items", h.Routes()).
 func (h *Handler) Routes() http.Handler {
@@ -183,7 +183,7 @@ func respond(w http.ResponseWriter, r *http.Request, status int, body any, err e
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
 }
-// @tfverse end
+// @cuilo end
 
 func page(limitParam, offsetParam string) (limit, offset int, err error) {
 	limit, offset = defaultLimit, 0

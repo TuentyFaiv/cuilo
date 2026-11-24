@@ -13,7 +13,7 @@ describe("ExampleMolecule", () => {
 		molecule.description = "Choose how we reach you.";
 		document.body.append(molecule);
 		await molecule.updateComplete;
-		const group = molecule.shadowRoot?.querySelector('[role="group"]');
+		const group = molecule.shadowRoot?.querySelector("fieldset");
 
 		expect(molecule.shadowRoot?.querySelector("#label")?.textContent).toBe("Notifications");
 		expect(group?.getAttribute("aria-describedby")).toBe("description");
@@ -25,6 +25,6 @@ describe("ExampleMolecule", () => {
 		document.body.append(molecule);
 		await molecule.updateComplete;
 
-		expect(molecule.shadowRoot?.querySelector('[role="group"]')?.hasAttribute("aria-describedby")).toBe(false);
+		expect(molecule.shadowRoot?.querySelector("fieldset")?.hasAttribute("aria-describedby")).toBe(false);
 	});
 });

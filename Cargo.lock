@@ -171,6 +171,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "clap_complete"
+version = "4.6.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "037e2a1a92236d0aff7e845093f64661d6df4c02c9fcc61a60e9e1d736fa392f"
+dependencies = [
+ "clap",
+]
+
+[[package]]
 name = "clap_derive"
 version = "4.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -187,6 +196,16 @@ name = "clap_lex"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c133bc6a41be0d194c306b5506d15e6feeea7b1d6604bd3f8310dfb2ca96486"
+
+[[package]]
+name = "clap_mangen"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "211d617eaa4b735c96c9e0228fcbdb5120ef623f2b8cb67ffb84c3e02dbc28a4"
+dependencies = [
+ "clap",
+ "roff",
+]
 
 [[package]]
 name = "colorchoice"
@@ -252,6 +271,83 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce6e4c961d6cd6c9a86db418387425e8bdeaf05b3c8bc1411e6dca4c252f1453"
 dependencies = [
  "hybrid-array",
+]
+
+[[package]]
+name = "cuilo"
+version = "2.0.0-alpha.0"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "clap",
+ "clap_complete",
+ "clap_mangen",
+ "cuilo-core",
+ "cuilo-mcp",
+ "cuilo-packs",
+ "cuilo-rpc",
+ "minisign-verify",
+ "predicates",
+ "semver",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
+name = "cuilo-core"
+version = "2.0.0-alpha.0"
+dependencies = [
+ "imara-diff",
+ "insta",
+ "schemars",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror",
+ "toml",
+]
+
+[[package]]
+name = "cuilo-mcp"
+version = "2.0.0-alpha.0"
+dependencies = [
+ "cuilo-core",
+ "cuilo-rpc",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "cuilo-packs"
+version = "2.0.0-alpha.0"
+dependencies = [
+ "cuilo-core",
+ "flate2",
+ "minisign-verify",
+ "rustls",
+ "rustls-native-certs",
+ "semver",
+ "serde",
+ "serde_json",
+ "tar",
+ "tempfile",
+ "thiserror",
+ "ureq",
+]
+
+[[package]]
+name = "cuilo-rpc"
+version = "2.0.0-alpha.0"
+dependencies = [
+ "cuilo-core",
+ "cuilo-packs",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -657,6 +753,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "roff"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "323c417e1d9665a65b263ec744ba09030cfb277e9daa0b018a4ab62e57bc8189"
+
+[[package]]
 name = "rustix"
 version = "1.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -929,79 +1031,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
 
 [[package]]
-name = "tfverse"
-version = "2.0.0-alpha.0"
-dependencies = [
- "anyhow",
- "assert_cmd",
- "clap",
- "predicates",
- "serde",
- "serde_json",
- "tempfile",
- "tfverse-core",
- "tfverse-mcp",
- "tfverse-packs",
- "tfverse-rpc",
- "thiserror",
-]
-
-[[package]]
-name = "tfverse-core"
-version = "2.0.0-alpha.0"
-dependencies = [
- "imara-diff",
- "insta",
- "schemars",
- "semver",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "thiserror",
- "toml",
-]
-
-[[package]]
-name = "tfverse-mcp"
-version = "2.0.0-alpha.0"
-dependencies = [
- "serde_json",
- "tempfile",
- "tfverse-core",
- "tfverse-rpc",
-]
-
-[[package]]
-name = "tfverse-packs"
-version = "2.0.0-alpha.0"
-dependencies = [
- "flate2",
- "minisign-verify",
- "rustls",
- "rustls-native-certs",
- "semver",
- "serde",
- "serde_json",
- "tar",
- "tempfile",
- "tfverse-core",
- "thiserror",
- "ureq",
-]
-
-[[package]]
-name = "tfverse-rpc"
-version = "2.0.0-alpha.0"
-dependencies = [
- "serde",
- "serde_json",
- "tempfile",
- "tfverse-core",
- "tfverse-packs",
-]
-
-[[package]]
 name = "thiserror"
 version = "2.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1229,6 +1258,11 @@ checksum = "8c3b93199df0ab874cdf0c6a94f0a0dc3423fe41f1cafb62b8bd7b1deb277aef"
 [[package]]
 name = "xtask"
 version = "2.0.0-alpha.0"
+dependencies = [
+ "semver",
+ "serde_json",
+ "tempfile",
+]
 
 [[package]]
 name = "zeroize"

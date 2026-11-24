@@ -1,5 +1,5 @@
 {
-	"name": "tfverse-monorepo",
+	"name": "cuilo-monorepo",
 	"private": true,
 	"type": "module",
 	"workspaces": [

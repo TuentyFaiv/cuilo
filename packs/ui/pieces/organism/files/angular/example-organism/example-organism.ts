@@ -6,11 +6,11 @@ let nextId = 0;
 @Component({
 	selector: "ui-example-organism",
 	templateUrl: "./example-organism.html",
-	styleUrl: "./example-organism.css", // @tfverse if !stack.tailwind
+	styleUrl: "./example-organism.css", // @cuilo if !stack.tailwind
 	changeDetection: ChangeDetectionStrategy.OnPush,
 	host: {
 		role: "region",
-		class: "grid gap-4 rounded-xl border border-zinc-200 p-6", // @tfverse if stack.tailwind
+		class: "grid gap-4 rounded-xl border border-zinc-200 p-6", // @cuilo if stack.tailwind
 		"[attr.aria-labelledby]": "headingId",
 	},
 })

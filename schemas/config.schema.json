@@ -102,7 +102,7 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "`tfverse.json` / `tfverse.toml`, committed with the project.",
+  "description": "`cuilo.json` / `cuilo.toml`, committed with the project.",
   "properties": {
     "$schema": {
       "description": "JSON Schema URL for editor completion.",
@@ -148,6 +148,16 @@
       },
       "description": "Stack facts that replace detection, e.g. `framework = [\"svelte\"]`.",
       "type": "object"
+    },
+    "verify": {
+      "description": "Commands `--verify` runs instead of the detected checks, e.g. `[[\"bun\", \"run\", \"check\"]]`;\nthey run only once the user trusts the project.",
+      "items": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "type": "array"
     }
   },
   "title": "ProjectConfig",

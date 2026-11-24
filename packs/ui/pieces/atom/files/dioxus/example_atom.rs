@@ -1,10 +1,10 @@
 use dioxus::prelude::*;
 
-// @tfverse if stack.tailwind
+// @cuilo if stack.tailwind
 const ROOT: &str = "inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-700 data-[tone=accent]:bg-indigo-600 data-[tone=accent]:text-white";
-// @tfverse else
+// @cuilo else
 const ROOT: &str = "example-atom";
-// @tfverse end
+// @cuilo end
 
 /// Visual emphasis of an [`ExampleAtom`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

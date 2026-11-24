@@ -1,4 +1,4 @@
-// @tfverse if stack.hono
+// @cuilo if stack.hono
 import type { ErrorHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -18,7 +18,7 @@ export const errorHandler: ErrorHandler = (error, c) => {
 		"Content-Type": "application/problem+json",
 	});
 };
-// @tfverse else
+// @cuilo else
 import type { ErrorRequestHandler } from "express";
 
 import { toProblem } from "./errors";
@@ -35,4 +35,4 @@ export const errorHandler: ErrorRequestHandler = (error, _request, response, nex
 	}
 	response.status(problem.status).type("application/problem+json").json(problem);
 };
-// @tfverse end
+// @cuilo end

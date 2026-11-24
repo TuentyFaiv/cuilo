@@ -6,7 +6,7 @@
     },
     "FileRecord": {
       "additionalProperties": false,
-      "description": "A generated file and the hash of the version tfverse wrote.",
+      "description": "A generated file and the hash of the version cuilo wrote.",
       "properties": {
         "base": {
           "$ref": "#/$defs/Digest",
@@ -116,7 +116,7 @@
           "description": "Pack name."
         },
         "signer": {
-          "description": "Id of the key that signed it; later versions must be signed by the same key.",
+          "description": "The minisign public key that signed it, as in the user config's `signing.keys`; later versions\nmust be signed by the same key.",
           "type": [
             "string",
             "null"
@@ -202,7 +202,7 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "`tfverse.lock`.",
+  "description": "`cuilo.lock`.",
   "properties": {
     "instance": {
       "description": "Generated pieces.",

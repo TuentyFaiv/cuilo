@@ -1,8 +1,8 @@
-// @tfverse if stack.hono
+// @cuilo if stack.hono
 import { Hono } from "hono";
-// @tfverse else
+// @cuilo else
 import { Router } from "express";
-// @tfverse end
+// @cuilo end
 import { z } from "zod";
 
 import { validate } from "../../shared/errors";
@@ -16,7 +16,7 @@ const pageSchema = z.object({
 	offset: z.coerce.number().int().min(0).default(0),
 });
 
-// @tfverse if stack.hono
+// @cuilo if stack.hono
 /** HTTP routes for example items; mount them with `app.route("/example-items", exampleItemRoutes(service))`. */
 export function exampleItemRoutes(service: ExampleItemService) {
 	return new Hono()
@@ -36,7 +36,7 @@ export function exampleItemRoutes(service: ExampleItemService) {
 			return c.body(null, 204);
 		});
 }
-// @tfverse else
+// @cuilo else
 /** HTTP routes for example items; mount them after `express.json()` with `app.use("/example-items", …)`. */
 export function exampleItemRoutes(service: ExampleItemService): Router {
 	return Router()
@@ -58,4 +58,4 @@ export function exampleItemRoutes(service: ExampleItemService): Router {
 			response.status(204).end();
 		});
 }
-// @tfverse end
+// @cuilo end

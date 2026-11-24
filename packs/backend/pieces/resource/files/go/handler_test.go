@@ -8,31 +8,31 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-// @tfverse if stack.echo
+// @cuilo if stack.echo
 	"github.com/labstack/echo/v4"
 
 	"example.com/app/internal/apperror"
-// @tfverse end
+// @cuilo end
 )
 
-// @tfverse if stack.echo
+// @cuilo if stack.echo
 const collection = "/example-items"
-// @tfverse else
+// @cuilo else
 const collection = "/example-items/"
-// @tfverse end
+// @cuilo end
 
 func server() http.Handler {
 	handler := NewHandler(NewService(NewMemoryRepository()))
-// @tfverse if stack.echo
+// @cuilo if stack.echo
 	app := echo.New()
 	app.HTTPErrorHandler = apperror.Handler
 	handler.Register(app.Group("/example-items"))
 	return app
-// @tfverse else
+// @cuilo else
 	mux := http.NewServeMux()
 	mux.Handle("/example-items/", http.StripPrefix("/example-items", handler.Routes()))
 	return mux
-// @tfverse end
+// @cuilo end
 }
 
 func send(t *testing.T, app http.Handler, method, path, body string) *httptest.ResponseRecorder {

@@ -12,16 +12,16 @@
 	let { heading, actions, class: className, children, ...rest }: Props = $props();
 	const headingId = $props.id();
 
-	// @tfverse if stack.tailwind
+	// @cuilo if stack.tailwind
 	const classes = {
 		root: "grid gap-4 rounded-xl border border-zinc-200 p-6",
 		header: "flex flex-wrap items-center justify-between gap-3",
 		title: "text-lg font-semibold",
 		actions: "flex gap-2",
 	};
-	// @tfverse else
+	// @cuilo else
 	const classes = { root: "root", header: "header", title: "title", actions: "actions" };
-	// @tfverse end
+	// @cuilo end
 </script>
 
 <section {...rest} aria-labelledby={headingId} class={[classes.root, className]}>
@@ -33,7 +33,7 @@
 	</header>
 	{@render children?.()}
 </section>
-<!-- @tfverse if !stack.tailwind -->
+<!-- @cuilo if !stack.tailwind -->
 
 <style>
 	.root {
@@ -63,4 +63,4 @@
 		gap: 0.5rem;
 	}
 </style>
-<!-- @tfverse end -->
+<!-- @cuilo end -->

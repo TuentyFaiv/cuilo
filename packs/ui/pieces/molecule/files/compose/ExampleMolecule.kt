@@ -12,9 +12,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
-// @tfverse if !stack.compose-multiplatform
+// @cuilo if !stack.compose-multiplatform
 import androidx.compose.ui.tooling.preview.Preview
-// @tfverse end
+// @cuilo end
 import androidx.compose.ui.unit.dp
 
 /** Groups atoms under one accessible label, such as a field with its hint. */
@@ -45,7 +45,7 @@ fun ExampleMolecule(
         ) { content() }
     }
 }
-// @tfverse if !stack.compose-multiplatform
+// @cuilo if !stack.compose-multiplatform
 
 @Preview
 @Composable
@@ -56,4 +56,4 @@ private fun ExampleMoleculePreview() {
         }
     }
 }
-// @tfverse end
+// @cuilo end

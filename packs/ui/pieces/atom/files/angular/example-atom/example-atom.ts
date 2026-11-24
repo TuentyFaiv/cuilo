@@ -6,10 +6,10 @@ export type ExampleAtomTone = "neutral" | "accent";
 @Component({
 	selector: "ui-example-atom",
 	template: "<ng-content />",
-	styleUrl: "./example-atom.css", // @tfverse if !stack.tailwind
+	styleUrl: "./example-atom.css", // @cuilo if !stack.tailwind
 	changeDetection: ChangeDetectionStrategy.OnPush,
 	host: {
-		class: "inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-700 data-[tone=accent]:bg-indigo-600 data-[tone=accent]:text-white", // @tfverse if stack.tailwind
+		class: "inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-700 data-[tone=accent]:bg-indigo-600 data-[tone=accent]:text-white", // @cuilo if stack.tailwind
 		"[attr.data-tone]": "tone()",
 	},
 })

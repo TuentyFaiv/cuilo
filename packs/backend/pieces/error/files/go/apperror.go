@@ -6,10 +6,10 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-// @tfverse if stack.echo
+// @cuilo if stack.echo
 
 	"github.com/labstack/echo/v4"
-// @tfverse end
+// @cuilo end
 )
 
 // Error is an error with an HTTP status.
@@ -75,7 +75,7 @@ func Write(w http.ResponseWriter, r *http.Request, err error) {
 	w.WriteHeader(problem.Status)
 	_ = json.NewEncoder(w).Encode(problem)
 }
-// @tfverse if stack.echo
+// @cuilo if stack.echo
 
 // Handler is an echo.HTTPErrorHandler that sends every error as problem details.
 func Handler(err error, c echo.Context) {
@@ -88,4 +88,4 @@ func Handler(err error, c echo.Context) {
 	}
 	Write(c.Response(), c.Request(), err)
 }
-// @tfverse end
+// @cuilo end

@@ -1,16 +1,16 @@
 use dioxus::prelude::*;
 
-// @tfverse if stack.tailwind
+// @cuilo if stack.tailwind
 const ROOT: &str = "grid gap-4 rounded-xl border border-zinc-200 p-6";
 const HEADER: &str = "flex flex-wrap items-center justify-between gap-3";
 const TITLE: &str = "text-lg font-semibold";
 const ACTIONS: &str = "flex gap-2";
-// @tfverse else
+// @cuilo else
 const ROOT: &str = "example-organism";
 const HEADER: &str = "example-organism__header";
 const TITLE: &str = "example-organism__title";
 const ACTIONS: &str = "example-organism__actions";
-// @tfverse end
+// @cuilo end
 
 /// A distinct, labelled region of the page, built from molecules.
 #[component]

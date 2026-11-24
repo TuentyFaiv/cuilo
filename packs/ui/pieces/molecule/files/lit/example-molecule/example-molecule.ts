@@ -12,6 +12,10 @@ export class ExampleMolecule extends LitElement {
 		.root {
 			display: grid;
 			gap: 0.5rem;
+			min-inline-size: 0;
+			margin: 0;
+			border: 0;
+			padding: 0;
 		}
 
 		.label {
@@ -41,11 +45,11 @@ export class ExampleMolecule extends LitElement {
 
 	override render() {
 		return html`
-			<div class="root" role="group" aria-labelledby="label" aria-describedby=${this.description ? "description" : nothing}>
+			<fieldset class="root" aria-labelledby="label" aria-describedby=${this.description ? "description" : nothing}>
 				<span id="label" class="label">${this.label}</span>
 				${this.description ? html`<p id="description" class="description">${this.description}</p>` : nothing}
 				<div class="content"><slot></slot></div>
-			</div>
+			</fieldset>
 		`;
 	}
 }

@@ -10,9 +10,9 @@ example = "ExampleMolecule"
 
 [inputs.tests]
 type = "bool"
-description = "Add a test file."
+description = "Add a test file; on by default when the project can run it."
 prompt = "Add tests?"
-default = true
+default_when = "stack.vitest || !(stack.javascript || stack.typescript)"
 
 [inputs.app]
 type = "string"

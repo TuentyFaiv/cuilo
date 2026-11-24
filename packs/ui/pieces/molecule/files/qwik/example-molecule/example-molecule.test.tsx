@@ -11,7 +11,7 @@ describe("ExampleMolecule", () => {
 				<button type="button">Email</button>
 			</ExampleMolecule>,
 		);
-		const group = screen.querySelector('[role="group"]');
+		const group = screen.querySelector("fieldset");
 		const label = screen.querySelector(`[id="${group?.getAttribute("aria-labelledby")}"]`);
 		const description = screen.querySelector(`[id="${group?.getAttribute("aria-describedby")}"]`);
 
@@ -24,6 +24,6 @@ describe("ExampleMolecule", () => {
 		const { screen, render } = await createDOM();
 		await render(<ExampleMolecule label="Notifications" />);
 
-		expect(screen.querySelector('[role="group"]')?.hasAttribute("aria-describedby")).toBe(false);
+		expect(screen.querySelector("fieldset")?.hasAttribute("aria-describedby")).toBe(false);
 	});
 });

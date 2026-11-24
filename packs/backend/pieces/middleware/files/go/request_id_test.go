@@ -4,10 +4,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-// @tfverse if stack.echo
+// @cuilo if stack.echo
 
 	"github.com/labstack/echo/v4"
-// @tfverse end
+// @cuilo end
 )
 
 func send(header string) *httptest.ResponseRecorder {
@@ -16,15 +16,15 @@ func send(header string) *httptest.ResponseRecorder {
 		request.Header.Set(RequestIdHeader, header)
 	}
 	recorder := httptest.NewRecorder()
-// @tfverse if stack.echo
+// @cuilo if stack.echo
 	app := echo.New()
 	app.Use(RequestId())
 	app.GET("/", func(c echo.Context) error { return c.String(http.StatusOK, RequestIdFrom(c.Request().Context())) })
 	app.ServeHTTP(recorder, request)
-// @tfverse else
+// @cuilo else
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(RequestIdFrom(r.Context()))) })
 	RequestId(handler).ServeHTTP(recorder, request)
-// @tfverse end
+// @cuilo end
 	return recorder
 }
 

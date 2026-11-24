@@ -164,6 +164,13 @@
                 "null"
               ]
             },
+            "default_when": {
+              "description": "Condition on the project's stack that gives the default instead, e.g. `stack.vitest`.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "description": {
               "description": "Shown in help and schemas.",
               "type": [

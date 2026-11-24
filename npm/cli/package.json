@@ -1,0 +1,34 @@
+{
+	"name": "@cuilo/cli",
+	"version": "2.0.0-alpha.0",
+	"private": true,
+	"description": "Generate projects and code from versioned, updatable packs, for humans and AI agents.",
+	"keywords": [
+		"cli",
+		"scaffolding",
+		"generator",
+		"templates",
+		"mcp"
+	],
+	"homepage": "https://cuilo.dev",
+	"bugs": {
+		"url": "https://github.com/TuentyFaiv/cuilo/issues"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/TuentyFaiv/cuilo.git",
+		"directory": "npm/cli"
+	},
+	"license": "MIT",
+	"author": "Tonalli López <contact@tuentyfaiv.com>",
+	"type": "module",
+	"bin": {
+		"cuilo": "bin/cuilo.js"
+	},
+	"files": [
+		"bin/cuilo.js"
+	],
+	"engines": {
+		"node": ">=18"
+	}
+}

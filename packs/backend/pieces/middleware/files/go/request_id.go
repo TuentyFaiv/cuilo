@@ -3,11 +3,11 @@ package middleware
 
 import (
 	"context"
-	"net/http" // @tfverse if !stack.echo
+	"net/http" // @cuilo if !stack.echo
 	"regexp"
 
 	"github.com/google/uuid"
-	"github.com/labstack/echo/v4" // @tfverse if stack.echo
+	"github.com/labstack/echo/v4" // @cuilo if stack.echo
 )
 
 // RequestIdHeader carries the request id.
@@ -29,7 +29,7 @@ func requestId(incoming string) string {
 	}
 	return uuid.NewString()
 }
-// @tfverse if stack.echo
+// @cuilo if stack.echo
 
 // RequestId reuses a valid incoming request id or creates one, stores it in the request context and echoes it.
 func RequestId() echo.MiddlewareFunc {
@@ -42,7 +42,7 @@ func RequestId() echo.MiddlewareFunc {
 		}
 	}
 }
-// @tfverse else
+// @cuilo else
 
 // RequestId reuses a valid incoming request id or creates one, stores it in the request context and echoes it.
 func RequestId(next http.Handler) http.Handler {
@@ -52,4 +52,4 @@ func RequestId(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), requestIdKey{}, id)))
 	})
 }
-// @tfverse end
+// @cuilo end

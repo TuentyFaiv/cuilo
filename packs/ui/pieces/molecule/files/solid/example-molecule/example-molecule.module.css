@@ -1,6 +1,10 @@
 .root {
 	display: grid;
 	gap: 0.5rem;
+	min-inline-size: 0;
+	margin: 0;
+	border: 0;
+	padding: 0;
 }
 
 .label {

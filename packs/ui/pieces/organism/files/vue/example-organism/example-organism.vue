@@ -15,16 +15,16 @@ const slots = defineSlots<{
 
 const headingId = useId();
 
-// @tfverse if stack.tailwind
+// @cuilo if stack.tailwind
 const classes = {
 	root: "grid gap-4 rounded-xl border border-zinc-200 p-6",
 	header: "flex flex-wrap items-center justify-between gap-3",
 	title: "text-lg font-semibold",
 	actions: "flex gap-2",
 };
-// @tfverse else
+// @cuilo else
 const classes = { root: "root", header: "header", title: "title", actions: "actions" };
-// @tfverse end
+// @cuilo end
 </script>
 
 <template>
@@ -36,7 +36,7 @@ const classes = { root: "root", header: "header", title: "title", actions: "acti
 		<slot />
 	</section>
 </template>
-<!-- @tfverse if !stack.tailwind -->
+<!-- @cuilo if !stack.tailwind -->
 
 <style scoped>
 	.root {
@@ -66,4 +66,4 @@ const classes = { root: "root", header: "header", title: "title", actions: "acti
 		gap: 0.5rem;
 	}
 </style>
-<!-- @tfverse end -->
+<!-- @cuilo end -->

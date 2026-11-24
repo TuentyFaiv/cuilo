@@ -16,9 +16,9 @@ example = "ExampleItems"
 
 [inputs.tests]
 type = "bool"
-description = "Add tests."
+description = "Add tests; on by default when the project can run them."
 prompt = "Add tests?"
-default = true
+default_when = "stack.vitest || stack.pytest || stack.go || stack.rust"
 
 [inputs.module]
 type = "string"

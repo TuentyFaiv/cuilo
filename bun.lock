@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "tfverse-monorepo",
+      "name": "cuilo-monorepo",
       "devDependencies": {
         "@biomejs/biome": "2.6.6",
       },

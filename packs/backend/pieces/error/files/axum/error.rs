@@ -37,7 +37,7 @@ impl AppError {
 		}
 	}
 }
-// @tfverse if stack.sqlx
+// @cuilo if stack.sqlx
 
 impl From<sqlx::Error> for AppError {
 	fn from(error: sqlx::Error) -> Self {
@@ -50,7 +50,7 @@ impl From<sqlx::Error> for AppError {
 		}
 	}
 }
-// @tfverse end
+// @cuilo end
 
 #[derive(Debug, Serialize)]
 struct Problem {
@@ -79,7 +79,7 @@ impl IntoResponse for AppError {
 		(status, [(header::CONTENT_TYPE, "application/problem+json")], Json(problem)).into_response()
 	}
 }
-// @tfverse if tests
+// @cuilo if tests
 
 #[cfg(test)]
 mod tests {
@@ -110,4 +110,4 @@ mod tests {
 		assert!(!problem["detail"].as_str().unwrap().contains("hunter2"));
 	}
 }
-// @tfverse end
+// @cuilo end

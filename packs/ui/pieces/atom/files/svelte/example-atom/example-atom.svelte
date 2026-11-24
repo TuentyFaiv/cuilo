@@ -12,19 +12,19 @@
 
 	let { tone = "neutral", class: className, children, ...rest }: Props = $props();
 
-	// @tfverse if stack.tailwind
+	// @cuilo if stack.tailwind
 	const classes = {
 		root: "inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-700 data-[tone=accent]:bg-indigo-600 data-[tone=accent]:text-white",
 	};
-	// @tfverse else
+	// @cuilo else
 	const classes = { root: "root" };
-	// @tfverse end
+	// @cuilo end
 </script>
 
 <span {...rest} class={[classes.root, className]} data-tone={tone}>
 	{@render children?.()}
 </span>
-<!-- @tfverse if !stack.tailwind -->
+<!-- @cuilo if !stack.tailwind -->
 
 <style>
 	.root {
@@ -45,4 +45,4 @@
 		background: var(--ui-accent, #4f46e5);
 	}
 </style>
-<!-- @tfverse end -->
+<!-- @cuilo end -->

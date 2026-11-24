@@ -1,16 +1,16 @@
 use leptos::prelude::*;
 
-// @tfverse if stack.tailwind
-const ROOT: &str = "grid gap-2";
+// @cuilo if stack.tailwind
+const ROOT: &str = "grid min-w-0 gap-2";
 const LABEL: &str = "text-sm font-semibold";
 const DESCRIPTION: &str = "text-sm text-zinc-500";
 const CONTENT: &str = "flex flex-wrap items-center gap-2";
-// @tfverse else
+// @cuilo else
 const ROOT: &str = "example-molecule";
 const LABEL: &str = "example-molecule__label";
 const DESCRIPTION: &str = "example-molecule__description";
 const CONTENT: &str = "example-molecule__content";
-// @tfverse end
+// @cuilo end
 
 /// Groups atoms under one accessible label, such as a field with its hint.
 #[component]
@@ -32,9 +32,8 @@ pub fn ExampleMolecule(
 	let described_by = description_id.clone();
 
 	view! {
-		<div
+		<fieldset
 			id=id
-			role="group"
 			aria-labelledby=labelled_by
 			aria-describedby=described_by
 			class=ROOT
@@ -44,6 +43,6 @@ pub fn ExampleMolecule(
 			</span>
 			{description.map(|description| view! { <p id=description_id class=DESCRIPTION>{description}</p> })}
 			<div class=CONTENT>{children()}</div>
-		</div>
+		</fieldset>
 	}
 }

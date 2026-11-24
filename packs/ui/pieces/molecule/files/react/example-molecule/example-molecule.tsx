@@ -1,26 +1,26 @@
 import { type ComponentProps, type ReactNode, useId } from "react";
-// @tfverse if !stack.tailwind
+// @cuilo if !stack.tailwind
 
 import styles from "./example-molecule.module.css";
-// @tfverse end
+// @cuilo end
 
-export type ExampleMoleculeProps = Omit<ComponentProps<"div">, "aria-describedby" | "aria-labelledby" | "role"> & {
+export type ExampleMoleculeProps = Omit<ComponentProps<"fieldset">, "aria-describedby" | "aria-labelledby" | "role"> & {
 	/** Names the group for assistive technology. */
 	label: ReactNode;
 	/** Extra guidance shown under the label. */
 	description?: ReactNode;
 };
 
-// @tfverse if stack.tailwind
+// @cuilo if stack.tailwind
 const classes = {
-	root: "grid gap-2",
+	root: "grid min-w-0 gap-2",
 	label: "text-sm font-semibold",
 	description: "text-sm text-zinc-500",
 	content: "flex flex-wrap items-center gap-2",
 };
-// @tfverse else
+// @cuilo else
 const classes = styles;
-// @tfverse end
+// @cuilo end
 
 /** Groups atoms under one accessible label, such as a field with its hint. */
 export function ExampleMolecule({ label, description, className, children, ...props }: ExampleMoleculeProps) {
@@ -29,9 +29,8 @@ export function ExampleMolecule({ label, description, className, children, ...pr
 	const descriptionId = description ? `${id}-description` : undefined;
 
 	return (
-		<div
+		<fieldset
 			{...props}
-			role="group"
 			aria-labelledby={labelId}
 			aria-describedby={descriptionId}
 			className={[classes.root, className].filter(Boolean).join(" ")}
@@ -45,6 +44,6 @@ export function ExampleMolecule({ label, description, className, children, ...pr
 				</p>
 			) : null}
 			<div className={classes.content}>{children}</div>
-		</div>
+		</fieldset>
 	);
 }

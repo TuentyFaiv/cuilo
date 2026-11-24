@@ -9,9 +9,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-// @tfverse if !stack.compose-multiplatform
+// @cuilo if !stack.compose-multiplatform
 import androidx.compose.ui.tooling.preview.Preview
-// @tfverse end
+// @cuilo end
 import androidx.compose.ui.unit.dp
 
 /** Visual emphasis of an [ExampleAtom]. */
@@ -36,11 +36,11 @@ fun ExampleAtom(
         }
     }
 }
-// @tfverse if !stack.compose-multiplatform
+// @cuilo if !stack.compose-multiplatform
 
 @Preview
 @Composable
 private fun ExampleAtomPreview() {
     MaterialTheme { ExampleAtom(tone = ExampleAtomTone.Accent) { Text("New") } }
 }
-// @tfverse end
+// @cuilo end

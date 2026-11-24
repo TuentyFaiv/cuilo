@@ -1,7 +1,7 @@
 <script lang="ts">
-	import type { HTMLAttributes } from "svelte/elements";
+	import type { HTMLFieldsetAttributes } from "svelte/elements";
 
-	interface Props extends Omit<HTMLAttributes<HTMLDivElement>, "aria-describedby" | "aria-labelledby" | "role"> {
+	interface Props extends Omit<HTMLFieldsetAttributes, "aria-describedby" | "aria-labelledby" | "role"> {
 		/** Names the group for assistive technology. */
 		label: string;
 		/** Extra guidance shown under the label. */
@@ -11,21 +11,20 @@
 	let { label, description, class: className, children, ...rest }: Props = $props();
 	const id = $props.id();
 
-	// @tfverse if stack.tailwind
+	// @cuilo if stack.tailwind
 	const classes = {
-		root: "grid gap-2",
+		root: "grid min-w-0 gap-2",
 		label: "text-sm font-semibold",
 		description: "text-sm text-zinc-500",
 		content: "flex flex-wrap items-center gap-2",
 	};
-	// @tfverse else
+	// @cuilo else
 	const classes = { root: "root", label: "label", description: "description", content: "content" };
-	// @tfverse end
+	// @cuilo end
 </script>
 
-<div
+<fieldset
 	{...rest}
-	role="group"
 	aria-labelledby="{id}-label"
 	aria-describedby={description ? `${id}-description` : undefined}
 	class={[classes.root, className]}
@@ -37,13 +36,17 @@
 	<div class={classes.content}>
 		{@render children?.()}
 	</div>
-</div>
-<!-- @tfverse if !stack.tailwind -->
+</fieldset>
+<!-- @cuilo if !stack.tailwind -->
 
 <style>
 	.root {
 		display: grid;
 		gap: 0.5rem;
+		min-inline-size: 0;
+		margin: 0;
+		border: 0;
+		padding: 0;
 	}
 
 	.label {
@@ -64,4 +67,4 @@
 		gap: 0.5rem;
 	}
 </style>
-<!-- @tfverse end -->
+<!-- @cuilo end -->

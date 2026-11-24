@@ -10,21 +10,20 @@ const { label, description } = defineProps<{
 
 const id = useId();
 
-// @tfverse if stack.tailwind
+// @cuilo if stack.tailwind
 const classes = {
-	root: "grid gap-2",
+	root: "grid min-w-0 gap-2",
 	label: "text-sm font-semibold",
 	description: "text-sm text-zinc-500",
 	content: "flex flex-wrap items-center gap-2",
 };
-// @tfverse else
+// @cuilo else
 const classes = { root: "root", label: "label", description: "description", content: "content" };
-// @tfverse end
+// @cuilo end
 </script>
 
 <template>
-	<div
-		role="group"
+	<fieldset
 		:aria-labelledby="`${id}-label`"
 		:aria-describedby="description ? `${id}-description` : undefined"
 		:class="classes.root"
@@ -32,14 +31,18 @@ const classes = { root: "root", label: "label", description: "description", cont
 		<span :id="`${id}-label`" :class="classes.label">{{ label }}</span>
 		<p v-if="description" :id="`${id}-description`" :class="classes.description">{{ description }}</p>
 		<div :class="classes.content"><slot /></div>
-	</div>
+	</fieldset>
 </template>
-<!-- @tfverse if !stack.tailwind -->
+<!-- @cuilo if !stack.tailwind -->
 
 <style scoped>
 	.root {
 		display: grid;
 		gap: 0.5rem;
+		min-inline-size: 0;
+		margin: 0;
+		border: 0;
+		padding: 0;
 	}
 
 	.label {
@@ -60,4 +63,4 @@ const classes = { root: "root", label: "label", description: "description", cont
 		gap: 0.5rem;
 	}
 </style>
-<!-- @tfverse end -->
+<!-- @cuilo end -->

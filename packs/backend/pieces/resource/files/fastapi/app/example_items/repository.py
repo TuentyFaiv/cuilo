@@ -3,13 +3,13 @@
 from typing import Protocol
 from uuid import UUID
 
-# @tfverse if stack.sqlalchemy
+# @cuilo if stack.sqlalchemy
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# @tfverse end
+# @cuilo end
 from .models import ExampleItem
-from .tables import ExampleItemRow  # @tfverse if stack.sqlalchemy
+from .tables import ExampleItemRow  # @cuilo if stack.sqlalchemy
 
 
 class ExampleItemRepository(Protocol):
@@ -51,7 +51,7 @@ class InMemoryExampleItemRepository:
 
     async def delete(self, item_id: UUID) -> bool:
         return self._items.pop(item_id, None) is not None
-# @tfverse if stack.sqlalchemy
+# @cuilo if stack.sqlalchemy
 
 
 class SqlAlchemyExampleItemRepository:
@@ -88,4 +88,4 @@ class SqlAlchemyExampleItemRepository:
         )
         await self._session.commit()
         return deleted.first() is not None
-# @tfverse end
+# @cuilo end

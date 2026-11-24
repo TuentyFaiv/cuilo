@@ -1,10 +1,10 @@
-// @tfverse if stack.hono
+// @cuilo if stack.hono
 import { createMiddleware } from "hono/factory";
 
-// @tfverse else
+// @cuilo else
 import type { RequestHandler } from "express";
 
-// @tfverse end
+// @cuilo end
 /** Header that carries the request id. */
 export const REQUEST_ID_HEADER = "x-request-id";
 
@@ -15,7 +15,7 @@ export function requestIdFrom(incoming: string | undefined): string {
 	return incoming && VALID_REQUEST_ID.test(incoming) ? incoming : crypto.randomUUID();
 }
 
-// @tfverse if stack.hono
+// @cuilo if stack.hono
 /** Reuses or creates the request id, stores it as `c.get("requestId")` and echoes it in the response. */
 export const requestId = createMiddleware<{ Variables: { requestId: string } }>(async (c, next) => {
 	const value = requestIdFrom(c.req.header(REQUEST_ID_HEADER));
@@ -23,7 +23,7 @@ export const requestId = createMiddleware<{ Variables: { requestId: string } }>(
 	c.header(REQUEST_ID_HEADER, value);
 	await next();
 });
-// @tfverse else
+// @cuilo else
 /** Reuses or creates the request id, stores it as `response.locals.requestId` and echoes it. */
 export const requestId: RequestHandler = (request, response, next) => {
 	const value = requestIdFrom(request.get(REQUEST_ID_HEADER));
@@ -31,4 +31,4 @@ export const requestId: RequestHandler = (request, response, next) => {
 	response.setHeader(REQUEST_ID_HEADER, value);
 	next();
 };
-// @tfverse end
+// @cuilo end

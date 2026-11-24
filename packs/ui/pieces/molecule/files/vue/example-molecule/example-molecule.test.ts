@@ -9,7 +9,7 @@ describe("ExampleMolecule", () => {
 			props: { label: "Notifications", description: "Choose how we reach you." },
 			slots: { default: '<button type="button">Email</button>' },
 		});
-		const group = wrapper.get('[role="group"]');
+		const group = wrapper.get("fieldset");
 
 		expect(wrapper.get(`[id="${group.attributes("aria-labelledby")}"]`).text()).toBe("Notifications");
 		expect(wrapper.get(`[id="${group.attributes("aria-describedby")}"]`).text()).toBe("Choose how we reach you.");
@@ -19,6 +19,6 @@ describe("ExampleMolecule", () => {
 	it("leaves out the description when there is none", () => {
 		const wrapper = mount(ExampleMolecule, { props: { label: "Notifications" } });
 
-		expect(wrapper.get('[role="group"]').attributes("aria-describedby")).toBeUndefined();
+		expect(wrapper.get("fieldset").attributes("aria-describedby")).toBeUndefined();
 	});
 });
