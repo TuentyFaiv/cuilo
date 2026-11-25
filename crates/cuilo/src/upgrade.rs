@@ -447,7 +447,7 @@ mod tests {
 		assert_eq!(fs::read(&exe)?, BINARY);
 		let receipt = fs::read_to_string(exe.with_file_name(brand::INSTALL_RECEIPT))?;
 		assert!(receipt.contains("\"version\": \"99.0.0\""), "{receipt}");
-		assert_eq!(fs::read_dir(dir.path())?.count(), 2, "a staged file was left behind");
+		assert!(!sibling(&exe, "new").exists(), "the staged file was left behind");
 		Ok(())
 	}
 
