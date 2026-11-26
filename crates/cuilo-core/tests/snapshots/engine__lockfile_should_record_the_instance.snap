@@ -24,6 +24,7 @@ framework = ["react"]
 language = ["typescript"]
 runtime = ["node"]
 package_manager = ["npm"]
+import_style = ["imports-extensionless"]
 
 [instance.inputs]
 name = "UserCard"

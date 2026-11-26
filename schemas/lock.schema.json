@@ -66,7 +66,7 @@
         },
         "stack": {
           "$ref": "#/$defs/Stack",
-          "description": "Stack facts used, so the original can be rendered again."
+          "description": "Stack facts used, so the original can be rendered again; `import_style`, e.g. `[\"imports-js\"]`, keeps\nrelative imports written the same way on every update, and is absent for pieces that aren't JavaScript\nor TypeScript."
         },
         "target": {
           "anyOf": [

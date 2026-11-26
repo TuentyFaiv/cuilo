@@ -63,8 +63,9 @@ nothing at install time: the package manager picks the one platform package (`@c
 `CUILO_REQUIRE_SIGNATURE=1` makes them refuse to install without checking the signature. Only those copies update
 themselves, once a day in the background or with `cuilo upgrade`, and only when the release's `SHA256SUMS` carries a
 valid signature by the release key built into cuilo; without `--version`, they never move to an older version. For
-copies installed another way, `cuilo upgrade` runs their package manager, and the daily check prints a notice
-instead. `updates = "notify"` or `"off"` in the user config, or `CUILO_UPDATES`, changes this, and
+global installs made another way, `cuilo upgrade` runs their package manager, and the daily check prints a notice
+instead; for a project's own copy or one run through `npx`, `bunx`, `pnpm dlx` or `yarn dlx`, it prints the command
+to run instead of running anything. `updates = "notify"` or `"off"` in the user config, or `CUILO_UPDATES`, changes this, and
 `cuilo upgrade --check` only reports what is available. To see where a binary was built, run
 `gh attestation verify $(command -v cuilo) --repo TuentyFaiv/cuilo`.
 
@@ -241,8 +242,9 @@ variants = ["hono", "express"]
 Plans list dependencies and offer to add them with the project's package manager (see "Packages a piece
 needs"). Declaring them needs `permissions.dependencies = true` in `pack.toml`, and the user can refuse them.
 
-Patches edit files the project already has: `anchor` inserts text next to a unique line, `import` adds an import,
-and `css_vars` adds custom properties to a CSS block, creating the block if needed and keeping values already set:
+Patches edit files the project already has: `anchor` inserts text next to a unique line (or the first of a list of
+alternatives the file contains, e.g. `anchor = ["export default app", "serve("]`), `import` adds an import, and
+`css_vars` adds custom properties to a CSS block, creating the block if needed and keeping values already set:
 
 ```toml
 [[patches]]

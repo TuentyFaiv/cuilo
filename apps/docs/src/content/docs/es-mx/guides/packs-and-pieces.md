@@ -15,7 +15,7 @@ cuilo pack list
 ```
 
 ```text
-backend 0.1.0  official:backend
+backend 0.2.0  official:backend
   database, error, middleware, resource
 ui 0.2.0  official:ui
   atom, molecule, organism
@@ -54,7 +54,7 @@ cuilo pack show backend
 ```
 
 ```text
-backend 0.1.0
+backend 0.2.0
 Layered backend pieces: REST resources, problem-details errors and middleware for Hono, Express, Axum, FastAPI, chi and Echo.
 
 backend/database  SQLAlchemy async engine, sessions and the declarative base for FastAPI.
@@ -100,8 +100,8 @@ Packages to add (offered after applying; --install adds them without asking):
   npm      zod ^4.1
   npm      vitest ^4.0 (dev)
 Next steps:
-  1. Register the error handler in `src/index.ts` with `app.onError(errorHandler)`.
-  2. Mount the routes in `src/index.ts` with `app.route("/blog-posts", blogPostRoutes(new BlogPostService(new InMemoryBlogPostRepository())))`.
+  1. Register the error handler in the file that creates your Hono app, with `app.onError(errorHandler)`.
+  2. Mount the routes in the file that creates your Hono app, with `app.route("/blog-posts", blogPostRoutes(new BlogPostService(new InMemoryBlogPostRepository())))`.
 ```
 
 La parte `(with error)` significa que `resource` se apoya en la pieza `error`. cuilo agrega `error` primero cuando el proyecto todavía no la tiene, y le pasa las entradas que comparten, como `tests`. Los siguientes pasos son lo que te queda por hacer; consulta [siguientes pasos y conexión](#siguientes-pasos-y-conexión).
@@ -230,24 +230,26 @@ Packages to add (offered after applying; --install adds them without asking):
   npm      vitest ^4.0 (dev)
 ```
 
+Estos imports no llevan extensión porque este proyecto los resuelve como lo hace un bundler. Donde su `tsconfig.json` usa `NodeNext`, como en las plantillas de Node.js y Vercel de create-hono, terminan en `.js`, tanto en el archivo de entrada parcheado como en los archivos generados. Consulta [imports relativos en el código generado](/es-mx/guides/stack-detection/#imports-relativos-en-el-código-generado).
+
 Para conectar siempre, define `wire = true` en tu [configuración de usuario](/es-mx/reference/user-config/). `--no-wire` lo desactiva en una ejecución.
 
 ```toml title="config.toml"
 wire = true
 ```
 
-cuilo aplica los parches de un paso todos o ninguno. Si uno no se puede aplicar, por ejemplo cuando `src/index.ts` no tiene una línea `export default app`, cuilo te deja ese paso a ti: lo lista y anota el motivo.
+cuilo aplica los parches de un paso todos o ninguno. Si uno no se puede aplicar, por ejemplo cuando `src/index.ts` no tiene una línea que exporte o sirva la app, cuilo te deja ese paso a ti: lo lista y anota el motivo.
 
 ```text
 Notes:
-  src/index.ts: no line contains `export default app`; wire it by hand
+  src/index.ts: no line contains `export default app`, `export const handler = handle(app)`, `fire(app)` or `serve(`; wire it by hand
 ```
 
-En el pack oficial `backend`, cuilo puede conectar el `src/index.ts` de Hono, el `app/main.py` de FastAPI y las declaraciones de módulo en el `src/main.rs` de Axum. Los demás pasos, como los de Express y Go, que no tienen un archivo de entrada convencional, siempre se listan.
+En el pack oficial `backend`, cuilo puede conectar el `src/index.ts` o `src/index.tsx` de Hono, el `app/main.py` de FastAPI y las declaraciones de módulo en el `src/main.rs` de Axum. En Hono, eso cubre todas las plantillas de `create-hono` con uno de esos archivos de entrada: Node.js, Bun, Cloudflare Workers, Vercel, AWS Lambda, Lambda@Edge y Fastly (`src/index.ts`), y Cloudflare Pages y Cloudflare Workers + Vite (`src/index.tsx`). Un proyecto con los dos archivos recibe la conexión en `src/index.ts`. Las plantillas con otro archivo de entrada listan los pasos de Hono: Deno (`main.ts`), Next.js y HonoX. La plantilla de Netlify no tiene `package.json` ni `deno.json`, así que cuilo no detecta Hono en ella. Los demás pasos, como los de Express y Go, que no tienen un archivo de entrada convencional, siempre se listan.
 
 - La conexión solo se aplica a las piezas que están en su carpeta por defecto, porque los imports que agrega apuntan ahí. Con `--target` o `paths`, los pasos se listan.
 - `cuilo adopt` no lista pasos ni conecta nada.
-- `cuilo update` mantiene al día la conexión que aplicó cuilo, y nunca conecta una pieza que agregaste sin ella. Consulta [actualizaciones](/es-mx/guides/updates/).
+- `cuilo update` mantiene al día la conexión que aplicó cuilo en el archivo donde la aplicó, y nunca conecta una pieza que agregaste sin ella. Consulta [actualizaciones](/es-mx/guides/updates/).
 
 ## Usa otros packs
 

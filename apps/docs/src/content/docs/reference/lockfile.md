@@ -89,7 +89,9 @@ Piece within that pack.
 
 **Type:** `map of array of string` · optional
 
-Stack facts used, so the original can be rendered again.
+Stack facts used, so the original can be rendered again; `import_style`, e.g. `["imports-js"]`, keeps
+relative imports written the same way on every update, and is absent for pieces that aren't JavaScript
+or TypeScript.
 
 #### `instance[].target`
 

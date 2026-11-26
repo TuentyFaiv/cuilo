@@ -3,6 +3,7 @@
 mod config;
 mod detect;
 mod fs;
+mod imports;
 mod lock;
 mod store;
 mod trust;
@@ -18,6 +19,7 @@ pub use config::{
 pub use detect::{ProjectModel, parse_jsonc};
 pub(crate) use detect::{declared_packages, detect, normalized_python_name};
 pub use fs::{DiskFs, EntryKind, Fs, MemoryFs};
+pub(crate) use imports::{import_style, is_commonjs};
 pub(crate) use lock::instance_id;
 pub use lock::{FileRecord, Instance, LockError, Lockfile, PackRecord, PatchRecord};
 pub(crate) use store::ObjectStore;
@@ -29,7 +31,8 @@ use crate::model::RelPath;
 
 const STATE_GITIGNORE: &str = "# cuilo local state: cache and history. Safe to delete.\n*\n";
 
-/// A project confined to its root: cuilo never goes through symlinks or files in the way.
+/// A project confined to its root: reads and writes never go through symlinks or files in the way. Import
+/// detection alone may read a tsconfig or `package.json` through links, when its real path is inside the root.
 #[derive(Clone, Debug)]
 pub(crate) struct Workspace {
 	fs: Arc<dyn Fs>,
@@ -47,8 +50,8 @@ pub enum WorkspaceError {
 		/// The cause.
 		source: io::Error,
 	},
-	/// cuilo never reads or writes through symlinks.
-	#[error("`{0}` is a symlink; cuilo never reads or writes through symlinks")]
+	/// cuilo never writes through symlinks or reads project files through them.
+	#[error("`{0}` is a symlink; cuilo never writes through symlinks or reads project files through them")]
 	Symlink(RelPath),
 	/// A folder where a file is expected.
 	#[error("`{0}` is a folder, not a file")]
@@ -92,9 +95,22 @@ impl Workspace {
 		}
 	}
 
+	/// Reads a file of at most `limit` bytes, or `None` when it does not exist or is larger.
+	pub(crate) fn read_limited(&self, path: &RelPath, limit: u64) -> Result<Option<Vec<u8>>, WorkspaceError> {
+		if !self.exists(path)? || self.fs.size(path).map_err(io_error(path))? > limit {
+			return Ok(None);
+		}
+		self.read(path)
+	}
+
 	/// Whether a file exists at `path`.
 	pub(crate) fn exists(&self, path: &RelPath) -> Result<bool, WorkspaceError> {
 		Ok(self.entry(path)? == Some(EntryKind::File))
+	}
+
+	/// Whether anything is at `path`: a file, a folder or a symlink.
+	pub(crate) fn occupied(&self, path: &RelPath) -> Result<bool, WorkspaceError> {
+		Ok(self.entry(path)?.is_some())
 	}
 
 	/// Writes a file atomically, creating parent folders; returns the folders it created.
@@ -316,6 +332,56 @@ mod tests {
 			workspace.write(&rel("link/evil.txt"), b"x"),
 			Err(WorkspaceError::Symlink(_))
 		));
+	}
+
+	#[test]
+	fn reads_and_writes_should_refuse_a_link_even_when_it_stays_inside_the_root() {
+		let (fs, workspace) = workspace();
+		fs.insert(&rel("real/pkg/package.json"), "{}");
+		fs.insert_symlink_to(&rel("node_modules/pkg"), "../real/pkg");
+
+		assert_eq!(
+			fs.resolve_links_inside_root(&rel("node_modules/pkg/package.json"))
+				.unwrap(),
+			Some(rel("real/pkg/package.json"))
+		);
+		assert!(matches!(
+			workspace.read(&rel("node_modules/pkg/package.json")),
+			Err(WorkspaceError::Symlink(_))
+		));
+		assert!(matches!(
+			workspace.read_limited(&rel("node_modules/pkg/package.json"), 1024),
+			Err(WorkspaceError::Symlink(_))
+		));
+		assert!(matches!(
+			workspace.write(&rel("node_modules/pkg/package.json"), b"x"),
+			Err(WorkspaceError::Symlink(_))
+		));
+		assert_eq!(fs.files()[&rel("real/pkg/package.json")], b"{}");
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn disk_workspace_should_refuse_reading_through_a_link_inside_the_root() {
+		let dir = tempfile::tempdir().unwrap();
+		std::fs::create_dir_all(dir.path().join("real/pkg")).unwrap();
+		std::fs::write(dir.path().join("real/pkg/package.json"), "{}").unwrap();
+		std::fs::create_dir(dir.path().join("node_modules")).unwrap();
+		std::os::unix::fs::symlink("../real/pkg", dir.path().join("node_modules/pkg")).unwrap();
+		let workspace = Workspace::open(dir.path()).unwrap();
+
+		assert!(matches!(
+			workspace.read(&rel("node_modules/pkg/package.json")),
+			Err(WorkspaceError::Symlink(_))
+		));
+		assert!(matches!(
+			workspace.write(&rel("node_modules/pkg/package.json"), b"x"),
+			Err(WorkspaceError::Symlink(_))
+		));
+		assert_eq!(
+			std::fs::read_to_string(dir.path().join("real/pkg/package.json")).unwrap(),
+			"{}"
+		);
 	}
 
 	#[test]

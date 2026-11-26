@@ -15,7 +15,7 @@ Cada comando que cambia el proyecto arma primero un plan. No se escribe nada has
 - `--dry-run` muestra el plan y se detiene. En una terminal, cuilo pregunta antes de aplicar, salvo que pases `--yes`. Con `--no-input` o `--json` y sin `--yes`, no se aplica nada y el código de salida es `2`.
 - Cada aplicación es una sola transacción, registrada en la bitácora `.cuilo/history`. Si un archivo cambió después de crear el plan, la aplicación se detiene y no se escribe nada; vuelve a planear.
 - Solo un proceso de cuilo cambia un proyecto a la vez. Mientras trabaja, mantiene `.cuilo/busy`.
-- cuilo nunca lee ni escribe a través de enlaces simbólicos. Las rutas no pueden salir del proyecto: se rechazan las rutas absolutas, los segmentos `..` y las barras invertidas.
+- cuilo nunca escribe a través de enlaces simbólicos ni lee archivos del proyecto a través de ellos. La única excepción es la [detección del estilo de imports](/es-mx/guides/stack-detection/#imports-relativos-en-el-código-generado): para leer archivos `tsconfig.json` y los `package.json` que resuelven sus `extends`, cuilo sigue enlaces simbólicos y uniones de directorio (junctions) de Windows, como los que pnpm crea en `node_modules`, pero solo cuando el archivo real está dentro del proyecto. Las rutas no pueden salir del proyecto: se rechazan las rutas absolutas, los segmentos `..` y las barras invertidas.
 
 Los agentes siguen la misma regla por MCP: solo `apply_plan` escribe un plan. Consulta [Conecta un agente por MCP](/es-mx/agents/mcp/).
 
@@ -163,7 +163,7 @@ Todavía no hay versiones publicadas. Cuando las haya, todos los canales instala
 - El paquete de npm no tiene dependencias y no ejecuta nada al instalarse.
 - Los scripts de instalación solo descargan por HTTPS y no siguen redirecciones. `install.sh` además exige TLS 1.2 o más reciente. Con `CUILO_REQUIRE_SIGNATURE=1`, se niegan a instalar a menos que `minisign` verifique la firma.
 - `cuilo upgrade` y las actualizaciones automáticas solo reemplazan copias que instaló el script de instalación. Reemplazan el binario solo cuando el `SHA256SUMS` de la versión trae una firma válida de la llave de publicación integrada en cuilo, y el binario coincide con su checksum firmado. Las actualizaciones automáticas nunca bajan a una versión anterior, y `cuilo upgrade` solo lo hace con `--version`.
-- Para otras copias, `cuilo upgrade` corre el gestor de paquetes que las instaló, como un programa con argumentos fijos y nunca a través de un shell, y ese gestor de paquetes revisa la descarga. Las actualizaciones automáticas nunca corren un gestor de paquetes.
+- Para otras instalaciones globales, `cuilo upgrade` corre el gestor de paquetes que las instaló, como un programa con argumentos fijos y nunca a través de un shell, y ese gestor de paquetes revisa la descarga. No corre nada para una copia de un ejecutor de un solo uso como `npx`, ni para una en el `node_modules` de un proyecto. Las actualizaciones automáticas nunca corren un gestor de paquetes.
 - La búsqueda diaria de actualizaciones solo lee cuál es la versión más reciente. `updates = "off"` en tu configuración de usuario, o `CUILO_UPDATES=off`, la desactiva.
 - Cada firma nombra su versión y su archivo, así que no se puede reutilizar para otro archivo u otra versión.
 - Para ver dónde se compiló un binario: `gh attestation verify $(command -v cuilo) --repo TuentyFaiv/cuilo`.

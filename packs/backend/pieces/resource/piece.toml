@@ -108,39 +108,39 @@ variants = ["hono", "express"]
 when = "stack.prisma"
 
 [[steps]]
-text = "Mount the routes in `src/index.ts` with `app.route(\"/example-items\", exampleItemRoutes(new ExampleItemService(new InMemoryExampleItemRepository())))`."
+text = "Mount the routes in the file that creates your Hono app, with `app.route(\"/example-items\", exampleItemRoutes(new ExampleItemService(new InMemoryExampleItemRepository())))`."
 variants = ["hono"]
 when = "!stack.drizzle && !stack.prisma"
 
 [[steps.patches]]
 kind = "import"
-file = "src/index.ts"
+file = ["src/index.ts", "src/index.tsx"]
 import = 'import { exampleItemRoutes } from "./modules/example-items/example-item.routes";'
 
 [[steps.patches]]
 kind = "import"
-file = "src/index.ts"
+file = ["src/index.ts", "src/index.tsx"]
 import = 'import { ExampleItemService } from "./modules/example-items/example-item.service";'
 
 [[steps.patches]]
 kind = "import"
-file = "src/index.ts"
+file = ["src/index.ts", "src/index.tsx"]
 import = 'import { InMemoryExampleItemRepository } from "./modules/example-items/example-item.repository";'
 
 [[steps.patches]]
 kind = "anchor"
-file = "src/index.ts"
-anchor = "export default app"
+file = ["src/index.ts", "src/index.tsx"]
+anchor = ["export default app", "export const handler = handle(app)", "fire(app)", "serve("]
 position = "before"
 insert = "app.route(\"/example-items\", exampleItemRoutes(new ExampleItemService(new InMemoryExampleItemRepository())));\n\n"
 
 [[steps]]
-text = "Mount the routes in `src/index.ts` with `app.route(\"/example-items\", exampleItemRoutes(new ExampleItemService(new DrizzleExampleItemRepository(db))))`, where `db` is your Drizzle database."
+text = "Mount the routes in the file that creates your Hono app, with `app.route(\"/example-items\", exampleItemRoutes(new ExampleItemService(new DrizzleExampleItemRepository(db))))`, where `db` is your Drizzle database."
 variants = ["hono"]
 when = "stack.drizzle"
 
 [[steps]]
-text = "Mount the routes in `src/index.ts` with `app.route(\"/example-items\", exampleItemRoutes(new ExampleItemService(new PrismaExampleItemRepository(prisma))))`, where `prisma` is your `PrismaClient`."
+text = "Mount the routes in the file that creates your Hono app, with `app.route(\"/example-items\", exampleItemRoutes(new ExampleItemService(new PrismaExampleItemRepository(prisma))))`, where `prisma` is your `PrismaClient`."
 variants = ["hono"]
 when = "stack.prisma"
 

@@ -16,7 +16,8 @@ use semver::Version;
 use serde::{Deserialize, Serialize};
 
 use crate::cli::Cli;
-use crate::upgrade::{self, Install};
+use crate::ui::printable_line;
+use crate::upgrade::{self, Install, Kind};
 
 /// What the last check found, in the user cache folder.
 const STATE_FILE: &str = "update.json";
@@ -30,27 +31,93 @@ const DAY: u64 = 24 * 60 * 60;
 /// How old a lock must be before another check takes it over.
 const STALE_LOCK: Duration = Duration::from_mins(10);
 
-/// The update policy: `CUILO_UPDATES` when set, where an unknown value counts as `off`, else the
-/// user config's; always `off` when `CI` is set.
-fn policy(config: UpdatePolicy, env: Option<&OsStr>, ci: Option<&OsStr>) -> UpdatePolicy {
-	if ci.is_some_and(|ci| !ci.is_empty()) {
-		return UpdatePolicy::Off;
-	}
-	let Some(value) = env.filter(|value| !value.is_empty()) else {
-		return config;
-	};
-	match value.to_str().map(|value| value.trim().to_ascii_lowercase()).as_deref() {
-		Some("auto") => UpdatePolicy::Auto,
-		Some("notify") => UpdatePolicy::Notify,
-		_ => UpdatePolicy::Off,
+/// `CUILO_UPDATES`, which overrides the user config's `updates`.
+fn updates_var() -> String {
+	format!("{}UPDATES", brand::ENV_PREFIX)
+}
+
+/// `CUILO_UPDATES` as set.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Requested {
+	/// Unset, or empty once trimmed.
+	Unset,
+	/// A policy, named in any letter case.
+	Policy(UpdatePolicy),
+	/// A value that names no policy, as set.
+	Invalid(String),
+}
+
+impl Requested {
+	/// What `value` asks for, with surrounding whitespace trimmed.
+	fn parse(value: Option<&OsStr>) -> Self {
+		let Some(value) = value else {
+			return Self::Unset;
+		};
+		let text = value.to_string_lossy();
+		match text.trim().to_ascii_lowercase().as_str() {
+			"" => Self::Unset,
+			"auto" => Self::Policy(UpdatePolicy::Auto),
+			"notify" => Self::Policy(UpdatePolicy::Notify),
+			"off" => Self::Policy(UpdatePolicy::Off),
+			_ => Self::Invalid(text.into_owned()),
+		}
 	}
 }
 
-/// This process's update policy; `off` when the user config cannot be read and nothing overrides it.
-fn current_policy() -> UpdatePolicy {
-	let config = UserConfig::load().map_or(UpdatePolicy::Off, |user| user.updates);
-	let env = env::var_os(format!("{}UPDATES", brand::ENV_PREFIX));
-	policy(config, env.as_deref(), env::var_os("CI").as_deref())
+/// What decides a process's update policy.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Settings {
+	/// `updates` in the user config, or `off` when it cannot be read.
+	config: UpdatePolicy,
+	/// `CUILO_UPDATES`.
+	requested: Requested,
+	/// Whether `CI` is set to a value that is not empty.
+	ci: bool,
+}
+
+impl Settings {
+	/// This process's settings.
+	fn current() -> Self {
+		Self {
+			config: UserConfig::load().map_or(UpdatePolicy::Off, |user| user.updates),
+			requested: Requested::parse(env::var_os(updates_var()).as_deref()),
+			ci: env::var_os("CI").is_some_and(|ci| !ci.is_empty()),
+		}
+	}
+
+	/// The update policy: `CUILO_UPDATES` when it names one, else the user config's; always `off` in
+	/// CI.
+	fn policy(&self) -> UpdatePolicy {
+		match &self.requested {
+			_ if self.ci => UpdatePolicy::Off,
+			Requested::Policy(policy) => *policy,
+			Requested::Unset | Requested::Invalid(_) => self.config,
+		}
+	}
+
+	/// The warning for a `CUILO_UPDATES` that names no policy; none in CI, where updates are off.
+	fn warning(&self) -> Option<String> {
+		let Requested::Invalid(value) = &self.requested else {
+			return None;
+		};
+		(!self.ci).then(|| {
+			format!(
+				"{}={} is not `auto`, `notify` or `off`; using the config's `{}`.",
+				updates_var(),
+				printable_line(value),
+				policy_name(self.config)
+			)
+		})
+	}
+}
+
+/// How `updates` spells `policy`.
+fn policy_name(policy: UpdatePolicy) -> &'static str {
+	match policy {
+		UpdatePolicy::Auto => "auto",
+		UpdatePolicy::Notify => "notify",
+		UpdatePolicy::Off => "off",
+	}
 }
 
 /// Whether a run is interactive enough to check for updates: stderr is a terminal, the output is
@@ -87,6 +154,8 @@ struct State {
 	latest: Option<Version>,
 	/// When a notice was last printed.
 	noticed_at: u64,
+	/// When the warning about an invalid `CUILO_UPDATES` was last printed.
+	warned_at: u64,
 	/// The update the last check installed, until a run of that binary reports it.
 	updated: Option<Updated>,
 	/// Why the last check or update failed.
@@ -202,6 +271,12 @@ impl Running {
 		})
 	}
 
+	/// Whether this copy checks for updates and reports them: not when off, nor for a one-off
+	/// runner's copy.
+	fn checks(&self) -> bool {
+		self.policy != UpdatePolicy::Off && self.install.kind() != Some(Kind::Ephemeral)
+	}
+
 	/// Starts `cuilo upgrade --background`, detached and with no stdio, in the cache folder so it
 	/// holds no project folder open. It starts the binary by the path this process was started
 	/// with, since a resolved Windows path is a `\\?\` one.
@@ -239,56 +314,86 @@ impl Running {
 			"{} {latest} is available (you have {}); {}.",
 			brand::NAME,
 			self.version,
-			self.install.hint()
+			self.install.hint(latest, true)
 		);
 		state.noticed_at = now;
 		Some(line)
 	}
 }
 
-/// Update checks and notices for one interactive run.
+/// Update checks, notices and the `CUILO_UPDATES` warning for one interactive run.
 #[derive(Debug)]
-pub(crate) struct Watch(Running);
+pub(crate) struct Watch {
+	/// The running binary.
+	running: Running,
+	/// The warning about `CUILO_UPDATES`, when it names no policy.
+	warning: Option<String>,
+}
 
 impl Watch {
-	/// Starts a background check when one is due; `None` when this run neither checks nor reports.
+	/// Starts a background check when one is due; `None` when this run neither checks nor warns.
 	pub(crate) fn start(cli: &Cli) -> Option<Self> {
 		if !interactive(cli, io::stderr().is_terminal()) {
 			return None;
 		}
-		let policy = current_policy();
-		if policy == UpdatePolicy::Off {
-			return None;
+		let settings = Settings::current();
+		let warning = settings.warning();
+		let running = Running::this(settings.policy())?;
+		if !running.checks() {
+			return warning.map(|warning| Self {
+				running,
+				warning: Some(warning),
+			});
 		}
-		let running = Running::this(policy)?;
 		if State::load(&running.dir).due(channel(&running.version), seconds(SystemTime::now())) {
 			let _ = running.spawn();
 		}
-		Some(Self(running))
+		Some(Self { running, warning })
 	}
 
-	/// Prints on stderr, after the command's own output, what the background checks found.
+	/// Prints on stderr, after the command's own output, the warning and what the background checks
+	/// found.
 	pub(crate) fn finish(self) {
-		let mut state = State::load(&self.0.dir);
-		let before = state.clone();
-		if let Some(line) = self.0.report(&mut state, seconds(SystemTime::now())) {
+		for line in self.settle(seconds(SystemTime::now())) {
 			eprintln!("{line}");
+		}
+	}
+
+	/// The lines to print at `now`, noting in the state what they reported.
+	fn settle(&self, now: u64) -> Vec<String> {
+		let dir = &self.running.dir;
+		let mut state = State::load(dir);
+		let before = state.clone();
+		let mut lines = Vec::new();
+		if let Some(warning) = &self.warning
+			&& a_day_since(state.warned_at, now)
+		{
+			state.warned_at = now;
+			lines.push(warning.clone());
+		}
+		if self.running.checks()
+			&& let Some(line) = self.running.report(&mut state, now)
+		{
+			lines.push(line);
 		}
 		if state != before {
 			let reported = state.updated != before.updated;
-			let _ = record(&self.0.dir, |now| {
+			let _ = fs::create_dir_all(dir);
+			let _ = record(dir, |now| {
 				now.noticed_at = state.noticed_at;
+				now.warned_at = state.warned_at;
 				if reported {
 					now.updated = state.updated;
 				}
 			});
 		}
+		lines
 	}
 }
 
 /// `cuilo upgrade --background`: checks for a new release and, when allowed, installs it.
 pub(crate) fn background() {
-	if let Some(running) = Running::this(current_policy()) {
+	if let Some(running) = Running::this(Settings::current().policy()) {
 		let _ = fs::create_dir_all(&running.dir);
 		check(
 			&HttpsFetch::default(),
@@ -302,7 +407,7 @@ pub(crate) fn background() {
 /// One check, unless another one runs or ran less than a day ago; it records what it found, and
 /// failures, in the state.
 fn check(fetch: &dyn Fetch, key: &str, running: &Running, now: SystemTime) {
-	if running.policy == UpdatePolicy::Off {
+	if !running.checks() {
 		return;
 	}
 	let Some(_lock) = Lock::take(&running.dir, now) else {
@@ -377,14 +482,10 @@ fn detach(command: &mut Command) -> io::Result<Child> {
 	const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
 	const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
 	let flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP;
-	command.creation_flags(flags | CREATE_BREAKAWAY_FROM_JOB);
-	match command.spawn() {
-		Ok(child) => Ok(child),
-		Err(_) => {
-			command.creation_flags(flags);
-			command.spawn()
-		}
-	}
+	command
+		.creation_flags(flags | CREATE_BREAKAWAY_FROM_JOB)
+		.spawn()
+		.or_else(|_| command.creation_flags(flags).spawn())
 }
 
 #[cfg(not(any(unix, windows)))]
@@ -436,20 +537,201 @@ mod tests {
 		UNIX_EPOCH + Duration::from_secs(seconds)
 	}
 
-	#[test]
-	fn policy_should_take_the_environment_over_the_config_and_turn_off_in_ci() {
-		let os = |value: &'static str| Some(OsStr::new(value));
+	const WARNING: &str = "CUILO_UPDATES=yes is not `auto`, `notify` or `off`; using the config's `auto`.";
 
-		assert_eq!(policy(UpdatePolicy::Auto, None, None), UpdatePolicy::Auto);
-		assert_eq!(policy(UpdatePolicy::Off, None, None), UpdatePolicy::Off);
-		assert_eq!(policy(UpdatePolicy::Auto, os("notify"), None), UpdatePolicy::Notify);
-		assert_eq!(policy(UpdatePolicy::Off, os(" AUTO "), None), UpdatePolicy::Auto);
-		assert_eq!(policy(UpdatePolicy::Notify, os("off"), None), UpdatePolicy::Off);
-		assert_eq!(policy(UpdatePolicy::Auto, os("sometimes"), None), UpdatePolicy::Off);
-		assert_eq!(policy(UpdatePolicy::Notify, os(""), None), UpdatePolicy::Notify);
-		assert_eq!(policy(UpdatePolicy::Auto, os("auto"), os("true")), UpdatePolicy::Off);
-		assert_eq!(policy(UpdatePolicy::Notify, None, os("1")), UpdatePolicy::Off);
-		assert_eq!(policy(UpdatePolicy::Auto, None, os("")), UpdatePolicy::Auto);
+	fn settings(config: UpdatePolicy, value: Option<&str>, ci: bool) -> Settings {
+		Settings {
+			config,
+			requested: Requested::parse(value.map(OsStr::new)),
+			ci,
+		}
+	}
+
+	#[test]
+	fn requested_should_match_a_policy_in_any_case_and_keep_any_other_value_as_set() {
+		let parse = |value: &str| Requested::parse(Some(OsStr::new(value)));
+
+		assert_eq!(Requested::parse(None), Requested::Unset);
+		assert_eq!(parse(""), Requested::Unset);
+		assert_eq!(parse(" \t"), Requested::Unset);
+		assert_eq!(parse("auto"), Requested::Policy(UpdatePolicy::Auto));
+		assert_eq!(parse(" AUTO "), Requested::Policy(UpdatePolicy::Auto));
+		assert_eq!(parse("Notify\n"), Requested::Policy(UpdatePolicy::Notify));
+		assert_eq!(parse("OFF"), Requested::Policy(UpdatePolicy::Off));
+		assert_eq!(parse("yes"), Requested::Invalid("yes".to_owned()));
+		assert_eq!(parse(" Sometimes "), Requested::Invalid(" Sometimes ".to_owned()));
+		#[cfg(unix)]
+		{
+			use std::os::unix::ffi::OsStrExt as _;
+			assert_eq!(
+				Requested::parse(Some(OsStr::from_bytes(b"auto\xff"))),
+				Requested::Invalid("auto\u{fffd}".to_owned())
+			);
+		}
+	}
+
+	#[test]
+	fn policy_should_take_a_valid_environment_value_over_the_config_and_turn_off_in_ci() {
+		assert_eq!(settings(UpdatePolicy::Auto, None, false).policy(), UpdatePolicy::Auto);
+		assert_eq!(settings(UpdatePolicy::Off, None, false).policy(), UpdatePolicy::Off);
+		assert_eq!(
+			settings(UpdatePolicy::Auto, Some("notify"), false).policy(),
+			UpdatePolicy::Notify
+		);
+		assert_eq!(
+			settings(UpdatePolicy::Off, Some(" AUTO "), false).policy(),
+			UpdatePolicy::Auto
+		);
+		assert_eq!(
+			settings(UpdatePolicy::Notify, Some("off"), false).policy(),
+			UpdatePolicy::Off
+		);
+		assert_eq!(
+			settings(UpdatePolicy::Notify, Some(""), false).policy(),
+			UpdatePolicy::Notify
+		);
+		assert_eq!(
+			settings(UpdatePolicy::Auto, Some("auto"), true).policy(),
+			UpdatePolicy::Off
+		);
+		assert_eq!(settings(UpdatePolicy::Notify, None, true).policy(), UpdatePolicy::Off);
+	}
+
+	#[test]
+	fn an_invalid_environment_value_should_leave_the_config_in_charge_and_warn() {
+		for config in [UpdatePolicy::Auto, UpdatePolicy::Notify, UpdatePolicy::Off] {
+			assert_eq!(settings(config, Some("sometimes"), false).policy(), config);
+		}
+		assert_eq!(
+			settings(UpdatePolicy::Auto, Some("yes"), false).warning().as_deref(),
+			Some(WARNING)
+		);
+		assert_eq!(
+			settings(UpdatePolicy::Off, Some(" 1 "), false).warning().as_deref(),
+			Some("CUILO_UPDATES= 1  is not `auto`, `notify` or `off`; using the config's `off`.")
+		);
+		assert_eq!(
+			settings(UpdatePolicy::Notify, Some("\u{1b}[2Kyes\n"), false)
+				.warning()
+				.as_deref(),
+			Some(r"CUILO_UPDATES=\u{1b}[2Kyes\n is not `auto`, `notify` or `off`; using the config's `notify`.")
+		);
+		assert_eq!(
+			settings(UpdatePolicy::Auto, Some("yes"), true).warning(),
+			None,
+			"updates are off in CI"
+		);
+		assert_eq!(settings(UpdatePolicy::Auto, Some("Notify"), false).warning(), None);
+		assert_eq!(settings(UpdatePolicy::Auto, Some(""), false).warning(), None);
+		assert_eq!(settings(UpdatePolicy::Auto, None, false).warning(), None);
+	}
+
+	#[test]
+	fn settle_should_warn_about_an_invalid_value_at_most_once_a_day() -> anyhow::Result<()> {
+		let dir = tempfile::tempdir()?;
+		let cache = dir.path().join("cache");
+		let settings = settings(UpdatePolicy::Auto, Some("yes"), false);
+		let watch = Watch {
+			running: running(
+				&cache,
+				PathBuf::from("/usr/local/bin/cuilo"),
+				settings.policy(),
+				"2.0.0",
+			),
+			warning: settings.warning(),
+		};
+
+		assert_eq!(watch.settle(NOW), [WARNING]);
+		assert_eq!(State::load(&cache).warned_at, NOW, "the warning was not recorded");
+		assert_eq!(watch.settle(NOW + 3600), Vec::<String>::new());
+		assert_eq!(watch.settle(NOW + DAY), [WARNING]);
+		Ok(())
+	}
+
+	#[test]
+	fn settle_should_still_notify_after_a_failed_auto_update_when_the_value_is_invalid() -> anyhow::Result<()> {
+		let dir = tempfile::tempdir()?;
+		let settings = settings(UpdatePolicy::Auto, Some("yes"), false);
+		let watch = |dir: &Path| -> anyhow::Result<Watch> {
+			Ok(Watch {
+				running: script_install(dir, settings.policy())?,
+				warning: settings.warning(),
+			})
+		};
+		let found = |error: Option<String>| {
+			move |state: &mut State| {
+				state.checked_at = NOW;
+				state.channel = Some("latest".to_owned());
+				state.latest = Some(version("2.1.0"));
+				state.error = error;
+			}
+		};
+		let failed = watch(&dir.path().join("failed"))?;
+		let updated = watch(&dir.path().join("updated"))?;
+		record(&failed.running.dir, found(Some("offline".to_owned())))?;
+		record(&updated.running.dir, found(None))?;
+
+		assert_eq!(
+			failed.settle(NOW),
+			[
+				WARNING,
+				"cuilo 2.1.0 is available (you have 2.0.0); run `cuilo upgrade`."
+			]
+		);
+		let state = State::load(&failed.running.dir);
+		assert_eq!((state.warned_at, state.noticed_at), (NOW, NOW));
+		assert_eq!(updated.settle(NOW), [WARNING], "auto-update covers it");
+		Ok(())
+	}
+
+	#[test]
+	fn a_one_off_runner_s_copy_should_never_check_or_notify() -> anyhow::Result<()> {
+		let dir = tempfile::tempdir()?;
+		let exe = PathBuf::from("/home/me/.npm/_npx/1a4eb60c8f6b0f89/node_modules/@cuilo/cli-linux-x64/bin/cuilo");
+		let npx = running(dir.path(), exe, UpdatePolicy::Notify, "2.0.0");
+		let fetch = newer_release(BINARY);
+
+		check(&fetch, KEY, &npx, at(NOW));
+		assert!(asked(&fetch).is_empty(), "it looked for a release");
+		assert_eq!(State::load(dir.path()), State::default());
+
+		record(dir.path(), |state| {
+			state.checked_at = NOW;
+			state.channel = Some("latest".to_owned());
+			state.latest = Some(version("2.1.0"));
+		})?;
+		let watch = Watch {
+			running: npx,
+			warning: None,
+		};
+		assert_eq!(watch.settle(NOW), Vec::<String>::new(), "it reported on a one-off copy");
+		Ok(())
+	}
+
+	#[test]
+	fn report_should_name_the_project_s_own_command_for_a_project_copy() -> anyhow::Result<()> {
+		let dir = tempfile::tempdir()?;
+		fs::write(dir.path().join("package.json"), "{}")?;
+		fs::write(dir.path().join("pnpm-lock.yaml"), "")?;
+		let exe = dir
+			.path()
+			.join("node_modules/.pnpm/@cuilo+cli-linux-x64@2.0.0/node_modules/@cuilo/cli-linux-x64/bin/cuilo");
+		let project = running(&dir.path().join("cache"), exe, UpdatePolicy::Auto, "2.0.0");
+		let mut state = State {
+			checked_at: NOW,
+			channel: Some("latest".to_owned()),
+			latest: Some(version("2.1.0")),
+			..State::default()
+		};
+
+		assert_eq!(
+			project.report(&mut state, NOW),
+			Some(format!(
+				"cuilo 2.1.0 is available (you have 2.0.0); this copy is a dependency of the project in {}; run `pnpm add --save-dev @cuilo/cli@2.1.0` there.",
+				dir.path().display()
+			))
+		);
+		Ok(())
 	}
 
 	#[test]

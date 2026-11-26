@@ -158,7 +158,7 @@ cuilo upgrade
 
 Una copia instalada con el script de instalación se reemplaza por la versión firmada más reciente. cuilo solo reemplaza el binario cuando el `SHA256SUMS` de la versión trae una firma válida de la llave de publicación integrada en cuilo, y el binario coincide con su checksum firmado. Nunca pasa a una versión anterior. Un cuilo preliminar sigue el canal de versiones preliminares.
 
-Para cualquier otra copia, `cuilo upgrade` corre el gestor de paquetes que la instaló, y primero imprime el comando. Los distingue por la carpeta donde está el binario:
+Para una copia que un gestor de paquetes instaló de forma global, `cuilo upgrade` corre ese gestor de paquetes, y primero imprime el comando. Los distingue por la carpeta donde está el binario:
 
 | Instalado con | `cuilo upgrade` corre                                                                                                                       |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -179,6 +179,25 @@ cuilo upgrade --version 2.0.0
 
 `cuilo upgrade --check` solo te avisa si hay una versión más reciente, y qué comando correría `cuilo upgrade`. Con `--json`, la salida del gestor de paquetes va a stderr, así que stdout sigue siendo JSON válido. Consulta [`cuilo upgrade`](/es-mx/reference/cli/upgrade/).
 
+### Copias que cuilo no actualiza
+
+`cuilo upgrade` solo actualiza instalaciones globales. El paquete de npm también corre de otras dos formas, y para esas copias `cuilo upgrade` no corre nada. En su lugar, imprime qué correr.
+
+Un ejecutor de un solo uso, como `npx`, `bunx`, `pnpm dlx` o `yarn dlx`, guarda su copia en una caché. `cuilo upgrade` nombra el ejecutor y el comando que trae la versión más reciente, por ejemplo ``this copy runs through npx; run `npx @cuilo/cli@latest`.`` Con `--version`, el comando nombra esa versión. Estas copias nunca buscan versiones nuevas en segundo plano ni imprimen avisos.
+
+Una copia en el `node_modules` propio de un proyecto es una dependencia del proyecto, y su lockfile la fija. `cuilo upgrade` imprime el comando que actualiza la dependencia, elegido por el lockfile junto a ese `node_modules`. El aviso diario nombra ese comando en lugar de `cuilo upgrade`.
+
+| Lockfile                                            | Comando                                       |
+| --------------------------------------------------- | --------------------------------------------- |
+| `bun.lock` o `bun.lockb`                            | `bun add --dev @cuilo/cli@<versión>`          |
+| `pnpm-lock.yaml`                                    | `pnpm add --save-dev @cuilo/cli@<versión>`    |
+| `yarn.lock`                                         | `yarn add --dev @cuilo/cli@<versión>`         |
+| `package-lock.json`, `npm-shrinkwrap.json`, ninguno | `npm install --save-dev @cuilo/cli@<versión>` |
+
+Sin lockfile, cuilo se guía por cómo está organizado `node_modules`, como la carpeta `.pnpm` de pnpm, y nombra npm cuando nada indica otra cosa.
+
+cuilo distingue estas copias por la carpeta donde está el binario. Un `node_modules` sin un `package.json` junto a él es un prefijo de npm, como `/usr/local/lib` o `%APPDATA%\npm`, así que esa copia cuenta como global. Con `--json`, `kind` es `global`, `ephemeral` o `project`, y `project` nombra la carpeta del proyecto.
+
 ### Actualizaciones automáticas
 
 Cuando usas cuilo en una terminal, busca una versión nueva como máximo una vez al día. La búsqueda corre en segundo plano, así que ningún comando la espera ni falla por ella. Lo que pasa después depende de `updates` en tu [configuración de usuario](/es-mx/reference/user-config/#updates), `config.toml` en tu carpeta de configuración de cuilo:
@@ -193,7 +212,11 @@ Cuando usas cuilo en una terminal, busca una versión nueva como máximo una vez
 updates = "notify"
 ```
 
-`CUILO_UPDATES` tiene prioridad sobre la configuración, por ejemplo `CUILO_UPDATES=off cuilo status`. cuilo imprime estas líneas en stderr, después de la salida del propio comando. Nunca busca ni las imprime con `--json`, cuando stderr no es una terminal, cuando `CI` está definida, ni en `cuilo mcp`, `cuilo completions` y `cuilo upgrade`. Una búsqueda o actualización que falla queda anotada en `update.json` en tu carpeta de caché, y se intenta de nuevo al día siguiente. Mientras tanto, una copia que no pudo actualizarse sola imprime el aviso, para que corras `cuilo upgrade` y veas por qué. Consulta [Variables de entorno](/es-mx/reference/environment/).
+La copia de un proyecto recibe un aviso que nombra el comando del proyecto, y la copia de un ejecutor de un solo uso nunca busca. Consulta [copias que cuilo no actualiza](#copias-que-cuilo-no-actualiza).
+
+`CUILO_UPDATES` tiene prioridad sobre la configuración, por ejemplo `CUILO_UPDATES=off cuilo status`. Acepta `auto`, `notify` u `off` en mayúsculas o minúsculas, y un valor vacío cuenta como no definido. cuilo ignora cualquier otro valor, así que se aplica la configuración, y lo advierte como máximo una vez al día: ``CUILO_UPDATES=yes is not `auto`, `notify` or `off`; using the config's `auto`.``
+
+cuilo imprime estas líneas en stderr, después de la salida del propio comando. Nunca busca ni las imprime con `--json`, cuando stderr no es una terminal, cuando `CI` está definida, ni en `cuilo mcp`, `cuilo completions` y `cuilo upgrade`. Una búsqueda o actualización que falla queda anotada en `update.json` en tu carpeta de caché, y se intenta de nuevo al día siguiente. Mientras tanto, una copia que no pudo actualizarse sola imprime el aviso, para que corras `cuilo upgrade` y veas por qué. Consulta [Variables de entorno](/es-mx/reference/environment/).
 
 ## Autocompletado de tu shell
 

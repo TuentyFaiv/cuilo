@@ -1,0 +1,23 @@
+---
+source: crates/cuilo-core/tests/official_packs.rs
+expression: "create_hono(\"nextjs\", \"app/api/[...route]/route.ts\", false)?"
+---
+nextjs: app/api/[...route]/route.ts
+→ Register the error handler in the file that creates your Hono app, with `app.onError(errorHandler)`.
+→ Mount the routes in the file that creates your Hono app, with `app.route("/status-badges", statusBadgeRoutes(new StatusBadgeService(new InMemoryStatusBadgeRepository())))`.
+! src/index.ts: none of `src/index.ts` or `src/index.tsx` exists; wire it by hand
+→ Register the middleware in the file that creates your Hono app, before your routes, with `app.use(statusBadge)`.
+! src/index.ts: none of `src/index.ts` or `src/index.tsx` exists; wire it by hand
+---
+import { Hono } from 'hono'
+import { handle } from '@hono/vercel'
+
+const app = new Hono().basePath('/api')
+
+app.get('/hello', (c) => {
+  return c.json({
+    message: 'Hello from Hono!'
+  })
+})
+
+export const GET = handle(app)

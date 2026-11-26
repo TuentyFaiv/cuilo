@@ -11,11 +11,11 @@ mod value;
 pub(crate) use case::{Case, words};
 pub use glob::{Glob, GlobError};
 pub use hash::{Digest, ParseDigestError};
-pub(crate) use manifest::SCHEMA_VERSION;
 pub use manifest::{
-	Dependency, Ecosystem, Fact, FileRule, Input, Migration, Name, NameError, PackManifest, PatchSpec, Permissions,
-	PieceKind, PieceManifest, Position, Rename, Step, Variant,
+	Anchors, Dependency, Ecosystem, Fact, FileRule, Files, Input, Migration, Name, NameError, PackManifest, PatchSpec,
+	Permissions, PieceKind, PieceManifest, Position, Rename, Step, Variant,
 };
+pub(crate) use manifest::{SCHEMA_VERSION, or_list, shared_alternative};
 pub use path::{PathError, RelPath};
-pub use stack::Stack;
+pub use stack::{ImportStyle, Stack};
 pub use value::{Value, Values};

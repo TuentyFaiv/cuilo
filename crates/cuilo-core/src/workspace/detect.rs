@@ -48,6 +48,11 @@ pub(crate) fn detect(workspace: &Workspace, config: &ProjectConfig) -> Result<Pr
 	for (fact, values) in &config.stack {
 		stack.set(*fact, values.iter().cloned());
 	}
+	if !config.stack.contains_key(&Fact::ImportStyle)
+		&& let Some(style) = super::import_style(workspace, None, &stack)
+	{
+		stack.set_import_style(style);
+	}
 	Ok(ProjectModel {
 		stack,
 		env: env_keys(workspace)?,
@@ -1272,6 +1277,125 @@ mod tests {
 		let model = detect_in(&[(".env.example", "# comment\nAPI_URL=https://x\nexport SECRET=\n")]);
 
 		assert_eq!(model.env.into_iter().collect::<Vec<_>>(), ["API_URL", "SECRET"]);
+	}
+
+	#[test]
+	fn import_style_should_come_from_the_root_tsconfig_or_deno_in_js_projects_only() {
+		let node = detect_in(&[
+			("package.json", r#"{"devDependencies": {"typescript": "6"}}"#),
+			("tsconfig.json", r#"{"compilerOptions": {"module": "NodeNext"}}"#),
+		]);
+		let bundler = detect_in(&[("package.json", r#"{"dependencies": {"vite": "8"}}"#)]);
+		let deno = detect_in(&[("deno.json", "{}")]);
+		let rust = detect_in(&[("Cargo.toml", "[package]\nname = \"x\"\n")]);
+
+		assert!(has(&node, Fact::ImportStyle, &["imports-js"]));
+		assert!(has(&bundler, Fact::ImportStyle, &["imports-extensionless"]));
+		assert!(has(&deno, Fact::ImportStyle, &["imports-ts"]));
+		assert_eq!(rust.stack.values(Fact::ImportStyle).count(), 0);
+	}
+
+	#[test]
+	fn import_style_should_follow_a_configured_deno_runtime_and_yield_to_a_configured_style() {
+		let files = [
+			("package.json", "{}"),
+			("tsconfig.json", r#"{"compilerOptions": {"module": "nodenext"}}"#),
+		];
+		let mut deno = ProjectConfig::default();
+		deno.stack.insert(Fact::Runtime, vec!["deno".to_owned()]);
+		let mut set = ProjectConfig::default();
+		set
+			.stack
+			.insert(Fact::ImportStyle, vec!["imports-extensionless".to_owned()]);
+		let mut cleared = ProjectConfig::default();
+		cleared.stack.insert(Fact::ImportStyle, Vec::new());
+
+		let detect_with = |config: &ProjectConfig| detect(&workspace(&files), config).unwrap();
+
+		assert!(has(&detect_with(&deno), Fact::ImportStyle, &["imports-js"]));
+		assert!(has(&detect_with(&set), Fact::ImportStyle, &["imports-extensionless"]));
+		assert_eq!(detect_with(&cleared).stack.values(Fact::ImportStyle).count(), 0);
+		let deno_only = detect(&workspace(&[("package.json", "{}")]), &deno).unwrap();
+		assert!(has(&deno_only, Fact::ImportStyle, &["imports-ts"]));
+	}
+
+	#[test]
+	fn no_detected_value_should_look_like_an_import_style() {
+		let tables: [&[(&str, &str)]; 22] = [
+			&JS_FRAMEWORKS,
+			&JS_STYLING,
+			&JS_TESTING,
+			&PYTHON_TESTING,
+			&JS_FORMATTERS,
+			&PYTHON_FORMATTERS,
+			&JS_DATABASES,
+			&RUST_FRAMEWORKS,
+			&RUST_RUNTIMES,
+			&RUST_DATABASES,
+			&PYTHON_FRAMEWORKS,
+			&PYTHON_DATABASES,
+			&GO_FRAMEWORKS,
+			&GO_DATABASES,
+			&DART_DATABASES,
+			&RUBY_DATABASES,
+			&RUBY_FRAMEWORKS,
+			&PHP_FRAMEWORKS,
+			&PHP_DATABASES,
+			&JVM_FRAMEWORKS,
+			&JVM_DATABASES,
+			&SWIFT_FRAMEWORKS,
+		];
+		let fixed = [
+			"typescript",
+			"javascript",
+			"deno",
+			"bun",
+			"node",
+			"npm",
+			"pnpm",
+			"yarn",
+			"rust",
+			"cargo",
+			"rustfmt",
+			"python",
+			"uv",
+			"poetry",
+			"pdm",
+			"pipenv",
+			"pip",
+			"django-orm",
+			"go",
+			"gofmt",
+			"dart",
+			"pub",
+			"flutter",
+			"ruby",
+			"bundler",
+			"activerecord",
+			"php",
+			"composer",
+			"eloquent",
+			"gradle",
+			"maven",
+			"kotlin",
+			"java",
+			"swift",
+			"cocoapods",
+			"swiftpm",
+			"gpui",
+		];
+		let values = tables
+			.iter()
+			.flat_map(|table| table.iter().map(|(_, value)| *value))
+			.chain(FORMATTER_CONFIGS.iter().map(|(tool, _)| *tool))
+			.chain(fixed);
+
+		for value in values {
+			assert!(
+				!value.starts_with("imports-"),
+				"`{value}` would collide with an import style"
+			);
+		}
 	}
 
 	#[test]

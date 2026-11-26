@@ -54,17 +54,17 @@ path = "apperror_test.go"
 when = "tests"
 
 [[steps]]
-text = "Register the error handler in `src/index.ts` with `app.onError(errorHandler)`."
+text = "Register the error handler in the file that creates your Hono app, with `app.onError(errorHandler)`."
 variants = ["hono"]
 
 [[steps.patches]]
 kind = "import"
-file = "src/index.ts"
+file = ["src/index.ts", "src/index.tsx"]
 import = 'import { errorHandler } from "./shared/error-handler";'
 
 [[steps.patches]]
 kind = "anchor"
-file = "src/index.ts"
+file = ["src/index.ts", "src/index.tsx"]
 anchor = "const app = new Hono()"
 insert = "app.onError(errorHandler);"
 

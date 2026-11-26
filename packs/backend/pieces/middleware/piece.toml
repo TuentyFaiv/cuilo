@@ -59,17 +59,17 @@ path = "request_id_test.go"
 when = "tests"
 
 [[steps]]
-text = "Register the middleware in `src/index.ts`, before your routes, with `app.use(requestId)`."
+text = "Register the middleware in the file that creates your Hono app, before your routes, with `app.use(requestId)`."
 variants = ["hono"]
 
 [[steps.patches]]
 kind = "import"
-file = "src/index.ts"
+file = ["src/index.ts", "src/index.tsx"]
 import = 'import { requestId } from "./shared/middleware/request-id";'
 
 [[steps.patches]]
 kind = "anchor"
-file = "src/index.ts"
+file = ["src/index.ts", "src/index.tsx"]
 anchor = "const app = new Hono()"
 insert = "app.use(requestId);"
 

@@ -146,7 +146,7 @@
         },
         "type": "array"
       },
-      "description": "Stack facts that replace detection, e.g. `framework = [\"svelte\"]`.",
+      "description": "Stack facts that replace detection, e.g. `framework = [\"svelte\"]`. `import_style` takes one of\n`imports-extensionless` (`./foo`), `imports-js` (`./foo.js`) or `imports-ts` (`./foo.ts`) and sets how\ngenerated JavaScript and TypeScript write relative imports, e.g. `import_style = [\"imports-js\"]`;\nwithout it, the `tsconfig.json` that governs each piece's folder decides.",
       "type": "object"
     },
     "verify": {

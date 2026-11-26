@@ -3,6 +3,7 @@
 mod builder;
 mod capture;
 mod format;
+mod imports;
 mod install;
 mod planner;
 mod status;
@@ -27,7 +28,7 @@ pub(crate) use format::Formatting;
 use crate::event::EventSink;
 use crate::history::{self, Edit, History, HistoryError, Transaction};
 use crate::migrate::AstGrep;
-use crate::model::{Name, Permissions, RelPath, Values};
+use crate::model::{Name, Permissions, RelPath, Values, or_list};
 use crate::pack::{InputError, Pack, RenderError};
 use crate::patch::{PatchError, PatchKind, Patchers};
 use crate::plan::{Action, Plan, Rejected, Validated};
@@ -83,9 +84,9 @@ pub enum EngineError {
 		/// Requested piece.
 		piece: String,
 	},
-	/// A file to patch does not exist.
-	#[error("cannot patch `{0}`: the file does not exist")]
-	PatchTarget(RelPath),
+	/// No file a patch may edit exists; holds its alternatives.
+	#[error("cannot patch {}: {}", or_list(.0), if .0.len() == 1 { "the file does not exist" } else { "none of them exists" })]
+	PatchTarget(Vec<RelPath>),
 	/// A patch failed.
 	#[error("patch on `{file}`: {source}")]
 	Patch {

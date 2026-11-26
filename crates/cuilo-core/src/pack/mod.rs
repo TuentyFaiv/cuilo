@@ -11,10 +11,11 @@ use std::path::{Path, PathBuf};
 pub use inputs::InputError;
 pub(crate) use inputs::resolve as resolve_inputs;
 pub use render::RenderError;
-pub(crate) use render::{RenderRequest, Rendered, RenderedFile, RenderedStep, render};
+pub(crate) use render::{RenderRequest, Rendered, RenderedFile, RenderedPatch, RenderedStep, render, target};
 
 use crate::model::{
-	Dependency, Digest, Input, Name, PackManifest, PieceManifest, RelPath, SCHEMA_VERSION, Value, Variant, words,
+	Dependency, Digest, Input, Name, PackManifest, PatchSpec, PieceManifest, RelPath, SCHEMA_VERSION, Value, Variant,
+	shared_alternative, words,
 };
 use crate::template::{self, Example, Expr, Replacer};
 
@@ -444,10 +445,9 @@ impl Piece {
 			}
 		}
 
-		let step_patches = manifest.steps.iter().flat_map(|step| &step.patches);
-		for patch in manifest.patches.iter().chain(step_patches) {
-			RelPath::new(patch.file()).map_err(|error| invalid(file, &format!("patch file: {error}")))?;
-			patch.when().map_or(Ok(()), check_when)?;
+		for patches in std::iter::once(&manifest.patches).chain(manifest.steps.iter().map(|step| &step.patches)) {
+			validate_patch_files(file, patches)?;
+			patches.iter().filter_map(PatchSpec::when).try_for_each(check_when)?;
 		}
 		let check_limits = |what: &str, variants: &[Name], when: Option<&str>| {
 			if let Some(unknown) = variants.iter().find(|name| !variant_names.contains(name)) {
@@ -522,6 +522,30 @@ fn migration_rules(
 		}
 	}
 	Ok(rules)
+}
+
+/// Checks the files of `patches`, the piece's own or one step's: every alternative is a project path listed once,
+/// and patches that share an alternative list the same ones in the same order.
+fn validate_patch_files(file: &str, patches: &[PatchSpec]) -> Result<(), PackError> {
+	for patch in patches {
+		let alternatives = patch.file().as_slice();
+		for (i, alternative) in alternatives.iter().enumerate() {
+			RelPath::new(alternative).map_err(|error| invalid(file, &format!("patch file: {error}")))?;
+			if alternatives[..i].contains(alternative) {
+				return Err(invalid(file, &format!("patch file lists `{alternative}` twice")));
+			}
+		}
+	}
+	let lists: Vec<&[String]> = patches.iter().map(|patch| patch.file().as_slice()).collect();
+	match shared_alternative(&lists) {
+		Some(shared) => Err(invalid(
+			file,
+			&format!(
+				"two patches list `{shared}` among different file alternatives; give them the same list, in the same order"
+			),
+		)),
+		None => Ok(()),
+	}
 }
 
 /// Names and versions end up as package-manager arguments, so only plain characters are allowed.
@@ -877,6 +901,57 @@ mod tests {
 			let message = error(files(&[("pieces/thing/piece.toml", &piece)]));
 			assert!(message.contains(expected), "{steps}: {message}");
 		}
+	}
+
+	fn import(file: &str) -> String {
+		format!("[[steps.patches]]\nkind = \"import\"\nfile = {file}\nimport = \"import a from 'a';\"\n")
+	}
+
+	const ENTRIES: &str = "[\"src/index.ts\", \"src/index.tsx\"]";
+
+	#[test]
+	fn from_files_should_check_file_alternatives() {
+		let step = "[[steps]]\ntext = \"x\"\n";
+		let invalid = [
+			(import("[\"src/index.ts\", \"../index.ts\"]"), "patch file"),
+			(
+				import("[\"src/index.ts\", \"src/index.ts\"]"),
+				"lists `src/index.ts` twice",
+			),
+			(
+				format!("{}{}", import(ENTRIES), import("\"src/index.tsx\"")),
+				"two patches list `src/index.tsx` among different file alternatives",
+			),
+			(
+				format!("{}{}", import(ENTRIES), import("[\"src/index.tsx\", \"src/index.ts\"]")),
+				"two patches list `src/index.ts` among different file alternatives",
+			),
+		];
+
+		for (patches, expected) in invalid {
+			let piece = format!("{PIECE}{step}{patches}");
+			let message = error(files(&[("pieces/thing/piece.toml", &piece)]));
+			assert!(message.contains(expected), "{patches}: {message}");
+		}
+		let own = format!(
+			"{PIECE}{}{}",
+			import(ENTRIES).replace("steps.patches", "patches"),
+			import("\"src/index.tsx\"").replace("steps.patches", "patches")
+		);
+		assert!(error(files(&[("pieces/thing/piece.toml", &own)])).contains("among different file alternatives"));
+	}
+
+	#[test]
+	fn from_files_should_allow_the_same_alternatives_in_one_step_and_others_in_another() {
+		let piece = format!(
+			"{PIECE}[[steps]]\ntext = \"x\"\n{}{}{}[[steps]]\ntext = \"y\"\n{}",
+			import(ENTRIES),
+			import(ENTRIES),
+			import("\"src/main.ts\""),
+			import("\"src/index.tsx\"")
+		);
+
+		assert!(Pack::from_files(files(&[("pieces/thing/piece.toml", &piece)])).is_ok());
 	}
 
 	#[test]

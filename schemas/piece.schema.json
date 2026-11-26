@@ -1,5 +1,22 @@
 {
   "$defs": {
+    "Anchors": {
+      "anyOf": [
+        {
+          "description": "Text that exactly one line of the file must contain.",
+          "type": "string"
+        },
+        {
+          "description": "Alternatives tried in order: the first one in the file is used, and one on more than one line fails the patch without trying the rest.",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      ],
+      "description": "The text an anchor line contains, or alternatives in order of preference."
+    },
     "Dependency": {
       "additionalProperties": false,
       "description": "A package the generated code imports.",
@@ -107,6 +124,23 @@
         "when"
       ],
       "type": "object"
+    },
+    "Files": {
+      "anyOf": [
+        {
+          "description": "Path from the project root of a file the project must have.",
+          "type": "string"
+        },
+        {
+          "description": "Alternatives in order of preference: the first one the project has is used, and on `cuilo update` the one the piece already patched. A step's patches, or the piece's own, that share an alternative must list the same alternatives in the same order, so they all edit the same file.",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      ],
+      "description": "The project file a patch edits, or alternatives in order of preference."
     },
     "Input": {
       "description": "One input of a piece.",
@@ -312,12 +346,12 @@
           "description": "Inserts text next to an anchor line; works in every language.",
           "properties": {
             "anchor": {
-              "description": "Text identifying the anchor line.",
-              "type": "string"
+              "$ref": "#/$defs/Anchors",
+              "description": "Text the anchor line contains, or a list of alternatives tried in order: the first one in the file\nis used, and one on more than one line fails the patch without trying the rest."
             },
             "file": {
-              "description": "Project file to edit; may contain examples.",
-              "type": "string"
+              "$ref": "#/$defs/Files",
+              "description": "Project file to edit, or a list of alternatives in order of preference: the first one the project has\nis used. A step's patches, or the piece's own, that share a file must list the same alternatives in the\nsame order. May contain examples."
             },
             "insert": {
               "description": "Text to insert; may contain examples.",
@@ -353,8 +387,8 @@
           "description": "Adds a JavaScript or TypeScript import after the existing imports.",
           "properties": {
             "file": {
-              "description": "Project file to edit; may contain examples.",
-              "type": "string"
+              "$ref": "#/$defs/Files",
+              "description": "Project file to edit, or a list of alternatives in order of preference: the first one the project has\nis used. A step's patches, or the piece's own, that share a file must list the same alternatives in the\nsame order. May contain examples."
             },
             "import": {
               "description": "The import statement; may contain examples.",
@@ -384,8 +418,8 @@
           "description": "Adds CSS custom properties to a block such as `:root`, keeping values the project already set.",
           "properties": {
             "file": {
-              "description": "Project CSS file to edit; may contain examples.",
-              "type": "string"
+              "$ref": "#/$defs/Files",
+              "description": "Project CSS file to edit, or a list of alternatives in order of preference: the first one the project\nhas is used. A step's patches, or the piece's own, that share a file must list the same alternatives in\nthe same order. May contain examples."
             },
             "kind": {
               "const": "css_vars",

@@ -4,13 +4,15 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::fs::{self, OpenOptions};
 use std::io::{self, ErrorKind, Write as _};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::model::RelPath;
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
+/// The most links [`MemoryFs`] follows to resolve one path.
+const MAX_LINK_HOPS: usize = 40;
 
 /// What a path is, without following symlinks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -19,7 +21,8 @@ pub enum EntryKind {
 	File,
 	/// A folder.
 	Dir,
-	/// A symlink, which cuilo never follows.
+	/// A symlink or a Windows junction. Reads and writes never go through one; only
+	/// [`Fs::resolve_links_inside_root`] follows it.
 	Symlink,
 }
 
@@ -29,6 +32,10 @@ pub trait Fs: Send + Sync + fmt::Debug {
 	fn entry(&self, path: &RelPath) -> io::Result<Option<EntryKind>>;
 	/// Reads a file.
 	fn read(&self, path: &RelPath) -> io::Result<Vec<u8>>;
+	/// The size of a file in bytes.
+	fn size(&self, path: &RelPath) -> io::Result<u64> {
+		self.read(path).map(|bytes| bytes.len() as u64)
+	}
 	/// Creates or replaces a file atomically; its folder exists.
 	fn write(&self, path: &RelPath, bytes: &[u8]) -> io::Result<()>;
 	/// Creates a file, failing with [`ErrorKind::AlreadyExists`] if something is there.
@@ -47,6 +54,12 @@ pub trait Fs: Send + Sync + fmt::Debug {
 	/// ignores case.
 	fn same_entry(&self, a: &RelPath, b: &RelPath) -> io::Result<bool> {
 		Ok(a == b)
+	}
+	/// Read-only, inside-root link resolution: the real path of `path` with the links in every segment
+	/// followed, or `None` when it leaves the root; an error when nothing is there, a link is broken or links
+	/// loop. Only import detection uses it, to read a tsconfig or `package.json`. The default follows no links.
+	fn resolve_links_inside_root(&self, path: &RelPath) -> io::Result<Option<RelPath>> {
+		Ok(Some(path.clone()))
 	}
 }
 
@@ -93,6 +106,10 @@ impl Fs for DiskFs {
 
 	fn read(&self, path: &RelPath) -> io::Result<Vec<u8>> {
 		fs::read(self.native(path))
+	}
+
+	fn size(&self, path: &RelPath) -> io::Result<u64> {
+		fs::symlink_metadata(self.native(path)).map(|meta| meta.len())
 	}
 
 	fn write(&self, path: &RelPath, bytes: &[u8]) -> io::Result<()> {
@@ -155,6 +172,25 @@ impl Fs for DiskFs {
 	fn same_entry(&self, a: &RelPath, b: &RelPath) -> io::Result<bool> {
 		same_file(&self.native(a), &self.native(b))
 	}
+
+	/// Canonicalizes `path` below the canonical root, so symlinks and Windows junctions are followed by the
+	/// OS, which also bounds the hops, and keeps the result only when its components start with the root's.
+	fn resolve_links_inside_root(&self, path: &RelPath) -> io::Result<Option<RelPath>> {
+		let real = fs::canonicalize(self.native(path))?;
+		Ok(real.strip_prefix(&self.root).ok().and_then(plain_rel_path))
+	}
+}
+
+/// `path`, made only of plain names, as a [`RelPath`].
+fn plain_rel_path(path: &Path) -> Option<RelPath> {
+	let names = path
+		.components()
+		.map(|component| match component {
+			Component::Normal(name) => name.to_str(),
+			_ => None,
+		})
+		.collect::<Option<Vec<&str>>>()?;
+	RelPath::new(&names.join("/")).ok()
 }
 
 /// Whether `a` and `b` are one file or folder, not following a final symlink.
@@ -181,7 +217,8 @@ pub struct MemoryFs {
 enum Node {
 	File(Vec<u8>),
 	Dir,
-	Symlink,
+	/// A link to its target, written as a link on disk holds it.
+	Symlink(String),
 }
 
 impl MemoryFs {
@@ -200,13 +237,19 @@ impl MemoryFs {
 		nodes.insert(path.clone(), Node::File(bytes.into()));
 	}
 
-	/// Adds a symlink, to exercise symlink handling.
+	/// Adds a symlink that leads out of the tree, to exercise symlink handling.
 	pub fn insert_symlink(&self, path: &RelPath) {
+		self.insert_symlink_to(path, "/");
+	}
+
+	/// Adds a symlink to `target`, creating its folders. `target` is relative to the link's folder and may
+	/// hold `..`; an absolute one leads out of the tree.
+	pub fn insert_symlink_to(&self, path: &RelPath, target: &str) {
 		let mut nodes = self.nodes();
 		for ancestor in path.ancestors() {
 			nodes.insert(ancestor, Node::Dir);
 		}
-		nodes.insert(path.clone(), Node::Symlink);
+		nodes.insert(path.clone(), Node::Symlink(target.to_owned()));
 	}
 
 	/// Every file, by path.
@@ -217,7 +260,7 @@ impl MemoryFs {
 			.iter()
 			.filter_map(|(path, node)| match node {
 				Node::File(bytes) => Some((path.clone(), bytes.clone())),
-				Node::Dir | Node::Symlink => None,
+				Node::Dir | Node::Symlink(_) => None,
 			})
 			.collect()
 	}
@@ -247,7 +290,7 @@ impl Fs for MemoryFs {
 		Ok(self.nodes().get(path).map(|node| match node {
 			Node::File(_) => EntryKind::File,
 			Node::Dir => EntryKind::Dir,
-			Node::Symlink => EntryKind::Symlink,
+			Node::Symlink(_) => EntryKind::Symlink,
 		}))
 	}
 
@@ -255,7 +298,7 @@ impl Fs for MemoryFs {
 		match self.nodes().get(path) {
 			Some(Node::File(bytes)) => Ok(bytes.clone()),
 			Some(Node::Dir) => Err(ErrorKind::IsADirectory.into()),
-			Some(Node::Symlink) => Err(ErrorKind::InvalidInput.into()),
+			Some(Node::Symlink(_)) => Err(ErrorKind::InvalidInput.into()),
 			None => Err(ErrorKind::NotFound.into()),
 		}
 	}
@@ -293,7 +336,7 @@ impl Fs for MemoryFs {
 	fn remove_file(&self, path: &RelPath) -> io::Result<()> {
 		let mut nodes = self.nodes();
 		match nodes.get(path) {
-			Some(Node::File(_) | Node::Symlink) => {
+			Some(Node::File(_) | Node::Symlink(_)) => {
 				nodes.remove(path);
 				Ok(())
 			}
@@ -321,7 +364,7 @@ impl Fs for MemoryFs {
 		let mut nodes = self.nodes();
 		require_parent(&nodes, to)?;
 		match nodes.get(from) {
-			Some(Node::File(_) | Node::Symlink) => {
+			Some(Node::File(_) | Node::Symlink(_)) => {
 				let node = nodes.remove(from).ok_or(ErrorKind::NotFound)?;
 				nodes.insert(to.clone(), node);
 				Ok(())
@@ -347,6 +390,47 @@ impl Fs for MemoryFs {
 				.map(|path| path.file_name().to_owned())
 				.collect(),
 		)
+	}
+
+	/// Walks `path` one name at a time, replacing each link with its target, as a disk does.
+	fn resolve_links_inside_root(&self, path: &RelPath) -> io::Result<Option<RelPath>> {
+		let nodes = self.nodes();
+		let mut pending: Vec<&str> = path.as_str().rsplit('/').collect();
+		let mut real: Vec<&str> = Vec::new();
+		let mut hops = 0;
+		while let Some(name) = pending.pop() {
+			match name {
+				"" | "." => {}
+				".." => {
+					if real.pop().is_none() {
+						return Ok(None);
+					}
+				}
+				name => {
+					real.push(name);
+					let Ok(current) = RelPath::new(&real.join("/")) else {
+						return Ok(None);
+					};
+					match nodes.get(&current) {
+						None => return Err(ErrorKind::NotFound.into()),
+						Some(Node::Symlink(target)) => {
+							hops += 1;
+							if hops > MAX_LINK_HOPS {
+								return Err(io::Error::new(ErrorKind::InvalidInput, "too many links"));
+							}
+							if target.starts_with('/') {
+								return Ok(None);
+							}
+							real.pop();
+							pending.extend(target.rsplit('/'));
+						}
+						Some(Node::File(_)) if !pending.is_empty() => return Err(ErrorKind::NotADirectory.into()),
+						Some(Node::File(_) | Node::Dir) => {}
+					}
+				}
+			}
+		}
+		Ok(RelPath::new(&real.join("/")).ok())
 	}
 }
 
@@ -407,6 +491,87 @@ mod tests {
 		fs.write(&rel("a.txt"), b"x").unwrap();
 
 		assert_eq!(fs.list(None).unwrap(), ["a.txt"]);
+	}
+
+	#[test]
+	fn memory_fs_should_resolve_links_like_a_disk_without_leaving_the_tree() {
+		let fs = MemoryFs::new();
+		fs.insert(&rel("store/pkg/tsconfig.json"), "{}");
+		for (link, target) in [
+			("node_modules/pkg", "../store/pkg"),
+			("node_modules/alias", "./pkg/tsconfig.json"),
+			("absolute", "/store/pkg"),
+			("up", "../store/pkg"),
+			("broken", "store/missing"),
+			("loop", "loop"),
+			("through_a_file", "store/pkg/tsconfig.json/x"),
+		] {
+			fs.insert_symlink_to(&rel(link), target);
+		}
+		let resolve = |path: &str| fs.resolve_links_inside_root(&rel(path));
+		let real = Some(rel("store/pkg/tsconfig.json"));
+
+		assert_eq!(resolve("node_modules/pkg/tsconfig.json").unwrap(), real);
+		assert_eq!(resolve("node_modules/alias").unwrap(), real);
+		assert_eq!(resolve("store/pkg/tsconfig.json").unwrap(), real);
+		assert_eq!(resolve("absolute/tsconfig.json").unwrap(), None);
+		assert_eq!(resolve("up/tsconfig.json").unwrap(), None);
+		assert_eq!(resolve("broken").unwrap_err().kind(), ErrorKind::NotFound);
+		assert!(resolve("loop").is_err());
+		assert_eq!(resolve("through_a_file").unwrap_err().kind(), ErrorKind::NotADirectory);
+	}
+
+	#[test]
+	fn memory_fs_should_follow_at_most_max_link_hops() {
+		let fs = MemoryFs::new();
+		fs.insert(&rel("real.json"), "{}");
+		fs.insert_symlink_to(&rel("link0"), "real.json");
+		for hop in 1..=MAX_LINK_HOPS {
+			fs.insert_symlink_to(&rel(&format!("link{hop}")), &format!("link{}", hop - 1));
+		}
+
+		assert_eq!(
+			fs.resolve_links_inside_root(&rel(&format!("link{}", MAX_LINK_HOPS - 1)))
+				.unwrap(),
+			Some(rel("real.json"))
+		);
+		assert!(
+			fs.resolve_links_inside_root(&rel(&format!("link{MAX_LINK_HOPS}")))
+				.is_err()
+		);
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn disk_fs_should_resolve_links_only_to_real_paths_inside_the_root() {
+		let parent = tempfile::tempdir().unwrap();
+		let root = parent.path().join("app");
+		std::fs::create_dir_all(root.join("store/pkg")).unwrap();
+		std::fs::write(root.join("store/pkg/tsconfig.json"), "{}").unwrap();
+		std::fs::create_dir(parent.path().join("app-sibling")).unwrap();
+		std::fs::write(parent.path().join("app-sibling/tsconfig.json"), "{}").unwrap();
+		let absolute = parent.path().join("app-sibling");
+		for (link, target) in [
+			("pkg", Path::new("store/pkg")),
+			("round_trip", Path::new("../app/store/pkg")),
+			("sibling", Path::new("../app-sibling")),
+			("absolute", absolute.as_path()),
+			("broken", Path::new("store/missing")),
+			("loop", Path::new("loop")),
+		] {
+			std::os::unix::fs::symlink(target, root.join(link)).unwrap();
+		}
+		let fs = DiskFs::open(&root).unwrap();
+		let resolve = |path: &str| fs.resolve_links_inside_root(&rel(path));
+		let real = Some(rel("store/pkg/tsconfig.json"));
+
+		assert_eq!(resolve("pkg/tsconfig.json").unwrap(), real);
+		assert_eq!(resolve("round_trip/tsconfig.json").unwrap(), real);
+		assert_eq!(resolve("store/pkg/tsconfig.json").unwrap(), real);
+		assert_eq!(resolve("sibling/tsconfig.json").unwrap(), None);
+		assert_eq!(resolve("absolute/tsconfig.json").unwrap(), None);
+		assert_eq!(resolve("broken").unwrap_err().kind(), ErrorKind::NotFound);
+		assert!(resolve("loop").is_err());
 	}
 
 	#[cfg(unix)]

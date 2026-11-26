@@ -115,6 +115,16 @@ El reemplazo aplica en cualquier parte, incluso dentro de palabras más largas: 
 
 Las plantillas no pueden leer archivos ni el entorno, y no pueden correr código.
 
+### Imports relativos
+
+Escribe los imports relativos de las plantillas de JavaScript y TypeScript sin extensión, como los lee un bundler, y cuilo los adapta a cada proyecto. Supón que el `example-card.ts` de la pieza importa su `example-card.title.ts`:
+
+```ts title="example-card/example-card.ts"
+import { cardTitle } from "./example-card.title";
+```
+
+Para `UserProfile`, en un proyecto cuyo `tsconfig.json` usa `NodeNext`, cuilo escribe `./user-profile.title.js`. En un proyecto de Deno, o en uno con `allowImportingTsExtensions`, escribe la extensión del propio archivo, como `./user-profile.title.ts`. En los demás, el import queda como está escrito. Un punto en un nombre, como en `example-card.title`, es parte del nombre: cuilo busca el archivo que nombra el import entre los archivos que escribe el plan y los que tiene el proyecto. Los imports que ya terminan en una extensión de script, los de otros archivos como `./example-card.module.css` y los de paquetes y alias quedan como los escribes. Consulta [imports relativos en el código generado](/es-mx/guides/stack-detection/#imports-relativos-en-el-código-generado).
+
 ### Condiciones en las plantillas
 
 Conserva u omite líneas con directivas dentro de comentarios. Sirve cualquier estilo de comentario: `//`, `#`, `--`, `;`, `/* */`, `<!-- -->` y `{/* */}`.
@@ -192,7 +202,7 @@ default_when = "stack.vitest || !(stack.javascript || stack.typescript)"
 
 Una pieza con `[[variants]]` tiene una carpeta de plantillas por stack. cuilo prueba las variantes en orden y usa la primera en la que se cumplen todos los datos de su `when`. Una variante sin `when` coincide con cualquier proyecto, así que ponla al final como respaldo. `--variant <name>` elige una por su nombre.
 
-- `when` acepta los datos `framework`, `language`, `runtime`, `database`, `styling`, `package_manager`, `testing` y `formatter`. Corre `cuilo detect` para ver los datos de un proyecto, y lee [detección del stack](/es-mx/guides/stack-detection/) para saber cómo se obtienen.
+- `when` acepta los datos `framework`, `language`, `runtime`, `database`, `styling`, `package_manager`, `testing`, `formatter` e `import_style`. Corre `cuilo detect` para ver los datos de un proyecto, y lee [detección del stack](/es-mx/guides/stack-detection/) para saber cómo se obtienen.
 - Las plantillas de una variante están en `files/<name>`, a menos que `files` indique otra carpeta. Así, varias variantes pueden compartir una, por ejemplo `files = "files/typescript"`.
 - El `target` de una variante reemplaza el de la pieza. La variante de Compose del pack `ui` escribe en `app/src/main/java/com/example/app/ui/atoms`, y su variante de Flutter usa `""` porque también agrega archivos en `test/`.
 - Una pieza sin variantes guarda sus plantillas en `files/`.
@@ -227,10 +237,14 @@ vars = { card-radius = "0.5rem", card-border = "220 13% 91%" }
 ```
 
 - `anchor` inserta `insert` en las líneas que siguen a la única línea que contiene el texto del ancla, con la sangría de esa línea. Define `position = "before"` para insertarlo antes. El ancla tiene que aparecer exactamente una vez.
+- Cuando la línea del ancla varía entre proyectos, como pasa en los archivos de entrada de las plantillas de un framework, `anchor` puede ser una lista de alternativas, como `anchor = ["export default app", "serve("]`. cuilo usa la primera que contiene el archivo. Una alternativa que aparece en más de una línea hace fallar el parche, y cuilo no prueba las siguientes: el lugar que prefieres está en el archivo, pero no queda claro a qué línea se refiere.
 - `import` agrega un import de JavaScript o TypeScript después de los que ya existen. En los archivos `.svelte` y `.vue` va dentro del bloque `<script>`, y en los archivos `.astro`, en el frontmatter.
+- En el `import` de un parche `import` y en el `insert` de un parche `anchor` sobre un archivo `.ts`, `.tsx`, `.js` u otro archivo de script, cuilo adapta los imports relativos como en las plantillas, desde la carpeta del archivo que edita el parche. Escríbelos sin extensión.
 - `css_vars` agrega propiedades personalizadas, sin el `--` inicial, al bloque de `selector`. Si el bloque no existe, lo crea, y conserva los valores que el archivo ya define.
 
 Un parche cuyo texto ya está en el archivo no cambia nada.
+
+Cuando el archivo mismo varía entre proyectos, `file` puede ser una lista de alternativas en orden de preferencia, como `file = ["src/index.ts", "src/index.tsx"]`. cuilo edita la primera que tiene el proyecto, y cada alternativa puede contener ejemplos. Si el proyecto no tiene ninguna, el parche falla y las nombra todas. Los parches de un paso, o de `[[patches]]`, que comparten una alternativa tienen que listar las mismas alternativas en el mismo orden, para que siempre editen el mismo archivo: un `import` y un `anchor` para un mismo archivo de entrada no pueden terminar en dos. cuilo se niega a cargar un pack que no cumple esta regla.
 
 ## Siguientes pasos y conexión
 
@@ -243,13 +257,13 @@ variants = ["hono"]
 
 [[steps.patches]]
 kind = "import"
-file = "src/index.ts"
+file = ["src/index.ts", "src/index.tsx"]
 import = 'import { exampleItemRoutes } from "./example-items/example-item.routes";'
 
 [[steps.patches]]
 kind = "anchor"
-file = "src/index.ts"
-anchor = "export default app"
+file = ["src/index.ts", "src/index.tsx"]
+anchor = ["export default app", "serve("]
 position = "before"
 insert = "app.route(\"/example-items\", exampleItemRoutes);\n\n"
 
@@ -262,12 +276,12 @@ when = "stack.prisma"
 - `variants` y `when` eligen los pasos igual que eligen las dependencias: un `variants` vacío significa todas las variantes, y `when` es una condición sobre las entradas y los valores `stack.`.
 - Un paso sin parches siempre se lista.
 - Los parches de un paso de conexión aceptan los mismos tipos y claves que `[[patches]]`. cuilo los aplica solo cuando el usuario activa la conexión, con `cuilo add --wire` o con `wire = true` en su [configuración de usuario](/es-mx/reference/user-config/). Entonces son parches normales: aparecen en el plan, necesitan `permissions.write` y quedan registrados en `cuilo.lock`, y el paso no se lista. Con la conexión desactivada, el paso se lista y no se aplica ningún parche.
-- Los parches de un paso se aplican todos o ninguno. Si uno no se puede aplicar, porque falta su archivo o su ancla, o porque el ancla aparece más de una vez, cuilo no aplica ninguno. El plan sigue adelante, lista el paso y anota el motivo en el archivo, por ejemplo ``src/index.ts: no line contains `export default app`; wire it by hand``.
+- Los parches de un paso se aplican todos o ninguno. Si uno no se puede aplicar, porque falta su archivo o su ancla, o porque el ancla aparece más de una vez, cuilo no aplica ninguno. El plan sigue adelante, lista el paso y anota el motivo en el archivo, por ejemplo ``src/index.ts: no line contains `export default app` or `serve(`; wire it by hand``. Cuando el proyecto no tiene ninguna de las alternativas de archivo de un parche, la nota las nombra todas: ``src/index.ts: none of `src/index.ts` or `src/index.tsx` exists; wire it by hand``.
 - Los parches de conexión suponen la carpeta por defecto de la pieza, así que no se aplican cuando el usuario escribe la pieza en otro lugar con `--target` o `paths`. En su lugar, se lista el paso.
 - `cuilo adopt` no lista pasos ni aplica conexiones.
-- En `cuilo update`, una pieza cuya conexión se aplicó, marcada con `wired = true` en `cuilo.lock`, actualiza sus parches de conexión como cualquier otro parche. cuilo nunca conecta una pieza que se agregó sin conexión. Cuando un parche de conexión ya no se puede aplicar, la actualización deja ese archivo como está y anota el motivo.
+- En `cuilo update`, una pieza cuya conexión se aplicó, marcada con `wired = true` en `cuilo.lock`, actualiza sus parches de conexión como cualquier otro parche. Se quedan en el archivo donde se aplicaron, que registra `cuilo.lock`, aunque el proyecto tenga ahora una alternativa listada antes. cuilo nunca conecta una pieza que se agregó sin conexión. Cuando un parche de conexión ya no se puede aplicar, la actualización deja ese archivo como está y anota el motivo.
 
-Dale parches a un paso solo cuando el framework tenga un archivo de entrada convencional y una línea de ancla que aparezca una sola vez en él, como el `src/index.ts` de `create-hono`. Elige el ancla para que el código insertado quede en el lugar correcto: unas rutas insertadas justo después de `const app = new Hono()` quedarían antes del middleware propio del usuario, como el de autenticación, que entonces no correría para ellas. El pack oficial `backend` inserta las rutas antes de `export default app` y el middleware justo después de crear la app. Si no, deja el paso solo como texto.
+Dale parches a un paso solo cuando el framework tenga un archivo de entrada convencional y una línea de ancla que aparezca una sola vez en él, como el `src/index.ts` de `create-hono`. Elige el ancla para que el código insertado quede en el lugar correcto: unas rutas insertadas justo después de `const app = new Hono()` quedarían antes del middleware propio del usuario, como el de autenticación, que entonces no correría para ellas. El pack oficial `backend` edita `src/index.ts`, o `src/index.tsx` cuando el proyecto solo tiene ese. Inserta el middleware justo después de crear la app, y las rutas justo antes de la línea que exporta o sirve la app: `export default app`, `export const handler = handle(app)`, `fire(app)` o `serve(`. Eso cubre todas las plantillas de `create-hono` cuyo archivo de entrada es `src/index.ts` o `src/index.tsx`. Lista las líneas completas antes que las alternativas cortas como `serve(`, que también pueden coincidir con otro texto. Si no, deja el paso solo como texto.
 
 ## Piezas que se apoyan en otras
 

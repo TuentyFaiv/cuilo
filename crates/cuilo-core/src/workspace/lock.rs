@@ -67,7 +67,9 @@ pub struct Instance {
 	/// `false` when absent, and updates never wire an instance that is not.
 	#[serde(default, skip_serializing_if = "std::ops::Not::not")]
 	pub wired: bool,
-	/// Stack facts used, so the original can be rendered again.
+	/// Stack facts used, so the original can be rendered again; `import_style`, e.g. `["imports-js"]`, keeps
+	/// relative imports written the same way on every update, and is absent for pieces that aren't JavaScript
+	/// or TypeScript.
 	#[serde(default, skip_serializing_if = "Stack::is_empty")]
 	pub stack: Stack,
 	/// Resolved input values.

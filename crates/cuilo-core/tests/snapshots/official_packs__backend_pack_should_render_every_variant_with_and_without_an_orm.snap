@@ -10,12 +10,12 @@ error · hono
   src/shared/error-handler.ts
   src/shared/errors.test.ts
   src/shared/errors.ts
-  → Register the error handler in `src/index.ts` with `app.onError(errorHandler)`.
+  → Register the error handler in the file that creates your Hono app, with `app.onError(errorHandler)`.
 error · hono (orm)
   src/shared/error-handler.ts
   src/shared/errors.test.ts
   src/shared/errors.ts
-  → Register the error handler in `src/index.ts` with `app.onError(errorHandler)`.
+  → Register the error handler in the file that creates your Hono app, with `app.onError(errorHandler)`.
 error · express
   src/shared/error-handler.ts
   src/shared/errors.test.ts
@@ -57,11 +57,11 @@ error · echo (orm)
 middleware · hono
   src/shared/middleware/status-badge.test.ts
   src/shared/middleware/status-badge.ts
-  → Register the middleware in `src/index.ts`, before your routes, with `app.use(statusBadge)`.
+  → Register the middleware in the file that creates your Hono app, before your routes, with `app.use(statusBadge)`.
 middleware · hono (orm)
   src/shared/middleware/status-badge.test.ts
   src/shared/middleware/status-badge.ts
-  → Register the middleware in `src/index.ts`, before your routes, with `app.use(statusBadge)`.
+  → Register the middleware in the file that creates your Hono app, before your routes, with `app.use(statusBadge)`.
 middleware · express
   src/shared/middleware/status-badge.test.ts
   src/shared/middleware/status-badge.ts
@@ -110,8 +110,8 @@ resource · hono
   src/shared/error-handler.ts
   src/shared/errors.test.ts
   src/shared/errors.ts
-  → Register the error handler in `src/index.ts` with `app.onError(errorHandler)`.
-  → Mount the routes in `src/index.ts` with `app.route("/status-badges", statusBadgeRoutes(new StatusBadgeService(new InMemoryStatusBadgeRepository())))`.
+  → Register the error handler in the file that creates your Hono app, with `app.onError(errorHandler)`.
+  → Mount the routes in the file that creates your Hono app, with `app.route("/status-badges", statusBadgeRoutes(new StatusBadgeService(new InMemoryStatusBadgeRepository())))`.
 resource · hono (orm)
   src/modules/status-badges/status-badge.drizzle-repository.ts
   src/modules/status-badges/status-badge.model.ts
@@ -125,10 +125,10 @@ resource · hono (orm)
   src/shared/error-handler.ts
   src/shared/errors.test.ts
   src/shared/errors.ts
-  → Register the error handler in `src/index.ts` with `app.onError(errorHandler)`.
+  → Register the error handler in the file that creates your Hono app, with `app.onError(errorHandler)`.
   → Add `model StatusBadge` to `schema.prisma` with `id String @id @default(uuid())`, `name String`, `createdAt DateTime @default(now())` and `updatedAt DateTime @updatedAt`, then run `prisma generate`.
-  → Mount the routes in `src/index.ts` with `app.route("/status-badges", statusBadgeRoutes(new StatusBadgeService(new DrizzleStatusBadgeRepository(db))))`, where `db` is your Drizzle database.
-  → Mount the routes in `src/index.ts` with `app.route("/status-badges", statusBadgeRoutes(new StatusBadgeService(new PrismaStatusBadgeRepository(prisma))))`, where `prisma` is your `PrismaClient`.
+  → Mount the routes in the file that creates your Hono app, with `app.route("/status-badges", statusBadgeRoutes(new StatusBadgeService(new DrizzleStatusBadgeRepository(db))))`, where `db` is your Drizzle database.
+  → Mount the routes in the file that creates your Hono app, with `app.route("/status-badges", statusBadgeRoutes(new StatusBadgeService(new PrismaStatusBadgeRepository(prisma))))`, where `prisma` is your `PrismaClient`.
 resource · express
   src/modules/status-badges/status-badge.model.ts
   src/modules/status-badges/status-badge.repository.ts

@@ -326,6 +326,10 @@ pub enum Fact {
 	Testing,
 	/// Formatters and fixing linters the project uses, e.g. `biome`, `prettier`, `eslint`, `ruff`, `rustfmt`.
 	Formatter,
+	/// How generated JavaScript and TypeScript write relative imports: `imports-extensionless` (`./foo`),
+	/// `imports-js` (`./foo.js`) or `imports-ts` (`./foo.ts`), from the `tsconfig.json` that governs the
+	/// output folder, or Deno.
+	ImportStyle,
 }
 
 impl Fact {
@@ -341,6 +345,7 @@ impl Fact {
 			Self::PackageManager => "package_manager",
 			Self::Testing => "testing",
 			Self::Formatter => "formatter",
+			Self::ImportStyle => "import_style",
 		}
 	}
 }
@@ -441,10 +446,13 @@ pub struct FileRule {
 pub enum PatchSpec {
 	/// Inserts text next to an anchor line; works in every language.
 	Anchor {
-		/// Project file to edit; may contain examples.
-		file: String,
-		/// Text identifying the anchor line.
-		anchor: String,
+		/// Project file to edit, or a list of alternatives in order of preference: the first one the project has
+		/// is used. A step's patches, or the piece's own, that share a file must list the same alternatives in the
+		/// same order. May contain examples.
+		file: Files,
+		/// Text the anchor line contains, or a list of alternatives tried in order: the first one in the file
+		/// is used, and one on more than one line fails the patch without trying the rest.
+		anchor: Anchors,
 		/// Where to insert relative to the anchor line.
 		#[serde(default)]
 		position: Position,
@@ -456,8 +464,10 @@ pub enum PatchSpec {
 	},
 	/// Adds a JavaScript or TypeScript import after the existing imports.
 	Import {
-		/// Project file to edit; may contain examples.
-		file: String,
+		/// Project file to edit, or a list of alternatives in order of preference: the first one the project has
+		/// is used. A step's patches, or the piece's own, that share a file must list the same alternatives in the
+		/// same order. May contain examples.
+		file: Files,
 		/// The import statement; may contain examples.
 		import: String,
 		/// Condition that keeps the patch.
@@ -466,8 +476,10 @@ pub enum PatchSpec {
 	},
 	/// Adds CSS custom properties to a block such as `:root`, keeping values the project already set.
 	CssVars {
-		/// Project CSS file to edit; may contain examples.
-		file: String,
+		/// Project CSS file to edit, or a list of alternatives in order of preference: the first one the project
+		/// has is used. A step's patches, or the piece's own, that share a file must list the same alternatives in
+		/// the same order. May contain examples.
+		file: Files,
 		/// The block's selector or at-rule, e.g. `:root`, `.dark` or `@theme inline`.
 		selector: String,
 		/// Properties without the leading `--`, e.g. `sidebar-border = "220 13% 91%"`.
@@ -479,9 +491,9 @@ pub enum PatchSpec {
 }
 
 impl PatchSpec {
-	/// The project file the patch edits.
+	/// The project file the patch edits, or its alternatives.
 	#[must_use]
-	pub fn file(&self) -> &str {
+	pub fn file(&self) -> &Files {
 		match self {
 			Self::Anchor { file, .. } | Self::Import { file, .. } | Self::CssVars { file, .. } => file,
 		}
@@ -494,6 +506,206 @@ impl PatchSpec {
 			Self::Anchor { when, .. } | Self::Import { when, .. } | Self::CssVars { when, .. } => when.as_deref(),
 		}
 	}
+}
+
+/// The text an anchor line contains, or alternatives in order of preference; never empty.
+///
+/// Written as a string for one alternative and as a list for several.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Anchors(Vec<String>);
+
+impl Anchors {
+	/// Alternatives in order of preference; `None` when there are none.
+	#[must_use]
+	pub fn new(alternatives: Vec<String>) -> Option<Self> {
+		(!alternatives.is_empty()).then_some(Self(alternatives))
+	}
+
+	/// The alternatives in order of preference.
+	pub fn iter(&self) -> impl Iterator<Item = &str> {
+		self.0.iter().map(String::as_str)
+	}
+}
+
+impl From<&str> for Anchors {
+	fn from(anchor: &str) -> Self {
+		Self(vec![anchor.to_owned()])
+	}
+}
+
+/// The alternatives in backticks, e.g. `` `a`, `b` or `c` ``.
+impl fmt::Display for Anchors {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.write_str(&or_list(&self.0))
+	}
+}
+
+impl Serialize for Anchors {
+	fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+		serialize_alternatives(&self.0, serializer)
+	}
+}
+
+impl<'de> Deserialize<'de> for Anchors {
+	fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+		deserializer
+			.deserialize_any(AlternativesVisitor(
+				"the anchor text or a non-empty list of alternatives",
+			))
+			.map(Self)
+	}
+}
+
+impl JsonSchema for Anchors {
+	fn schema_name() -> Cow<'static, str> {
+		"Anchors".into()
+	}
+
+	fn json_schema(_: &mut SchemaGenerator) -> Schema {
+		json_schema!({
+			"description": "The text an anchor line contains, or alternatives in order of preference.",
+			"anyOf": [
+				{
+					"description": "Text that exactly one line of the file must contain.",
+					"type": "string"
+				},
+				{
+					"description": "Alternatives tried in order: the first one in the file is used, and one on more than one line fails the patch without trying the rest.",
+					"type": "array",
+					"items": { "type": "string" },
+					"minItems": 1
+				}
+			]
+		})
+	}
+}
+
+/// The project file a patch edits, or alternatives in order of preference; never empty.
+///
+/// Written as a string for one alternative and as a list for several.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Files(Vec<String>);
+
+impl Files {
+	/// Alternatives in order of preference; `None` when there are none.
+	#[must_use]
+	pub fn new(alternatives: Vec<String>) -> Option<Self> {
+		(!alternatives.is_empty()).then_some(Self(alternatives))
+	}
+
+	/// The alternatives in order of preference.
+	#[must_use]
+	pub fn as_slice(&self) -> &[String] {
+		&self.0
+	}
+}
+
+impl From<&str> for Files {
+	fn from(file: &str) -> Self {
+		Self(vec![file.to_owned()])
+	}
+}
+
+impl Serialize for Files {
+	fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+		serialize_alternatives(&self.0, serializer)
+	}
+}
+
+impl<'de> Deserialize<'de> for Files {
+	fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+		deserializer
+			.deserialize_any(AlternativesVisitor(
+				"a project file or a non-empty list of alternatives",
+			))
+			.map(Self)
+	}
+}
+
+impl JsonSchema for Files {
+	fn schema_name() -> Cow<'static, str> {
+		"Files".into()
+	}
+
+	fn json_schema(_: &mut SchemaGenerator) -> Schema {
+		json_schema!({
+			"description": "The project file a patch edits, or alternatives in order of preference.",
+			"anyOf": [
+				{
+					"description": "Path from the project root of a file the project must have.",
+					"type": "string"
+				},
+				{
+					"description": "Alternatives in order of preference: the first one the project has is used, and on `cuilo update` the one the piece already patched. A step's patches, or the piece's own, that share an alternative must list the same alternatives in the same order, so they all edit the same file.",
+					"type": "array",
+					"items": { "type": "string" },
+					"minItems": 1
+				}
+			]
+		})
+	}
+}
+
+/// Writes one alternative as a string and several as a list.
+fn serialize_alternatives<S: Serializer>(alternatives: &[String], serializer: S) -> Result<S::Ok, S::Error> {
+	match alternatives {
+		[one] => serializer.serialize_str(one),
+		several => several.serialize(serializer),
+	}
+}
+
+/// Reads a string or a non-empty list of strings; holds what it expects, for errors.
+struct AlternativesVisitor(&'static str);
+
+impl<'de> serde::de::Visitor<'de> for AlternativesVisitor {
+	type Value = Vec<String>;
+
+	fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.write_str(self.0)
+	}
+
+	fn visit_str<E: serde::de::Error>(self, text: &str) -> Result<Vec<String>, E> {
+		Ok(vec![text.to_owned()])
+	}
+
+	fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut seq: A) -> Result<Vec<String>, A::Error> {
+		let mut alternatives = Vec::new();
+		while let Some(alternative) = seq.next_element::<String>()? {
+			alternatives.push(alternative);
+		}
+		if alternatives.is_empty() {
+			return Err(serde::de::Error::invalid_length(0, &self));
+		}
+		Ok(alternatives)
+	}
+}
+
+/// `items` in backticks, e.g. `` `a`, `b` or `c` ``.
+pub(crate) fn or_list<T: fmt::Display>(items: &[T]) -> String {
+	let mut text = String::new();
+	for (i, item) in items.iter().enumerate() {
+		let separator = match i {
+			0 => "",
+			_ if i + 1 == items.len() => " or ",
+			_ => ", ",
+		};
+		text.push_str(separator);
+		text.push('`');
+		text.push_str(&item.to_string());
+		text.push('`');
+	}
+	text
+}
+
+/// A file that two different lists of alternatives in `lists` share, which could send patches meant for one
+/// file to two.
+pub(crate) fn shared_alternative<'a, T: PartialEq>(lists: &[&'a [T]]) -> Option<&'a T> {
+	lists.iter().enumerate().find_map(|(i, list)| {
+		lists[i + 1..]
+			.iter()
+			.filter(|other| other != &list)
+			.find_map(|other| list.iter().find(|file| other.contains(file)))
+	})
 }
 
 /// Where an anchor patch inserts its text.
@@ -552,6 +764,126 @@ mod tests {
 				..
 			})
 		));
+	}
+
+	fn anchor_of(patch: &str) -> Result<Anchors, toml::de::Error> {
+		let manifest: PieceManifest = toml::from_str(&format!(
+			"schema_version = 1\nname = \"x\"\ntarget = \"src\"\n[[patches]]\nkind = \"anchor\"\nfile = \"a.ts\"\ninsert = \"x\"\n{patch}\n"
+		))?;
+		match manifest.patches.into_iter().next() {
+			Some(PatchSpec::Anchor { anchor, .. }) => Ok(anchor),
+			other => panic!("expected an anchor patch, got {other:?}"),
+		}
+	}
+
+	#[test]
+	fn anchor_should_accept_one_text_and_write_it_back_as_a_string() {
+		let anchor = anchor_of("anchor = \"export default app\"").unwrap();
+
+		assert_eq!(anchor.iter().collect::<Vec<_>>(), ["export default app"]);
+		assert_eq!(serde_json::to_value(&anchor).unwrap(), "export default app");
+	}
+
+	#[test]
+	fn anchor_should_accept_alternatives_in_order() {
+		let anchor = anchor_of("anchor = [\"export default app\", \"serve(\"]").unwrap();
+
+		assert_eq!(anchor.iter().collect::<Vec<_>>(), ["export default app", "serve("]);
+		assert_eq!(
+			serde_json::to_value(&anchor).unwrap(),
+			serde_json::json!(["export default app", "serve("])
+		);
+	}
+
+	#[test]
+	fn anchor_should_reject_an_empty_list() {
+		let error = anchor_of("anchor = []").unwrap_err();
+
+		assert!(error.to_string().contains("non-empty list of alternatives"), "{error}");
+	}
+
+	#[test]
+	fn anchors_should_display_as_a_backticked_list() {
+		let one = Anchors::from("a");
+		let three = Anchors::new(vec!["a".to_owned(), "b".to_owned(), "c".to_owned()]).unwrap();
+
+		assert_eq!(one.to_string(), "`a`");
+		assert_eq!(three.to_string(), "`a`, `b` or `c`");
+		assert_eq!(Anchors::new(Vec::new()), None);
+	}
+
+	fn piece_with_import(file: &str) -> Result<PieceManifest, toml::de::Error> {
+		toml::from_str(&format!(
+			"schema_version = 1\nname = \"x\"\ntarget = \"src\"\n[[patches]]\nkind = \"import\"\n{file}\nimport = \"import a from 'a';\"\n"
+		))
+	}
+
+	fn file_of(file: &str) -> Result<Files, toml::de::Error> {
+		let manifest = piece_with_import(file)?;
+		Ok(manifest.patches[0].file().clone())
+	}
+
+	#[test]
+	fn file_should_accept_one_path_and_write_it_back_as_a_string() {
+		let file = file_of("file = \"src/index.ts\"").unwrap();
+
+		assert_eq!(file.as_slice(), ["src/index.ts"]);
+		assert_eq!(serde_json::to_value(&file).unwrap(), "src/index.ts");
+	}
+
+	#[test]
+	fn file_should_accept_alternatives_in_order_and_write_them_back_as_a_list() {
+		let file = file_of("file = [\"src/index.ts\", \"src/index.tsx\"]").unwrap();
+
+		assert_eq!(file.as_slice(), ["src/index.ts", "src/index.tsx"]);
+		assert_eq!(
+			serde_json::to_value(&file).unwrap(),
+			serde_json::json!(["src/index.ts", "src/index.tsx"])
+		);
+	}
+
+	#[test]
+	fn file_should_reject_an_empty_list() {
+		let error = file_of("file = []").unwrap_err();
+
+		assert!(
+			error
+				.to_string()
+				.contains("a project file or a non-empty list of alternatives"),
+			"{error}"
+		);
+	}
+
+	#[test]
+	fn manifest_should_keep_a_single_file_a_string_when_written_back() {
+		let one = toml::to_string(&piece_with_import("file = \"src/index.ts\"").unwrap()).unwrap();
+		let two = toml::to_string(&piece_with_import("file = [\"src/index.ts\", \"src/index.tsx\"]").unwrap()).unwrap();
+
+		assert!(one.contains("file = \"src/index.ts\"\n"), "{one}");
+		assert!(two.contains("file = [\"src/index.ts\", \"src/index.tsx\"]\n"), "{two}");
+		assert_eq!(
+			piece_with_import("file = \"src/index.ts\"").unwrap(),
+			toml::from_str(&one).unwrap()
+		);
+	}
+
+	#[test]
+	fn shared_alternative_should_find_a_file_that_two_different_lists_share() {
+		let entries = ["src/index.ts", "src/index.tsx"];
+		let reversed = ["src/index.tsx", "src/index.ts"];
+
+		assert_eq!(
+			shared_alternative::<&str>(&[&entries, &entries, &["src/main.ts"]]),
+			None
+		);
+		assert_eq!(
+			shared_alternative::<&str>(&[&entries, &["src/main.ts"], &["src/index.tsx"]]),
+			Some(&"src/index.tsx")
+		);
+		assert_eq!(
+			shared_alternative::<&str>(&[&entries, &reversed]),
+			Some(&"src/index.ts")
+		);
 	}
 
 	#[test]

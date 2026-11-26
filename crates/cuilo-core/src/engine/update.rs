@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use semver::Version;
 
-use super::planner::{Added, Edited, Texts, Wiring, check_pinned, collect_required, finish};
+use super::planner::{Added, Aimed, Edited, Texts, Wiring, check_pinned, collect_required, finish};
 use super::{Engine, EngineError, PackProvider};
 use crate::migrate::MigrateError;
 use crate::model::{Digest, Migration, Name, Permissions, RelPath, Stack, Values};
@@ -35,13 +35,14 @@ pub struct UpdateRequest<'a> {
 /// Old records and new patches of one file, each with its instance index.
 type FilePatches<'a> = (Vec<(usize, &'a PatchRecord)>, Vec<(usize, &'a Patch)>);
 
-/// One instance's patches before and after the update.
+/// One instance's patches before and after the update, each editing the alternative the instance already
+/// patched, if any.
 struct PatchUpdate {
 	index: usize,
 	old: Vec<PatchRecord>,
 	new: Vec<Patch>,
 	/// The patches of each wiring step of the new version, for an instance whose wiring was applied.
-	steps: Vec<Vec<Patch>>,
+	steps: Vec<Aimed>,
 	/// The new version renders the instance outside its default folder, where wiring patches do not fit.
 	moved: bool,
 }
@@ -92,10 +93,12 @@ impl Engine {
 				.map(|previous| render_instance(previous, old, &old.inputs))
 				.transpose()?;
 			if let Some(previous) = &mut previous {
+				self.adapt_files(&old.stack, &mut previous.files, None);
 				self.format_files(&stack, &mut previous.files, None);
 			}
 			let values = carried_inputs(piece, &old.inputs, &old.stack)?;
 			let mut next = render_instance(piece, old, &values)?;
+			self.adapt_files(&old.stack, &mut next.files, Some(&mut plan));
 			self.format_files(&stack, &mut next.files, Some(&mut plan));
 			for dependency in &next.dependencies {
 				if previous
@@ -106,23 +109,7 @@ impl Engine {
 				}
 			}
 			let files = self.update_files(&mut plan, request, labels, old, previous.as_ref(), &next)?;
-			let steps = if old.wired {
-				next
-					.steps
-					.into_iter()
-					.map(|step| step.patches)
-					.filter(|patches| !patches.is_empty())
-					.collect()
-			} else {
-				Vec::new()
-			};
-			patch_updates.push(PatchUpdate {
-				index: updated.len(),
-				old: old.patches.clone(),
-				new: next.patches,
-				steps,
-				moved: !next.at_default_target,
-			});
+			patch_updates.push(self.patch_update(&mut plan, updated.len(), old, &next)?);
 			updated.push(Instance {
 				pack_version: manifest.version.clone(),
 				variant: next.variant,
@@ -154,6 +141,41 @@ impl Engine {
 			request.force,
 			request.on_conflict,
 		)
+	}
+
+	/// The patches of the instance `old`, at `index`, before and after the update to `next`, in its import style.
+	fn patch_update(
+		&self,
+		plan: &mut Plan<Draft>,
+		index: usize,
+		old: &Instance,
+		next: &Rendered,
+	) -> Result<PatchUpdate, EngineError> {
+		let mut steps: Vec<Aimed> = if old.wired {
+			next
+				.steps
+				.iter()
+				.filter(|step| !step.patches.is_empty())
+				.map(|step| self.aim(&step.patches, &old.patches))
+				.collect::<Result<_, _>>()?
+		} else {
+			Vec::new()
+		};
+		let mut new = self.aim(&next.patches, &old.patches)?.patches;
+		for patch in steps
+			.iter_mut()
+			.flat_map(|step| step.patches.iter_mut())
+			.chain(&mut new)
+		{
+			self.adapt_patch(&old.stack, patch, plan);
+		}
+		Ok(PatchUpdate {
+			index,
+			old: old.patches.clone(),
+			new,
+			steps,
+			moved: !next.at_default_target,
+		})
 	}
 
 	/// Plans each file of one instance and returns the records the lockfile keeps for it.
@@ -282,8 +304,8 @@ impl Engine {
 		let mut unwired: BTreeMap<RelPath, String> = BTreeMap::new();
 		for update in updates {
 			for step in &update.steps {
-				let kept = step.iter().find(|patch| untouched.contains(patch.file()));
-				let wiring = match (kept, step.first()) {
+				let kept = step.patches.iter().find(|patch| untouched.contains(patch.file()));
+				let wiring = match (kept, step.patches.first()) {
 					(Some(kept), _) => Wiring::Skipped {
 						file: kept.file().clone(),
 						reason: format!("its wiring also edits `{}`, which cuilo left as it is", kept.file()),
@@ -302,7 +324,7 @@ impl Engine {
 						}
 					}
 					Wiring::Skipped { reason, .. } => {
-						for patch in step.iter().filter(|patch| !untouched.contains(patch.file())) {
+						for patch in step.patches.iter().filter(|patch| !untouched.contains(patch.file())) {
 							unwired.entry(patch.file().clone()).or_insert_with(|| reason.clone());
 						}
 					}

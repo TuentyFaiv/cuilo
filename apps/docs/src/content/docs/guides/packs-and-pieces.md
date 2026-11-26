@@ -15,7 +15,7 @@ cuilo pack list
 ```
 
 ```text
-backend 0.1.0  official:backend
+backend 0.2.0  official:backend
   database, error, middleware, resource
 ui 0.2.0  official:ui
   atom, molecule, organism
@@ -54,7 +54,7 @@ cuilo pack show backend
 ```
 
 ```text
-backend 0.1.0
+backend 0.2.0
 Layered backend pieces: REST resources, problem-details errors and middleware for Hono, Express, Axum, FastAPI, chi and Echo.
 
 backend/database  SQLAlchemy async engine, sessions and the declarative base for FastAPI.
@@ -100,8 +100,8 @@ Packages to add (offered after applying; --install adds them without asking):
   npm      zod ^4.1
   npm      vitest ^4.0 (dev)
 Next steps:
-  1. Register the error handler in `src/index.ts` with `app.onError(errorHandler)`.
-  2. Mount the routes in `src/index.ts` with `app.route("/blog-posts", blogPostRoutes(new BlogPostService(new InMemoryBlogPostRepository())))`.
+  1. Register the error handler in the file that creates your Hono app, with `app.onError(errorHandler)`.
+  2. Mount the routes in the file that creates your Hono app, with `app.route("/blog-posts", blogPostRoutes(new BlogPostService(new InMemoryBlogPostRepository())))`.
 ```
 
 The `(with error)` part means `resource` builds on the `error` piece. cuilo adds `error` first when the project does not have it yet, and passes on the inputs they share, such as `tests`. The next steps are what is left for you to do; see [next steps and wiring](#next-steps-and-wiring).
@@ -230,24 +230,26 @@ Packages to add (offered after applying; --install adds them without asking):
   npm      vitest ^4.0 (dev)
 ```
 
+These imports have no extension because this project resolves them like a bundler does. Where its `tsconfig.json` uses `NodeNext`, as in create-hono's Node.js and Vercel templates, they end in `.js`, in the patched entry file and in the generated files alike. See [relative imports in generated code](/guides/stack-detection/#relative-imports-in-generated-code).
+
 To wire every time, set `wire = true` in your [user config](/reference/user-config/). `--no-wire` turns it off for one run.
 
 ```toml title="config.toml"
 wire = true
 ```
 
-cuilo applies a step's patches all or none. When one cannot apply, for example when `src/index.ts` has no `export default app` line, cuilo leaves that step to you: it lists the step and notes why.
+cuilo applies a step's patches all or none. When one cannot apply, for example when `src/index.ts` has no line that exports or serves the app, cuilo leaves that step to you: it lists the step and notes why.
 
 ```text
 Notes:
-  src/index.ts: no line contains `export default app`; wire it by hand
+  src/index.ts: no line contains `export default app`, `export const handler = handle(app)`, `fire(app)` or `serve(`; wire it by hand
 ```
 
-In the official `backend` pack, cuilo can wire Hono's `src/index.ts`, FastAPI's `app/main.py` and the module declarations in Axum's `src/main.rs`. The other steps, such as those for Express and Go, which have no conventional entry file, are always listed.
+In the official `backend` pack, cuilo can wire Hono's `src/index.ts` or `src/index.tsx`, FastAPI's `app/main.py` and the module declarations in Axum's `src/main.rs`. For Hono, that covers every `create-hono` template with one of those entry files: Node.js, Bun, Cloudflare Workers, Vercel, AWS Lambda, Lambda@Edge and Fastly (`src/index.ts`), and Cloudflare Pages and Cloudflare Workers + Vite (`src/index.tsx`). A project with both files gets the wiring in `src/index.ts`. The templates with another entry file list the Hono steps instead: Deno (`main.ts`), Next.js and HonoX. Netlify's template has neither a `package.json` nor a `deno.json`, so cuilo does not detect Hono there. The other steps, such as those for Express and Go, which have no conventional entry file, are always listed.
 
 - Wiring applies only to pieces in their default folder, since the imports it adds point there. With `--target` or `paths`, the steps are listed.
 - `cuilo adopt` lists no steps and wires nothing.
-- `cuilo update` keeps the wiring cuilo applied up to date, and never wires a piece you added without it. See [updates](/guides/updates/).
+- `cuilo update` keeps the wiring cuilo applied up to date in the file it wired, and never wires a piece you added without it. See [updates](/guides/updates/).
 
 ## Use other packs
 

@@ -1,0 +1,25 @@
+---
+source: crates/cuilo-core/tests/official_packs.rs
+expression: "create_hono(\"fastly\", \"src/index.ts\", true)?"
+---
+fastly: src/index.ts
+---
+import { Hono } from 'hono'
+import { fire } from '@fastly/hono-fastly-compute'
+import { errorHandler } from "./shared/error-handler";
+import { statusBadgeRoutes } from "./modules/status-badges/status-badge.routes";
+import { StatusBadgeService } from "./modules/status-badges/status-badge.service";
+import { InMemoryStatusBadgeRepository } from "./modules/status-badges/status-badge.repository";
+import { statusBadge } from "./shared/middleware/status-badge";
+
+const app = new Hono()
+app.use(statusBadge);
+app.onError(errorHandler);
+
+app.get('/', (c) => {
+  return c.text('Hello Hono!')
+})
+
+app.route("/status-badges", statusBadgeRoutes(new StatusBadgeService(new InMemoryStatusBadgeRepository())));
+
+fire(app)

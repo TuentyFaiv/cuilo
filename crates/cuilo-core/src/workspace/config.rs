@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{Workspace, WorkspaceError};
 use crate::brand;
-use crate::model::{Fact, RelPath, Values};
+use crate::model::{Fact, ImportStyle, RelPath, Values, or_list};
 use crate::patch::PatchKind;
 
 const USER_CONFIG_FILE: &str = "config.toml";
@@ -24,7 +24,10 @@ pub struct ProjectConfig {
 	/// Output folder per piece, replacing the piece's target.
 	#[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
 	pub paths: BTreeMap<String, RelPath>,
-	/// Stack facts that replace detection, e.g. `framework = ["svelte"]`.
+	/// Stack facts that replace detection, e.g. `framework = ["svelte"]`. `import_style` takes one of
+	/// `imports-extensionless` (`./foo`), `imports-js` (`./foo.js`) or `imports-ts` (`./foo.ts`) and sets how
+	/// generated JavaScript and TypeScript write relative imports, e.g. `import_style = ["imports-js"]`;
+	/// without it, the `tsconfig.json` that governs each piece's folder decides.
 	#[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
 	pub stack: BTreeMap<Fact, Vec<String>>,
 	/// Default input values per piece.
@@ -272,12 +275,22 @@ impl ProjectConfig {
 			(None, Some(bytes)) => (brand::CONFIG_FILE_TOML, parse_toml(brand::CONFIG_FILE_TOML, &bytes)?),
 			(None, None) => return Ok(Self::default()),
 		};
-		match config.stack.values().flatten().find(|value| !is_plain_name(value)) {
-			Some(value) => Err(ConfigError::Parse {
-				file: file.to_owned(),
-				message: format!("stack value {value:?} must be a plain name such as `react`, `next.js` or `c++`"),
-			}),
-			None => Ok(config),
+		let error = |message: String| ConfigError::Parse {
+			file: file.to_owned(),
+			message,
+		};
+		if let Some(value) = config.stack.values().flatten().find(|value| !is_plain_name(value)) {
+			return Err(error(format!(
+				"stack value {value:?} must be a plain name such as `react`, `next.js` or `c++`"
+			)));
+		}
+		match config.stack.get(&Fact::ImportStyle).map(Vec::as_slice) {
+			Some([_, _, ..]) => Err(error("stack `import_style` takes one value".to_owned())),
+			Some([value]) if ImportStyle::from_value(value).is_none() => Err(error(format!(
+				"stack `import_style` value {value:?} must be {}",
+				or_list(&ImportStyle::ALL.map(ImportStyle::value))
+			))),
+			_ => Ok(config),
 		}
 	}
 }
@@ -416,6 +429,29 @@ mod tests {
 				error.contains("must be a plain name") && !error.contains('\u{1b}'),
 				"{error}"
 			);
+		}
+	}
+
+	#[test]
+	fn load_should_accept_one_known_import_style_only() {
+		let load =
+			|stack: &str| ProjectConfig::load(&workspace_with(&[("cuilo.json", &format!(r#"{{"stack": {stack}}}"#))]));
+
+		assert_eq!(
+			load(r#"{"import_style": ["imports-js"]}"#).unwrap().stack[&Fact::ImportStyle],
+			["imports-js"]
+		);
+		assert!(load(r#"{"import_style": []}"#).is_ok());
+		for (stack, expected) in [
+			(
+				r#"{"import_style": ["js"]}"#,
+				"must be `imports-extensionless`, `imports-js` or `imports-ts`",
+			),
+			(r#"{"import_style": ["imports-js", "imports-ts"]}"#, "takes one value"),
+		] {
+			let error = load(stack).unwrap_err().to_string();
+
+			assert!(error.contains(expected), "{error}");
 		}
 	}
 

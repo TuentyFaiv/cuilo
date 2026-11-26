@@ -101,7 +101,10 @@ Pack namespaces, e.g. `"@acme": "gh:acme/packs@v1.2.0"`, so `@acme/ui` names a p
 
 **Type:** `map of array of string` · optional
 
-Stack facts that replace detection, e.g. `framework = ["svelte"]`.
+Stack facts that replace detection, e.g. `framework = ["svelte"]`. `import_style` takes one of
+`imports-extensionless` (`./foo`), `imports-js` (`./foo.js`) or `imports-ts` (`./foo.ts`) and sets how
+generated JavaScript and TypeScript write relative imports, e.g. `import_style = ["imports-js"]`;
+without it, the `tsconfig.json` that governs each piece's folder decides.
 
 ### `verify`
 

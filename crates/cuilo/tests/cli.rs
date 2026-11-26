@@ -124,6 +124,34 @@ fn add_should_plan_then_apply_only_with_yes() -> TestResult {
 }
 
 #[test]
+fn detect_should_show_the_import_style_in_text_and_json_and_take_the_configured_one() -> TestResult {
+	let dir = react_project()?;
+	std::fs::write(
+		dir.path().join("tsconfig.json"),
+		"{\n\t// Node.js\n\t\"compilerOptions\": { \"module\": \"NodeNext\" },\n}\n",
+	)?;
+	let style = |args: &[&str]| -> Result<serde_json::Value, Box<dyn Error>> {
+		let output = in_project(&dir)?.args(args).output()?;
+		assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+		let value: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+		Ok(value["stack"]["import_style"].clone())
+	};
+
+	assert_eq!(style(&["detect"])?, serde_json::json!(["imports-js"]));
+	assert_eq!(style(&["--json", "detect"])?, serde_json::json!(["imports-js"]));
+	std::fs::write(
+		dir.path().join("cuilo.json"),
+		r#"{"stack": {"import_style": ["imports-extensionless"]}}"#,
+	)?;
+	assert_eq!(style(&["detect"])?, serde_json::json!(["imports-extensionless"]));
+	std::fs::write(dir.path().join("cuilo.json"), r#"{"stack": {"import_style": ["js"]}}"#)?;
+	in_project(&dir)?.arg("detect").assert().failure().stderr(contains(
+		"must be `imports-extensionless`, `imports-js` or `imports-ts`",
+	));
+	Ok(())
+}
+
+#[test]
 fn json_output_should_describe_the_plan_and_the_transaction() -> TestResult {
 	let dir = react_project()?;
 
@@ -226,7 +254,7 @@ fn pack_list_should_include_the_official_packs() -> TestResult {
 		.args(["pack", "list"])
 		.assert()
 		.success()
-		.stdout(contains("ui 0.2.0").and(contains("backend 0.1.0")));
+		.stdout(contains("ui 0.2.0").and(contains("backend 0.2.0")));
 	Ok(())
 }
 
@@ -323,16 +351,22 @@ fn upgrade_background_should_stay_silent_and_record_nothing_in_ci() -> TestResul
 	Ok(())
 }
 
+/// A copy of this build in the folder `bin`.
+#[cfg(unix)]
+fn copy_in(bin: &std::path::Path) -> Result<std::path::PathBuf, Box<dyn Error>> {
+	std::fs::create_dir_all(bin)?;
+	let exe = bin.join(brand::BINARY_NAME);
+	std::fs::copy(assert_cmd::cargo::cargo_bin(brand::BINARY_NAME), &exe)?;
+	Ok(exe)
+}
+
 /// A copy of this build where a global npm install puts it, and a `PATH` whose fake `npm` prints
 /// `npm says hi`, saves its arguments in `npm-args` and exits with `status`.
 #[cfg(unix)]
 fn npm_install(dir: &std::path::Path, status: u8) -> Result<(std::path::PathBuf, String), Box<dyn Error>> {
 	use std::os::unix::fs::PermissionsExt as _;
 
-	let bin = dir.join("lib/node_modules/@cuilo/cli-test/bin");
-	std::fs::create_dir_all(&bin)?;
-	let exe = bin.join(brand::BINARY_NAME);
-	std::fs::copy(assert_cmd::cargo::cargo_bin(brand::BINARY_NAME), &exe)?;
+	let exe = copy_in(&dir.join("lib/node_modules/@cuilo/cli-test/bin"))?;
 	let fakes = dir.join("fake-bin");
 	std::fs::create_dir_all(&fakes)?;
 	std::fs::write(
@@ -387,6 +421,72 @@ fn upgrade_should_fail_naming_the_npm_command_that_failed() -> TestResult {
 		.code(1)
 		.stdout(contains("npm says hi"))
 		.stderr(contains("`npm install --global @cuilo/cli@99.0.0` failed"));
+	Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn upgrade_should_print_the_project_s_own_command_for_a_project_copy_and_run_nothing() -> TestResult {
+	let dir = tempfile::tempdir()?;
+	std::fs::write(dir.path().join("package.json"), "{}")?;
+	std::fs::write(dir.path().join("bun.lock"), "")?;
+	let exe = copy_in(&dir.path().join("node_modules/@cuilo/cli-test/bin"))?;
+	let nothing = tempfile::tempdir()?;
+	let root = dir.path().canonicalize()?;
+
+	let output = Command::new(&exe)
+		.args(["--json", "upgrade", "--version", "99.0.0"])
+		.env("PATH", nothing.path())
+		.output()?;
+	let value: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+
+	assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+	assert_eq!(
+		(&value["install"], &value["kind"], &value["upgraded"]),
+		(&"bun".into(), &"project".into(), &false.into())
+	);
+	assert_eq!(value["project"], root.to_string_lossy().as_ref());
+	assert_eq!(value["command"], "bun add --dev @cuilo/cli@99.0.0");
+	Command::new(&exe)
+		.args(["upgrade", "--version", "99.0.0"])
+		.env("PATH", nothing.path())
+		.assert()
+		.success()
+		.stdout(contains(format!(
+			"; this copy is a dependency of the project in {}; run `bun add --dev @cuilo/cli@99.0.0` there.",
+			root.display()
+		)));
+	Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn upgrade_should_point_an_npx_copy_back_to_npx_and_run_nothing() -> TestResult {
+	let dir = tempfile::tempdir()?;
+	let exe = copy_in(
+		&dir
+			.path()
+			.join("_npx/0e5ad6a08e1e9350/node_modules/@cuilo/cli-test/bin"),
+	)?;
+	let nothing = tempfile::tempdir()?;
+
+	let output = Command::new(&exe)
+		.args(["--json", "upgrade", "--version", "99.0.0"])
+		.env("PATH", nothing.path())
+		.output()?;
+	let value: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+
+	assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+	assert_eq!(
+		(&value["install"], &value["kind"], &value["command"]),
+		(&"npm".into(), &"ephemeral".into(), &"npx @cuilo/cli@99.0.0".into())
+	);
+	Command::new(&exe)
+		.args(["upgrade", "--version", "99.0.0"])
+		.env("PATH", nothing.path())
+		.assert()
+		.success()
+		.stdout(contains("; this copy runs through npx; run `npx @cuilo/cli@99.0.0`."));
 	Ok(())
 }
 

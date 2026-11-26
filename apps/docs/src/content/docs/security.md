@@ -15,7 +15,7 @@ Every command that changes the project builds a plan first. Nothing is written u
 - `--dry-run` shows the plan and stops. At a terminal, cuilo asks before it applies unless you pass `--yes`. With `--no-input` or `--json` and no `--yes`, nothing is applied and the exit code is `2`.
 - An apply is one transaction, journaled in `.cuilo/history`. If a file changed after the plan was made, the apply stops and nothing is written; plan again.
 - Only one cuilo process changes a project at a time. It holds `.cuilo/busy` while it works.
-- cuilo never reads or writes through symlinks. Paths cannot leave the project: absolute paths, `..` segments and backslashes are refused.
+- cuilo never writes through symlinks, and never reads project files through them. The one exception is [import style detection](/guides/stack-detection/#relative-imports-in-generated-code): to read `tsconfig.json` files and the `package.json` files that resolve their `extends`, cuilo follows symlinks and Windows junctions, such as the ones pnpm makes in `node_modules`, but only when the real file is inside the project. Paths cannot leave the project: absolute paths, `..` segments and backslashes are refused.
 
 Agents get the same rule over MCP: only `apply_plan` writes a plan. See [Connect an agent over MCP](/agents/mcp/).
 
@@ -163,7 +163,7 @@ Releases are not published yet. Once they are, every channel installs the same b
 - The npm package has no dependencies and runs nothing at install time.
 - The install scripts download over HTTPS only and follow no redirects. `install.sh` also requires TLS 1.2 or newer. `CUILO_REQUIRE_SIGNATURE=1` makes them refuse to install unless `minisign` checks the signature.
 - `cuilo upgrade` and automatic updates replace only copies the install script made. They replace the binary only when the release's `SHA256SUMS` carries a valid signature by the release key built into cuilo, and the binary matches its signed checksum. Automatic updates never move to an older release, and `cuilo upgrade` does only with `--version`.
-- For other copies, `cuilo upgrade` runs the package manager that installed them, as a program with fixed arguments and never through a shell, and that package manager checks the download. Automatic updates never run a package manager.
+- For other global installs, `cuilo upgrade` runs the package manager that installed them, as a program with fixed arguments and never through a shell, and that package manager checks the download. It runs nothing for a copy from a one-off runner such as `npx`, or one in a project's `node_modules`. Automatic updates never run a package manager.
 - The daily update check only reads which version is newest. `updates = "off"` in your user config, or `CUILO_UPDATES=off`, turns it off.
 - Each signature names its version and file, so a signature cannot be reused for another file or version.
 - To see where a binary was built: `gh attestation verify $(command -v cuilo) --repo TuentyFaiv/cuilo`.

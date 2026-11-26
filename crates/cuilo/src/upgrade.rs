@@ -12,9 +12,10 @@ use cuilo_core::model::Digest;
 use cuilo_packs::transport::Fetch;
 use minisign_verify::{PublicKey, Signature};
 use semver::Version;
-use serde::Serialize;
+use serde::ser::SerializeMap as _;
+use serde::{Serialize, Serializer};
 
-use crate::ui::Output;
+use crate::ui::{self, Output};
 
 /// The minisign public key that signs every release's `SHA256SUMS`; empty until the first release.
 pub(crate) const RELEASE_KEY: &str = include_str!("../release-key.pub");
@@ -29,19 +30,21 @@ const HOMEBREW_FORMULA: &str = concat!("tuentyfaiv/tap/", cuilo_core::brand_name
 const CRATE: &str = env!("CARGO_PKG_NAME");
 
 /// How the running binary was installed, which decides who may replace it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Install {
 	/// By the install script; `upgrade` replaces it.
 	Script,
-	/// By npm.
-	Npm,
-	/// By pnpm.
-	Pnpm,
-	/// By Bun.
-	Bun,
-	/// By Yarn 1, the one with `yarn global`.
-	Yarn,
+	/// Globally, by a JavaScript package manager; `upgrade` runs it.
+	Global(Manager),
+	/// In the cache of a package manager's one-off runner, such as npx; `upgrade` leaves it alone.
+	Ephemeral(Manager),
+	/// In a project's `node_modules`; `upgrade` leaves it to the project.
+	Project {
+		/// The package manager the project's lockfile names.
+		manager: Manager,
+		/// The project folder.
+		root: String,
+	},
 	/// By Homebrew.
 	Homebrew,
 	/// By `cargo install` or `cargo binstall`.
@@ -50,74 +53,196 @@ pub(crate) enum Install {
 	Unknown,
 }
 
+/// A JavaScript package manager.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Manager {
+	/// npm, with npx.
+	Npm,
+	/// pnpm, with `pnpm dlx`.
+	Pnpm,
+	/// Bun, with bunx.
+	Bun,
+	/// Yarn: `yarn global` is Yarn 1's, `yarn dlx` Yarn 2 and later's.
+	Yarn,
+}
+
+impl Manager {
+	/// Its name in messages, e.g. `Bun`.
+	fn name(self) -> &'static str {
+		match self {
+			Self::Npm => "npm",
+			Self::Pnpm => "pnpm",
+			Self::Bun => "Bun",
+			Self::Yarn => "Yarn",
+		}
+	}
+
+	/// Its one-off runner, e.g. `pnpm dlx`.
+	fn runner(self) -> &'static str {
+		match self {
+			Self::Npm => "npx",
+			Self::Pnpm => "pnpm dlx",
+			Self::Bun => "bunx",
+			Self::Yarn => "yarn dlx",
+		}
+	}
+}
+
+/// Who owns a copy of cuilo.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum Kind {
+	/// The user, through a global install that `upgrade` upgrades.
+	Global,
+	/// A one-off runner, such as npx, that keeps it in its cache.
+	Ephemeral,
+	/// A project, as one of its dependencies.
+	Project,
+}
+
+/// The lockfiles that name a project's package manager, in the order they are looked for.
+const LOCKFILES: [(&str, Manager); 6] = [
+	("bun.lock", Manager::Bun),
+	("bun.lockb", Manager::Bun),
+	("pnpm-lock.yaml", Manager::Pnpm),
+	("yarn.lock", Manager::Yarn),
+	("package-lock.json", Manager::Npm),
+	("npm-shrinkwrap.json", Manager::Npm),
+];
+
 impl Install {
 	/// How the binary at `exe` was installed.
 	pub(crate) fn of(exe: &Path) -> Self {
 		if exe.with_file_name(brand::INSTALL_RECEIPT).is_file() {
 			return Self::Script;
 		}
-		Self::from_path(&exe.to_string_lossy())
+		let search: Vec<String> = env::var_os("PATH")
+			.map(|path| {
+				env::split_paths(&path)
+					.map(|dir| dir.to_string_lossy().into_owned())
+					.collect()
+			})
+			.unwrap_or_default();
+		Self::judge(&exe.to_string_lossy(), &search, &|file| Path::new(file).is_file())
 	}
 
-	/// How a binary at `path` was installed, judged by its folder names; `/` and `\` both separate
-	/// them, so one platform can judge another's paths.
-	fn from_path(path: &str) -> Self {
-		let parts: Vec<String> = path
-			.split(['/', '\\'])
-			.filter(|part| !part.is_empty())
-			.map(str::to_ascii_lowercase)
-			.collect();
-		let has = |name: &str| parts.iter().any(|part| part == name);
-		let position = |names: &[&str]| parts.iter().position(|part| names.contains(&part.as_str()));
-		if has("node_modules") {
-			let yarn = position(&["yarn", ".yarn", ".yarn-config"]);
-			let global = parts.iter().rposition(|part| part == "global");
-			if has(".bun")
-				|| parts
-					.windows(3)
-					.any(|names| names == ["install", "global", "node_modules"])
-			{
-				Self::Bun
-			} else if has("pnpm") || has(".pnpm") {
-				Self::Pnpm
-			} else if yarn.zip(global).is_some_and(|(yarn, global)| yarn < global) {
-				Self::Yarn
+	/// How a binary at `path` was installed, judged by its folder names, the files `exists` finds
+	/// beside them, and the `PATH` folders in `search`. A copy in `node_modules` is ephemeral in a
+	/// one-off runner's cache, global in a package manager's global folder or in an npm prefix, which
+	/// has no `package.json`, and otherwise the dependency of a project.
+	fn judge(path: &str, search: &[String], exists: &dyn Fn(&str) -> bool) -> Self {
+		let lower = path.to_ascii_lowercase();
+		let folders = Folders::new(path, &lower);
+		if !folders.has("node_modules") {
+			return if folders.has("cellar") || folders.has("homebrew") || folders.has("linuxbrew") {
+				Self::Homebrew
+			} else if matches!(folders.names.as_slice(), [.., ".cargo", "bin", _]) {
+				Self::Cargo
 			} else {
-				Self::Npm
-			}
-		} else if has("cellar") || has("homebrew") || has("linuxbrew") {
-			Self::Homebrew
-		} else if parts.len() >= 3 && parts[parts.len() - 3] == ".cargo" && parts[parts.len() - 2] == "bin" {
-			Self::Cargo
-		} else {
-			Self::Unknown
+				Self::Unknown
+			};
+		}
+		if let Some(manager) = folders.runner() {
+			return Self::Ephemeral(manager);
+		}
+		if folders.in_pnpm_store() {
+			// pnpm 11 keeps the copies of `pnpm add --global` and `pnpm dlx` in the same store, so only
+			// the `PATH` folder `pnpm dlx` adds tells them apart.
+			let dlx = search
+				.iter()
+				.any(|dir| Folders::new(dir, &dir.to_ascii_lowercase()).is_pnpm_dlx_bin());
+			return if dlx {
+				Self::Ephemeral(Manager::Pnpm)
+			} else {
+				Self::Global(Manager::Pnpm)
+			};
+		}
+		if let Some(manager) = folders.global() {
+			return Self::Global(manager);
+		}
+		let Some((root, separator)) = folders.project() else {
+			return Self::Unknown;
+		};
+		let file = |name: &str| format!("{root}{separator}{name}");
+		if !exists(&file("package.json")) {
+			return Self::Global(Manager::Npm);
+		}
+		let manager = LOCKFILES
+			.iter()
+			.find(|(name, _)| exists(&file(name)))
+			.map(|&(_, manager)| manager)
+			.or_else(|| folders.layout())
+			.unwrap_or(Manager::Npm);
+		Self::Project {
+			manager,
+			root: shown(root).to_owned(),
 		}
 	}
 
-	/// The package manager's name, e.g. `npm`; `None` for script and unknown installs.
-	pub(crate) fn manager(self) -> Option<&'static str> {
+	/// Who owns this copy; `None` when unknown.
+	pub(crate) fn kind(&self) -> Option<Kind> {
 		match self {
-			Self::Npm => Some("npm"),
-			Self::Pnpm => Some("pnpm"),
-			Self::Bun => Some("Bun"),
-			Self::Yarn => Some("Yarn"),
+			Self::Script | Self::Global(_) | Self::Homebrew | Self::Cargo => Some(Kind::Global),
+			Self::Ephemeral(_) => Some(Kind::Ephemeral),
+			Self::Project { .. } => Some(Kind::Project),
+			Self::Unknown => None,
+		}
+	}
+
+	/// Its name in `--json` output, e.g. `pnpm` or `script`.
+	fn id(&self) -> &'static str {
+		match self {
+			Self::Script => "script",
+			Self::Global(manager) | Self::Ephemeral(manager) | Self::Project { manager, .. } => match manager {
+				Manager::Npm => "npm",
+				Manager::Pnpm => "pnpm",
+				Manager::Bun => "bun",
+				Manager::Yarn => "yarn",
+			},
+			Self::Homebrew => "homebrew",
+			Self::Cargo => "cargo",
+			Self::Unknown => "unknown",
+		}
+	}
+
+	/// The name of the package manager that `upgrade` runs, e.g. `npm`; `None` when it runs none.
+	pub(crate) fn manager(&self) -> Option<&'static str> {
+		match self {
+			Self::Global(manager) => Some(manager.name()),
 			Self::Homebrew => Some("Homebrew"),
 			Self::Cargo => Some("cargo"),
-			Self::Script | Self::Unknown => None,
+			Self::Script | Self::Ephemeral(_) | Self::Project { .. } | Self::Unknown => None,
 		}
 	}
 
-	/// The package-manager command that installs `version` over this copy, or `None` when no package
-	/// manager installed it. Homebrew cannot pin a version, so it moves to its formula's.
-	/// `binstall` says whether `cargo-binstall` is on `PATH`.
-	pub(crate) fn command(self, version: &Version, binstall: bool) -> Option<Invocation> {
+	/// The command that puts `version` in place of this copy, or `None` for script and unknown
+	/// installs: for a global install the one `upgrade` runs, otherwise the one to run yourself.
+	/// Homebrew cannot pin a version, so it moves to its formula's. A one-off runner gets the dist-tag
+	/// when `version` is the `newest` release. `binstall` says whether `cargo-binstall` is on `PATH`.
+	pub(crate) fn command(&self, version: &Version, newest: bool, binstall: bool) -> Option<Invocation> {
 		let package = format!("{}@{version}", brand::NPM_PACKAGE);
+		let tag = if version.pre.is_empty() { "latest" } else { "next" };
+		let run = if newest {
+			format!("{}@{tag}", brand::NPM_PACKAGE)
+		} else {
+			package.clone()
+		};
 		let version = version.to_string();
 		let (program, args): (&str, Vec<&str>) = match self {
-			Self::Npm => ("npm", vec!["install", "--global", &package]),
-			Self::Pnpm => ("pnpm", vec!["add", "--global", &package]),
-			Self::Bun => ("bun", vec!["add", "--global", &package]),
-			Self::Yarn => ("yarn", vec!["global", "add", &package]),
+			Self::Global(Manager::Npm) => ("npm", vec!["install", "--global", &package]),
+			Self::Global(Manager::Pnpm) => ("pnpm", vec!["add", "--global", &package]),
+			Self::Global(Manager::Bun) => ("bun", vec!["add", "--global", &package]),
+			Self::Global(Manager::Yarn) => ("yarn", vec!["global", "add", &package]),
+			Self::Ephemeral(Manager::Npm) => ("npx", vec![&run]),
+			Self::Ephemeral(Manager::Pnpm) => ("pnpm", vec!["dlx", &run]),
+			Self::Ephemeral(Manager::Bun) => ("bunx", vec![&run]),
+			Self::Ephemeral(Manager::Yarn) => ("yarn", vec!["dlx", &run]),
+			Self::Project { manager, .. } => match manager {
+				Manager::Npm => ("npm", vec!["install", "--save-dev", &package]),
+				Manager::Pnpm => ("pnpm", vec!["add", "--save-dev", &package]),
+				Manager::Bun => ("bun", vec!["add", "--dev", &package]),
+				Manager::Yarn => ("yarn", vec!["add", "--dev", &package]),
+			},
 			Self::Homebrew => ("brew", vec!["upgrade", HOMEBREW_FORMULA]),
 			Self::Cargo if binstall => ("cargo", vec!["binstall", CRATE, "--version", &version, "--no-confirm"]),
 			Self::Cargo => ("cargo", vec!["install", CRATE, "--locked", "--version", &version]),
@@ -129,18 +254,189 @@ impl Install {
 		})
 	}
 
-	/// What to do to upgrade this copy, for messages.
-	pub(crate) fn hint(self) -> String {
-		if self == Self::Unknown {
-			format!(
+	/// What to do to move this copy to `version`, for messages; `newest` says whether it is the newest
+	/// release.
+	pub(crate) fn hint(&self, version: &Version, newest: bool) -> String {
+		match (self, self.command(version, newest, false)) {
+			(Self::Unknown, _) => format!(
 				"{} did not install this copy; reinstall with the install script at {}/install.sh",
 				brand::NAME,
 				brand::DOWNLOAD_URL
-			)
-		} else {
-			format!("run `{} upgrade`", brand::BINARY_NAME)
+			),
+			(Self::Ephemeral(manager), Some(command)) => {
+				format!("this copy runs through {}; run `{command}`", manager.runner())
+			}
+			(Self::Project { root, .. }, Some(command)) => format!(
+				"this copy is a dependency of the project in {}; run `{command}` there",
+				ui::printable_line(root)
+			),
+			_ => format!("run `{} upgrade`", brand::BINARY_NAME),
 		}
 	}
+}
+
+/// `install`, `kind` and `project` in `--json` output.
+impl Serialize for Install {
+	fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+		let project = match self {
+			Self::Project { root, .. } => Some(root),
+			_ => None,
+		};
+		let mut map = serializer.serialize_map(Some(3))?;
+		map.serialize_entry("install", self.id())?;
+		map.serialize_entry("kind", &self.kind())?;
+		map.serialize_entry("project", &project)?;
+		map.end()
+	}
+}
+
+/// A binary's path split into folder names, which `/` and `\` both separate, so one platform can
+/// judge another's paths.
+#[derive(Debug)]
+struct Folders<'a> {
+	/// The path as given.
+	path: &'a str,
+	/// The names, lowercased.
+	names: Vec<&'a str>,
+	/// The byte offset in `path` where each name starts.
+	starts: Vec<usize>,
+}
+
+impl<'a> Folders<'a> {
+	/// The folders of `path`, whose lowercase copy is `lower`.
+	fn new(path: &'a str, lower: &'a str) -> Self {
+		let mut names = Vec::new();
+		let mut starts = Vec::new();
+		let mut start = 0;
+		for (index, c) in lower.char_indices().chain([(lower.len(), '/')]) {
+			if matches!(c, '/' | '\\') {
+				if let Some(name) = lower.get(start..index).filter(|name| !name.is_empty()) {
+					names.push(name);
+					starts.push(start);
+				}
+				start = index + 1;
+			}
+		}
+		Self { path, names, starts }
+	}
+
+	/// Whether a folder is called `name`.
+	fn has(&self, name: &str) -> bool {
+		self.names.contains(&name)
+	}
+
+	/// Whether `size` names in a row pass `test`.
+	fn any(&self, size: usize, test: impl Fn(&[&str]) -> bool) -> bool {
+		self.names.windows(size).any(test)
+	}
+
+	/// The package manager whose one-off runner keeps this copy in its cache: npx's `_npx/<hash>`,
+	/// bunx's `bunx-<uid>-<package>` or, since Bun 1.4 outside Windows, `.bunx-<uid>/<package>`,
+	/// pnpm's `dlx/<key>/<dir>/node_modules`, or Yarn's `xfs-<id>/dlx-<pid>`.
+	fn runner(&self) -> Option<Manager> {
+		if self.has("_npx") {
+			Some(Manager::Npm)
+		} else if self.names.iter().any(|name| bunx(name)) {
+			Some(Manager::Bun)
+		} else if self.any(4, |names| matches!(names, ["dlx", _, _, "node_modules"])) {
+			Some(Manager::Pnpm)
+		} else if self.any(
+			2,
+			|names| matches!(names, [temp, dlx] if temp.starts_with("xfs-") && dlx.starts_with("dlx-")),
+		) {
+			Some(Manager::Yarn)
+		} else {
+			None
+		}
+	}
+
+	/// Whether this copy is in pnpm's global virtual store,
+	/// `<store>/v11/links/@<scope>/<name>/<version>/<hash>/node_modules`.
+	fn in_pnpm_store(&self) -> bool {
+		self.any(7, |names| {
+			matches!(names, [version, "links", scope, _, _, _, "node_modules"] if store_version(version) && scope.starts_with('@'))
+		})
+	}
+
+	/// Whether this is the `node_modules/.bin` folder `pnpm dlx` adds to `PATH`,
+	/// `<cache>/dlx/<key>/<dir>/node_modules/.bin`.
+	fn is_pnpm_dlx_bin(&self) -> bool {
+		matches!(self.names.as_slice(), [.., "dlx", _, _, "node_modules", ".bin"])
+	}
+
+	/// The package manager whose global folder holds this copy: Bun's `install/global`, pnpm's
+	/// `global/5` or, since pnpm 11, `global/v11/<hash>`, or Yarn 1's `yarn/global` or
+	/// `Yarn/Data/global`.
+	fn global(&self) -> Option<Manager> {
+		if self.any(3, |names| names == ["install", "global", "node_modules"]) {
+			Some(Manager::Bun)
+		} else if self.any(4, |names| {
+			matches!(names, ["global", layout, "node_modules", _] | ["global", layout, _, "node_modules"] if pnpm_layout(layout))
+		}) {
+			Some(Manager::Pnpm)
+		} else if self.any(3, |names| names == ["yarn", "global", "node_modules"])
+			|| self.any(4, |names| names == ["yarn", "data", "global", "node_modules"])
+		{
+			Some(Manager::Yarn)
+		} else {
+			None
+		}
+	}
+
+	/// The project folder holding this copy, and the separator after it: the folder above `.yarn`
+	/// for a package Yarn unplugged, else the one holding the first `node_modules`.
+	fn project(&self) -> Option<(&'a str, char)> {
+		let index = self
+			.names
+			.windows(2)
+			.position(|names| names == [".yarn", "unplugged"])
+			.or_else(|| self.names.iter().position(|name| *name == "node_modules"))?;
+		let before = self.path.get(..*self.starts.get(index)?)?;
+		let separator = before.chars().next_back()?;
+		Some((before.strip_suffix(separator)?, separator))
+	}
+
+	/// The package manager a project's `node_modules` layout points to: pnpm's `.pnpm`, Bun's
+	/// `.bun`, Yarn's `.yarn`.
+	fn layout(&self) -> Option<Manager> {
+		if self.has(".pnpm") {
+			Some(Manager::Pnpm)
+		} else if self.has(".bun") {
+			Some(Manager::Bun)
+		} else if self.has(".yarn") {
+			Some(Manager::Yarn)
+		} else {
+			None
+		}
+	}
+}
+
+/// Whether `name` is a folder bunx installs into: `bunx-<uid>-<package>`, or `.bunx-<uid>`.
+fn bunx(name: &str) -> bool {
+	name
+		.strip_prefix('.')
+		.unwrap_or(name)
+		.strip_prefix("bunx-")
+		.is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_digit()))
+}
+
+/// Whether `name` is the layout folder of pnpm's global folder: `5` before pnpm 11, `v11` since.
+fn pnpm_layout(name: &str) -> bool {
+	let digits = name.strip_prefix('v').unwrap_or(name);
+	!digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+/// Whether `name` is a pnpm store's version folder, e.g. `v11`.
+fn store_version(name: &str) -> bool {
+	name.starts_with('v') && pnpm_layout(name)
+}
+
+/// `path` without the `\\?\` that a resolved Windows path starts with, when a drive letter follows.
+fn shown(path: &str) -> &str {
+	path
+		.strip_prefix(r"\\?\")
+		.filter(|rest| rest.as_bytes().get(1) == Some(&b':'))
+		.unwrap_or(path)
 }
 
 /// A package-manager command: a program and fixed arguments, never a shell string.
@@ -397,15 +693,21 @@ pub(crate) struct Outcome {
 	pub(crate) current: Version,
 	/// The version offered.
 	pub(crate) available: Version,
-	/// How the binary was installed.
+	/// How the binary was installed: `install` names the installer, e.g. `npm`, `kind` who owns the
+	/// copy (`global`, `ephemeral` or `project`, or `null` when unknown), and `project` the project
+	/// folder of a project's copy.
+	#[serde(flatten)]
 	pub(crate) install: Install,
 	/// Whether this copy was upgraded.
 	pub(crate) upgraded: bool,
-	/// The package-manager command that ran, or with `--check` the one that would run.
+	/// The command that moves this copy to `available`: for a global install the package-manager
+	/// command that ran, or with `--check` the one that would run; for other copies the one to run
+	/// yourself.
 	pub(crate) command: Option<String>,
 }
 
-/// Runs `cuilo upgrade`: replaces a script install itself, and runs the package manager for others.
+/// Runs `cuilo upgrade`: replaces a script install itself, runs the package manager for other global
+/// installs, and only reports the command for a one-off runner's or a project's copy.
 pub(crate) fn run(
 	fetch: &dyn Fetch,
 	exe: &Path,
@@ -416,7 +718,10 @@ pub(crate) fn run(
 	let current = Version::parse(env!("CARGO_PKG_VERSION"))?;
 	let install = Install::of(exe);
 	if !check && install == Install::Unknown {
-		bail!("this cuilo cannot upgrade itself: {}", install.hint());
+		bail!(
+			"this cuilo cannot upgrade itself: {}",
+			install.hint(&current, wanted.is_none())
+		);
 	}
 	if !check && install == Install::Homebrew && wanted.is_some() {
 		bail!(
@@ -438,9 +743,10 @@ pub(crate) fn run(
 	if (wanted.is_none() && target <= current) || wanted == Some(&current) {
 		return Ok(outcome);
 	}
-	let command = install.command(&target, install == Install::Cargo && runner.finds("cargo-binstall"));
+	let binstall = outcome.install == Install::Cargo && runner.finds("cargo-binstall");
+	let command = outcome.install.command(&target, wanted.is_none(), binstall);
 	outcome.command = command.as_ref().map(ToString::to_string);
-	if check {
+	if check || outcome.install.kind() != Some(Kind::Global) {
 		return Ok(outcome);
 	}
 	if let Some(command) = command {
@@ -478,10 +784,11 @@ pub(crate) fn command(json: bool, check: bool, wanted: Option<&Version>) -> anyh
 		}
 	} else if available == current {
 		println!("{name} {current} is the newest release.");
-	} else if available > current {
+	} else if available > current || command.is_some() {
+		let hint = install.hint(available, wanted.is_none());
 		let how = match command {
-			Some(command) => format!("{}, which runs `{command}`", install.hint()),
-			None => install.hint(),
+			Some(command) if install.kind() == Some(Kind::Global) => format!("{hint}, which runs `{command}`"),
+			_ => hint,
 		};
 		println!("{name} {available} is available (you have {current}); {how}.");
 	} else {
@@ -659,18 +966,34 @@ pub(crate) mod tests {
 		Ok(())
 	}
 
+	/// How a copy at `path` was installed, where the files in `files` exist and `PATH` is empty.
+	fn judged(path: &str, files: &[&str]) -> Install {
+		Install::judge(path, &[], &|file| files.contains(&file))
+	}
+
 	#[test]
-	fn install_should_follow_the_receipt_and_known_locations() -> anyhow::Result<()> {
+	fn install_should_follow_the_receipt_the_project_files_and_known_locations() -> anyhow::Result<()> {
 		let dir = tempfile::tempdir()?;
 		let exe = dir.path().join("bin/cuilo");
 		fs::create_dir_all(dir.path().join("bin"))?;
+		let local = dir.path().join("node_modules/@cuilo/cli-darwin-arm64/bin/cuilo");
 
 		assert_eq!(Install::of(&exe), Install::Unknown);
 		fs::write(exe.with_file_name(brand::INSTALL_RECEIPT), "{}")?;
 		assert_eq!(Install::of(&exe), Install::Script);
 		assert_eq!(
-			Install::of(Path::new("/p/node_modules/@cuilo/cli-darwin-arm64/bin/cuilo")),
-			Install::Npm
+			Install::of(&local),
+			Install::Global(Manager::Npm),
+			"a folder without package.json is an npm prefix"
+		);
+		fs::write(dir.path().join("package.json"), "{}")?;
+		fs::write(dir.path().join("pnpm-lock.yaml"), "")?;
+		assert_eq!(
+			Install::of(&local),
+			Install::Project {
+				manager: Manager::Pnpm,
+				root: dir.path().to_string_lossy().into_owned(),
+			}
 		);
 		assert_eq!(
 			Install::of(Path::new("/opt/homebrew/Cellar/cuilo/2.0.0/bin/cuilo")),
@@ -681,64 +1004,266 @@ pub(crate) mod tests {
 	}
 
 	#[test]
-	fn install_should_tell_package_managers_apart_on_every_platform() {
+	fn install_should_find_npm_prefixes_on_every_platform() {
+		let prefixes = [
+			"/opt/homebrew/lib/node_modules/@cuilo/cli/node_modules/@cuilo/cli-darwin-arm64/bin/cuilo",
+			"/usr/local/lib/node_modules/@cuilo/cli/node_modules/@cuilo/cli-darwin-x64/bin/cuilo",
+			"/Users/me/.nvm/versions/node/v24.11.1/lib/node_modules/@cuilo/cli/node_modules/@cuilo/cli-darwin-arm64/bin/cuilo",
+			"/Users/me/.local/share/fnm/node-versions/v26.13.0/installation/lib/node_modules/@cuilo/cli/node_modules/@cuilo/cli-darwin-arm64/bin/cuilo",
+			"/Users/me/.volta/tools/image/packages/@cuilo/cli/lib/node_modules/@cuilo/cli/node_modules/@cuilo/cli-darwin-x64/bin/cuilo",
+			"/home/me/.nvm/versions/node/v24.11.1/lib/node_modules/@cuilo/cli/node_modules/@cuilo/cli-linux-x64/bin/cuilo",
+			"/home/me/.local/share/mise/installs/node/24.11.1/lib/node_modules/@cuilo/cli/node_modules/@cuilo/cli-linux-x64-musl/bin/cuilo",
+			"/usr/lib/node_modules/@cuilo/cli/node_modules/@cuilo/cli-linux-arm64/bin/cuilo",
+			r"C:\Users\me\AppData\Roaming\npm\node_modules\@cuilo\cli\node_modules\@cuilo\cli-win32-x64\bin\cuilo.exe",
+			r"C:\Users\me\AppData\Local\nvm\v24.11.1\node_modules\@cuilo\cli\node_modules\@cuilo\cli-win32-x64\bin\cuilo.exe",
+			r"C:\Users\me\AppData\Roaming\fnm\node-versions\v24.11.1\installation\node_modules\@cuilo\cli\node_modules\@cuilo\cli-win32-x64\bin\cuilo.exe",
+			r"C:\Users\me\AppData\Local\Volta\tools\image\packages\@cuilo\cli\node_modules\@cuilo\cli\node_modules\@cuilo\cli-win32-x64\bin\cuilo.exe",
+			r"\\?\C:\Program Files\nodejs\node_modules\@cuilo\cli\node_modules\@cuilo\cli-win32-arm64\bin\cuilo.exe",
+		];
+
+		for path in prefixes {
+			assert_eq!(judged(path, &[]), Install::Global(Manager::Npm), "{path}");
+		}
+	}
+
+	#[test]
+	fn install_should_find_the_global_folders_of_bun_pnpm_and_yarn_on_every_platform() {
 		let cases = [
 			(
-				"/opt/homebrew/lib/node_modules/@cuilo/cli/node_modules/@cuilo/cli-darwin-arm64/bin/cuilo",
-				Install::Npm,
-			),
-			(
-				"/home/me/.nvm/versions/node/v24.11.1/lib/node_modules/@cuilo/cli-linux-x64/bin/cuilo",
-				Install::Npm,
-			),
-			(
-				r"C:\Users\me\AppData\Roaming\npm\node_modules\@cuilo\cli-win32-x64\bin\cuilo.exe",
-				Install::Npm,
-			),
-			(
-				r"\\?\C:\Program Files\nodejs\node_modules\@cuilo\cli\node_modules\@cuilo\cli-win32-arm64\bin\cuilo.exe",
-				Install::Npm,
-			),
-			(
-				"/Users/me/Library/pnpm/global/5/node_modules/.pnpm/@cuilo+cli-darwin-arm64@2.0.0/node_modules/@cuilo/cli-darwin-arm64/bin/cuilo",
-				Install::Pnpm,
-			),
-			(
-				"/home/me/.local/share/pnpm/global/5/node_modules/.pnpm/@cuilo+cli-linux-x64-musl@2.0.0/node_modules/@cuilo/cli-linux-x64-musl/bin/cuilo",
-				Install::Pnpm,
-			),
-			(
-				r"C:\Users\me\AppData\Local\pnpm\global\5\node_modules\.pnpm\@cuilo+cli-win32-x64@2.0.0\node_modules\@cuilo\cli-win32-x64\bin\cuilo.exe",
-				Install::Pnpm,
-			),
-			(
-				"/opt/tools/global/5/node_modules/.pnpm/@cuilo+cli-linux-arm64@2.0.0/node_modules/@cuilo/cli-linux-arm64/bin/cuilo",
-				Install::Pnpm,
-			),
-			(
 				"/Users/me/.bun/install/global/node_modules/@cuilo/cli-darwin-arm64/bin/cuilo",
-				Install::Bun,
+				Manager::Bun,
 			),
 			(
-				"/opt/bun/install/global/node_modules/@cuilo/cli-linux-x64/bin/cuilo",
-				Install::Bun,
+				"/home/me/.bun/install/global/node_modules/@cuilo/cli-linux-x64/bin/cuilo",
+				Manager::Bun,
+			),
+			(
+				"/opt/bun/install/global/node_modules/@cuilo/cli-linux-arm64/bin/cuilo",
+				Manager::Bun,
 			),
 			(
 				r"C:\Users\me\.bun\install\global\node_modules\@cuilo\cli-win32-x64\bin\cuilo.exe",
-				Install::Bun,
+				Manager::Bun,
+			),
+			(
+				"/Users/me/Library/pnpm/global/5/node_modules/.pnpm/@cuilo+cli-darwin-arm64@2.0.0/node_modules/@cuilo/cli-darwin-arm64/bin/cuilo",
+				Manager::Pnpm,
+			),
+			(
+				"/home/me/.local/share/pnpm/global/5/node_modules/.pnpm/@cuilo+cli-linux-x64-musl@2.0.0/node_modules/@cuilo/cli-linux-x64-musl/bin/cuilo",
+				Manager::Pnpm,
+			),
+			(
+				r"C:\Users\me\AppData\Local\pnpm\global\5\node_modules\.pnpm\@cuilo+cli-win32-x64@2.0.0\node_modules\@cuilo\cli-win32-x64\bin\cuilo.exe",
+				Manager::Pnpm,
+			),
+			(
+				"/opt/tools/global/5/node_modules/.pnpm/@cuilo+cli-linux-arm64@2.0.0/node_modules/@cuilo/cli-linux-arm64/bin/cuilo",
+				Manager::Pnpm,
+			),
+			(
+				"/Users/me/Library/pnpm/global/v11/1f3c9a7e2b-target/node_modules/.pnpm/@cuilo+cli-darwin-arm64@2.0.0/node_modules/@cuilo/cli-darwin-arm64/bin/cuilo",
+				Manager::Pnpm,
+			),
+			(
+				"/Users/me/Library/pnpm/store/v11/links/@cuilo/cli-darwin-arm64/2.0.0/4f1c0d6a9b2e/node_modules/@cuilo/cli-darwin-arm64/bin/cuilo",
+				Manager::Pnpm,
+			),
+			(
+				"/home/me/.local/share/pnpm/store/v11/links/@cuilo/cli-linux-x64/2.0.0/4f1c0d6a9b2e/node_modules/@cuilo/cli-linux-x64/bin/cuilo",
+				Manager::Pnpm,
+			),
+			(
+				r"C:\Users\me\AppData\Local\pnpm\store\v11\links\@cuilo\cli-win32-x64\2.0.0\4f1c0d6a9b2e\node_modules\@cuilo\cli-win32-x64\bin\cuilo.exe",
+				Manager::Pnpm,
 			),
 			(
 				"/Users/me/.config/yarn/global/node_modules/@cuilo/cli-darwin-x64/bin/cuilo",
-				Install::Yarn,
+				Manager::Yarn,
 			),
 			(
-				"/home/me/.config/yarn/global/node_modules/@cuilo/cli-linux-arm64-musl/bin/cuilo",
-				Install::Yarn,
+				"/home/me/.local/share/yarn/global/node_modules/@cuilo/cli-linux-arm64-musl/bin/cuilo",
+				Manager::Yarn,
 			),
 			(
 				r"C:\Users\me\AppData\Local\Yarn\Data\global\node_modules\@cuilo\cli-win32-arm64\bin\cuilo.exe",
-				Install::Yarn,
+				Manager::Yarn,
 			),
+		];
+
+		for (path, manager) in cases {
+			let everything = Install::judge(path, &[], &|_| true);
+			assert_eq!(everything, Install::Global(manager), "{path}");
+		}
+	}
+
+	#[test]
+	fn install_should_find_the_caches_of_one_off_runners_on_every_platform() {
+		let cases = [
+			(
+				"/Users/me/.npm/_npx/0e5ad6a08e1e9350/node_modules/@cuilo/cli-darwin-arm64/bin/cuilo",
+				Manager::Npm,
+			),
+			(
+				"/home/me/.npm/_npx/1a4eb60c8f6b0f89/node_modules/@cuilo/cli-linux-x64/bin/cuilo",
+				Manager::Npm,
+			),
+			(
+				r"C:\Users\me\AppData\Local\npm-cache\_npx\1d6e82a4126006c4\node_modules\@cuilo\cli-win32-x64\bin\cuilo.exe",
+				Manager::Npm,
+			),
+			(
+				"/Users/me/.bun/install/cache/.bunx-501/@cuilo/cli@latest/node_modules/@cuilo/cli-darwin-arm64/bin/cuilo",
+				Manager::Bun,
+			),
+			(
+				"/private/var/folders/fb/b3fb4y6n5q51w_ln9y1lr1jh0000gn/T/bunx-501-@cuilo/cli@latest/node_modules/@cuilo/cli-darwin-arm64/bin/cuilo",
+				Manager::Bun,
+			),
+			(
+				"/home/me/.bun/install/cache/.bunx-1000/@cuilo/cli@latest/node_modules/@cuilo/cli-linux-x64-musl/bin/cuilo",
+				Manager::Bun,
+			),
+			(
+				"/tmp/.bunx-1000/@cuilo/cli@latest/node_modules/@cuilo/cli-linux-x64/bin/cuilo",
+				Manager::Bun,
+			),
+			(
+				"/tmp/bunx-1000-@cuilo/cli@latest/node_modules/@cuilo/cli-linux-arm64/bin/cuilo",
+				Manager::Bun,
+			),
+			(
+				r"C:\Users\me\AppData\Local\Temp\bunx-3164710133-@cuilo\cli@latest\node_modules\@cuilo\cli-win32-x64\bin\cuilo.exe",
+				Manager::Bun,
+			),
+			(
+				"/Users/me/Library/Caches/pnpm/dlx/abfd2c4e6d5e2fd2dbf26b1d3e/19a0b7f1c2e-6f3a/node_modules/.pnpm/@cuilo+cli-darwin-arm64@2.0.0/node_modules/@cuilo/cli-darwin-arm64/bin/cuilo",
+				Manager::Pnpm,
+			),
+			(
+				"/home/me/.cache/pnpm/dlx/abfd2c4e6d5e2fd2dbf26b1d3e/19a0b7f1c2e-6f3a/node_modules/.pnpm/@cuilo+cli-linux-x64@2.0.0/node_modules/@cuilo/cli-linux-x64/bin/cuilo",
+				Manager::Pnpm,
+			),
+			(
+				r"C:\Users\me\AppData\Local\pnpm-cache\dlx\abfd2c4e6d5e2fd2dbf26b1d3e\19a0b7f1c2e-6f3a\node_modules\.pnpm\@cuilo+cli-win32-x64@2.0.0\node_modules\@cuilo\cli-win32-x64\bin\cuilo.exe",
+				Manager::Pnpm,
+			),
+			(
+				"/private/var/folders/fb/b3fb4y6n5q51w_ln9y1lr1jh0000gn/T/xfs-3f9c1a2b/dlx-48213/.yarn/unplugged/@cuilo-cli-darwin-arm64-npm-2.0.0-8d2c1f0a3b/node_modules/@cuilo/cli-darwin-arm64/bin/cuilo",
+				Manager::Yarn,
+			),
+			(
+				"/tmp/xfs-1b2c3d4e/dlx-9120/node_modules/@cuilo/cli-linux-x64/bin/cuilo",
+				Manager::Yarn,
+			),
+			(
+				r"C:\Users\me\AppData\Local\Temp\xfs-5e6f7a8b\dlx-7344\.yarn\unplugged\@cuilo-cli-win32-x64-npm-2.0.0-8d2c1f0a3b\node_modules\@cuilo\cli-win32-x64\bin\cuilo.exe",
+				Manager::Yarn,
+			),
+		];
+
+		for (path, manager) in cases {
+			let everything = Install::judge(path, &[], &|_| true);
+			assert_eq!(everything, Install::Ephemeral(manager), "{path}");
+		}
+	}
+
+	#[test]
+	fn install_should_tell_pnpm_dlx_from_a_global_install_in_the_shared_store_by_path() {
+		let cases = [
+			(
+				"/Users/me/Library/pnpm/store/v11/links/@cuilo/cli-darwin-arm64/2.0.0/4f1c0d6a9b2e/node_modules/@cuilo/cli-darwin-arm64/bin/cuilo",
+				"/Users/me/Library/Caches/pnpm/dlx/abfd2c4e6d5e/19a0b7f1c2e-6f3a/node_modules/.bin",
+			),
+			(
+				"/home/me/.local/share/pnpm/store/v11/links/@cuilo/cli-linux-x64/2.0.0/4f1c0d6a9b2e/node_modules/@cuilo/cli-linux-x64/bin/cuilo",
+				"/home/me/.cache/pnpm/dlx/abfd2c4e6d5e/19a0b7f1c2e-6f3a/node_modules/.bin",
+			),
+			(
+				r"C:\Users\me\AppData\Local\pnpm\store\v11\links\@cuilo\cli-win32-x64\2.0.0\4f1c0d6a9b2e\node_modules\@cuilo\cli-win32-x64\bin\cuilo.exe",
+				r"C:\Users\me\AppData\Local\pnpm-cache\dlx\abfd2c4e6d5e\19a0b7f1c2e-6f3a\node_modules\.bin",
+			),
+		];
+
+		for (path, dlx) in cases {
+			let search = [dlx.to_owned(), "/usr/bin".to_owned()];
+			assert_eq!(
+				Install::judge(path, &search, &|_| false),
+				Install::Ephemeral(Manager::Pnpm),
+				"{path}"
+			);
+			assert_eq!(
+				Install::judge(path, &search[1..], &|_| false),
+				Install::Global(Manager::Pnpm),
+				"{path}"
+			);
+		}
+	}
+
+	#[test]
+	fn install_should_take_a_project_copy_s_manager_from_its_lockfile_on_every_platform() {
+		let project = |manager: Manager, root: &str| Install::Project {
+			manager,
+			root: root.to_owned(),
+		};
+		let cases = [
+			(
+				"/Users/me/code/app/node_modules/@cuilo/cli-darwin-arm64/bin/cuilo",
+				&[
+					"/Users/me/code/app/package.json",
+					"/Users/me/code/app/package-lock.json",
+				][..],
+				project(Manager::Npm, "/Users/me/code/app"),
+			),
+			(
+				"/Users/me/code/app/node_modules/.bun/@cuilo+cli-darwin-arm64@2.0.0/node_modules/@cuilo/cli-darwin-arm64/bin/cuilo",
+				&["/Users/me/code/app/package.json", "/Users/me/code/app/bun.lock"],
+				project(Manager::Bun, "/Users/me/code/app"),
+			),
+			(
+				"/home/me/code/app/node_modules/.pnpm/@cuilo+cli-linux-x64@2.0.0/node_modules/@cuilo/cli-linux-x64/bin/cuilo",
+				&["/home/me/code/app/package.json", "/home/me/code/app/pnpm-lock.yaml"],
+				project(Manager::Pnpm, "/home/me/code/app"),
+			),
+			(
+				"/home/me/code/app/.yarn/unplugged/@cuilo-cli-linux-x64-npm-2.0.0-8d2c1f0a3b/node_modules/@cuilo/cli-linux-x64/bin/cuilo",
+				&["/home/me/code/app/package.json", "/home/me/code/app/yarn.lock"],
+				project(Manager::Yarn, "/home/me/code/app"),
+			),
+			(
+				"/home/me/code/tools/packages/lib/node_modules/@cuilo/cli-linux-x64/bin/cuilo",
+				&["/home/me/code/tools/packages/lib/package.json"],
+				project(Manager::Npm, "/home/me/code/tools/packages/lib"),
+			),
+			(
+				r"C:\Users\me\code\app\node_modules\@cuilo\cli-win32-x64\bin\cuilo.exe",
+				&[r"C:\Users\me\code\app\package.json", r"C:\Users\me\code\app\bun.lockb"],
+				project(Manager::Bun, r"C:\Users\me\code\app"),
+			),
+			(
+				r"\\?\C:\Users\me\code\app\node_modules\@cuilo\cli-win32-arm64\bin\cuilo.exe",
+				&[
+					r"\\?\C:\Users\me\code\app\package.json",
+					r"\\?\C:\Users\me\code\app\yarn.lock",
+				],
+				project(Manager::Yarn, r"C:\Users\me\code\app"),
+			),
+			(
+				r"D:\work\app\node_modules\.pnpm\@cuilo+cli-win32-x64@2.0.0\node_modules\@cuilo\cli-win32-x64\bin\cuilo.exe",
+				&[r"D:\work\app\package.json"],
+				project(Manager::Pnpm, r"D:\work\app"),
+			),
+		];
+
+		for (path, files, install) in cases {
+			assert_eq!(judged(path, files), install, "{path}");
+		}
+	}
+
+	#[test]
+	fn install_should_leave_paths_outside_node_modules_to_homebrew_cargo_or_nobody() {
+		let cases = [
+			("/opt/homebrew/Cellar/cuilo/2.0.0/bin/cuilo", Install::Homebrew),
 			("/usr/local/Cellar/cuilo/2.0.0/bin/cuilo", Install::Homebrew),
 			(
 				"/home/linuxbrew/.linuxbrew/Cellar/cuilo/2.0.0/bin/cuilo",
@@ -750,48 +1275,77 @@ pub(crate) mod tests {
 		];
 
 		for (path, install) in cases {
-			assert_eq!(Install::from_path(path), install, "{path}");
+			assert_eq!(judged(path, &[]), install, "{path}");
 		}
 	}
 
 	#[test]
-	fn command_should_pin_the_version_for_every_manager_but_homebrew() {
+	fn command_should_pin_the_version_for_every_manager_but_homebrew_and_one_off_runners() {
 		let target = version("2.1.0-beta.1");
-		let command =
-			|install: Install, binstall: bool| install.command(&target, binstall).map(|command| command.to_string());
+		let project = |manager| Install::Project {
+			manager,
+			root: "/app".to_owned(),
+		};
+		let command = |install: Install, newest: bool, binstall: bool| {
+			install
+				.command(&target, newest, binstall)
+				.map(|command| command.to_string())
+		};
+
+		let cases = [
+			(
+				Install::Global(Manager::Npm),
+				"npm install --global @cuilo/cli@2.1.0-beta.1",
+			),
+			(
+				Install::Global(Manager::Pnpm),
+				"pnpm add --global @cuilo/cli@2.1.0-beta.1",
+			),
+			(
+				Install::Global(Manager::Bun),
+				"bun add --global @cuilo/cli@2.1.0-beta.1",
+			),
+			(
+				Install::Global(Manager::Yarn),
+				"yarn global add @cuilo/cli@2.1.0-beta.1",
+			),
+			(Install::Ephemeral(Manager::Npm), "npx @cuilo/cli@next"),
+			(Install::Ephemeral(Manager::Pnpm), "pnpm dlx @cuilo/cli@next"),
+			(Install::Ephemeral(Manager::Bun), "bunx @cuilo/cli@next"),
+			(Install::Ephemeral(Manager::Yarn), "yarn dlx @cuilo/cli@next"),
+			(project(Manager::Npm), "npm install --save-dev @cuilo/cli@2.1.0-beta.1"),
+			(project(Manager::Pnpm), "pnpm add --save-dev @cuilo/cli@2.1.0-beta.1"),
+			(project(Manager::Bun), "bun add --dev @cuilo/cli@2.1.0-beta.1"),
+			(project(Manager::Yarn), "yarn add --dev @cuilo/cli@2.1.0-beta.1"),
+			(Install::Homebrew, "brew upgrade tuentyfaiv/tap/cuilo"),
+			(Install::Cargo, "cargo install cuilo --locked --version 2.1.0-beta.1"),
+		];
+		for (install, expected) in cases {
+			assert_eq!(command(install, true, false).as_deref(), Some(expected));
+		}
 
 		assert_eq!(
-			command(Install::Npm, false).as_deref(),
-			Some("npm install --global @cuilo/cli@2.1.0-beta.1")
-		);
-		assert_eq!(
-			command(Install::Pnpm, false).as_deref(),
-			Some("pnpm add --global @cuilo/cli@2.1.0-beta.1")
-		);
-		assert_eq!(
-			command(Install::Bun, false).as_deref(),
-			Some("bun add --global @cuilo/cli@2.1.0-beta.1")
-		);
-		assert_eq!(
-			command(Install::Yarn, false).as_deref(),
-			Some("yarn global add @cuilo/cli@2.1.0-beta.1")
-		);
-		assert_eq!(
-			command(Install::Homebrew, false).as_deref(),
-			Some("brew upgrade tuentyfaiv/tap/cuilo")
-		);
-		assert_eq!(
-			command(Install::Cargo, true).as_deref(),
+			command(Install::Cargo, true, true).as_deref(),
 			Some("cargo binstall cuilo --version 2.1.0-beta.1 --no-confirm")
 		);
 		assert_eq!(
-			command(Install::Cargo, false).as_deref(),
-			Some("cargo install cuilo --locked --version 2.1.0-beta.1")
+			command(Install::Ephemeral(Manager::Npm), false, false).as_deref(),
+			Some("npx @cuilo/cli@2.1.0-beta.1"),
+			"a chosen version is named, not the dist-tag"
 		);
-		assert_eq!(command(Install::Script, true), None);
-		assert_eq!(command(Install::Unknown, true), None);
 		assert_eq!(
-			Install::Npm.command(&target, false).map(|command| command.args),
+			Install::Ephemeral(Manager::Npm)
+				.command(&version("2.1.0"), true, false)
+				.map(|command| command.to_string())
+				.as_deref(),
+			Some("npx @cuilo/cli@latest")
+		);
+		assert_eq!(command(Install::Script, true, true), None);
+		assert_eq!(command(Install::Unknown, true, true), None);
+		assert_eq!(
+			Install::Global(Manager::Npm)
+				.command(&target, true, false)
+				.map(|command| command.args),
 			Some(vec![
 				"install".to_owned(),
 				"--global".to_owned(),
@@ -799,6 +1353,84 @@ pub(crate) mod tests {
 			]),
 			"the package and version must stay one argument"
 		);
+	}
+
+	#[test]
+	fn hint_should_say_who_updates_each_copy() {
+		let target = version("2.1.0");
+		let hint = |install: Install| install.hint(&target, true);
+
+		assert_eq!(hint(Install::Script), "run `cuilo upgrade`");
+		assert_eq!(hint(Install::Global(Manager::Pnpm)), "run `cuilo upgrade`");
+		assert_eq!(hint(Install::Homebrew), "run `cuilo upgrade`");
+		assert_eq!(
+			hint(Install::Ephemeral(Manager::Npm)),
+			"this copy runs through npx; run `npx @cuilo/cli@latest`"
+		);
+		assert_eq!(
+			hint(Install::Ephemeral(Manager::Bun)),
+			"this copy runs through bunx; run `bunx @cuilo/cli@latest`"
+		);
+		assert_eq!(
+			hint(Install::Ephemeral(Manager::Pnpm)),
+			"this copy runs through pnpm dlx; run `pnpm dlx @cuilo/cli@latest`"
+		);
+		assert_eq!(
+			hint(Install::Ephemeral(Manager::Yarn)),
+			"this copy runs through yarn dlx; run `yarn dlx @cuilo/cli@latest`"
+		);
+		assert_eq!(
+			hint(Install::Project {
+				manager: Manager::Bun,
+				root: "/Users/me/code/app".to_owned(),
+			}),
+			"this copy is a dependency of the project in /Users/me/code/app; run `bun add --dev @cuilo/cli@2.1.0` there"
+		);
+		assert_eq!(
+			hint(Install::Project {
+				manager: Manager::Npm,
+				root: "/tmp/\u{1b}[2Kevil".to_owned(),
+			}),
+			r"this copy is a dependency of the project in /tmp/\u{1b}[2Kevil; run `npm install --save-dev @cuilo/cli@2.1.0` there"
+		);
+		assert!(hint(Install::Unknown).contains("install script"));
+	}
+
+	#[test]
+	fn outcome_should_report_the_installer_kind_and_project_in_json() -> anyhow::Result<()> {
+		let outcome = |install| Outcome {
+			current: version("2.0.0"),
+			available: version("2.1.0"),
+			install,
+			upgraded: false,
+			command: None,
+		};
+
+		let project = serde_json::to_value(outcome(Install::Project {
+			manager: Manager::Pnpm,
+			root: "/app".to_owned(),
+		}))?;
+		let npx = serde_json::to_value(outcome(Install::Ephemeral(Manager::Npm)))?;
+		let script = serde_json::to_value(outcome(Install::Script))?;
+		let unknown = serde_json::to_value(outcome(Install::Unknown))?;
+
+		assert_eq!(
+			(&project["install"], &project["kind"], &project["project"]),
+			(&"pnpm".into(), &"project".into(), &"/app".into())
+		);
+		assert_eq!(
+			(&npx["install"], &npx["kind"], &npx["project"]),
+			(&"npm".into(), &"ephemeral".into(), &serde_json::Value::Null)
+		);
+		assert_eq!(
+			(&script["install"], &script["kind"]),
+			(&"script".into(), &"global".into())
+		);
+		assert_eq!(
+			(&unknown["install"], &unknown["kind"]),
+			(&"unknown".into(), &serde_json::Value::Null)
+		);
+		Ok(())
 	}
 
 	#[test]
@@ -898,7 +1530,7 @@ pub(crate) mod tests {
 			"only the channel is read; the package manager downloads"
 		);
 		let json = serde_json::to_value(&outcome)?;
-		assert_eq!(json["install"], "bun");
+		assert_eq!((&json["install"], &json["kind"]), (&"bun".into(), &"global".into()));
 		assert_eq!(json["available"], "99.0.0");
 		assert_eq!(json["command"], "bun add --global @cuilo/cli@99.0.0");
 		Ok(())
@@ -932,6 +1564,43 @@ pub(crate) mod tests {
 			Some("npm install --global @cuilo/cli@99.0.0")
 		);
 		assert!(runner.ran.borrow().is_empty());
+		Ok(())
+	}
+
+	#[test]
+	fn run_should_only_point_a_one_off_runner_s_copy_back_to_its_runner() -> anyhow::Result<()> {
+		let fetch = channels("99.0.0");
+		let runner = Recorder::default();
+		let exe = Path::new("/Users/me/.npm/_npx/0e5ad6a08e1e9350/node_modules/@cuilo/cli-darwin-arm64/bin/cuilo");
+
+		let newest = run(&fetch, exe, false, None, &runner)?;
+		let chosen = run(&Served::default(), exe, false, Some(&version("99.0.0")), &runner)?;
+
+		assert!(!newest.upgraded);
+		assert_eq!(newest.command.as_deref(), Some("npx @cuilo/cli@latest"));
+		assert_eq!(chosen.command.as_deref(), Some("npx @cuilo/cli@99.0.0"));
+		assert!(runner.ran.borrow().is_empty());
+		assert_eq!(asked(&fetch), 1, "only the channel is read");
+		assert_eq!(serde_json::to_value(&newest)?["kind"], "ephemeral");
+		Ok(())
+	}
+
+	#[test]
+	fn run_should_leave_a_project_s_copy_to_the_project_s_package_manager() -> anyhow::Result<()> {
+		let dir = tempfile::tempdir()?;
+		fs::write(dir.path().join("package.json"), "{}")?;
+		fs::write(dir.path().join("bun.lock"), "")?;
+		let exe = dir.path().join("node_modules/@cuilo/cli-linux-x64/bin/cuilo");
+		let runner = Recorder::default();
+
+		let outcome = run(&Served::default(), &exe, false, Some(&version("99.0.0")), &runner)?;
+
+		assert!(!outcome.upgraded);
+		assert_eq!(outcome.command.as_deref(), Some("bun add --dev @cuilo/cli@99.0.0"));
+		assert!(runner.ran.borrow().is_empty());
+		let json = serde_json::to_value(&outcome)?;
+		assert_eq!((&json["install"], &json["kind"]), (&"bun".into(), &"project".into()));
+		assert_eq!(json["project"], dir.path().to_string_lossy().as_ref());
 		Ok(())
 	}
 

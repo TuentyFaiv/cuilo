@@ -16,7 +16,7 @@ pub(crate) use command::CommandPatcher;
 pub(crate) use css::CssVarsPatcher;
 pub(crate) use import::ImportPatcher;
 
-use crate::model::{Position, RelPath};
+use crate::model::{Anchors, Position, RelPath};
 
 /// A rendered edit to an existing file.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -26,8 +26,8 @@ pub enum Patch {
 	Anchor {
 		/// File to edit.
 		file: RelPath,
-		/// Text identifying the anchor line.
-		anchor: String,
+		/// Text the anchor line contains, or alternatives in order of preference.
+		anchor: Anchors,
 		/// Where to insert.
 		position: Position,
 		/// Text to insert.
@@ -114,13 +114,13 @@ pub enum Patched {
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum PatchError {
-	/// The anchor is not in the file.
-	#[error("anchor `{0}` not found")]
-	MissingAnchor(String),
-	/// The anchor appears more than once.
+	/// None of the anchor's alternatives is in the file.
+	#[error("anchor {0} not found")]
+	MissingAnchor(Anchors),
+	/// The first alternative found in the file is on more than one line.
 	#[error("anchor `{anchor}` appears {count} times; it must be unique")]
 	AmbiguousAnchor {
-		/// The anchor text.
+		/// The alternative found.
 		anchor: String,
 		/// How many lines contain it.
 		count: usize,

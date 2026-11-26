@@ -158,7 +158,7 @@ cuilo upgrade
 
 A copy that the install script made is replaced with the newest signed release. cuilo replaces the binary only when the release's `SHA256SUMS` carries a valid signature by the release key built into cuilo, and the binary matches its signed checksum. It never moves to an older version. A pre-release cuilo follows the pre-release channel.
 
-For any other copy, `cuilo upgrade` runs the package manager that installed it, and prints the command first. It tells them apart by the folder the binary is in:
+For a copy that a package manager installed globally, `cuilo upgrade` runs that package manager, and prints the command first. It tells them apart by the folder the binary is in:
 
 | Installed with | `cuilo upgrade` runs                                                                                                             |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------- |
@@ -179,6 +179,25 @@ cuilo upgrade --version 2.0.0
 
 `cuilo upgrade --check` only reports whether a newer release exists, and which command `cuilo upgrade` would run. With `--json`, the package manager's output goes to stderr, so stdout stays valid JSON. See [`cuilo upgrade`](/reference/cli/upgrade/).
 
+### Copies cuilo does not upgrade
+
+`cuilo upgrade` upgrades only global installs. The npm package also runs in two other ways, and for those copies `cuilo upgrade` runs nothing. It prints what to run instead.
+
+A one-off runner, such as `npx`, `bunx`, `pnpm dlx` or `yarn dlx`, keeps its copy in a cache. `cuilo upgrade` names the runner and the command that gets the newest release, for example ``this copy runs through npx; run `npx @cuilo/cli@latest`.`` With `--version`, the command names that version. These copies never look for new releases in the background and print no notices.
+
+A copy in a project's own `node_modules` is a dependency of the project, and its lockfile pins it. `cuilo upgrade` prints the command that updates the dependency, picked by the lockfile next to that `node_modules`. The daily notice names that command instead of `cuilo upgrade`.
+
+| Lockfile                                          | Command                                       |
+| ------------------------------------------------- | --------------------------------------------- |
+| `bun.lock` or `bun.lockb`                         | `bun add --dev @cuilo/cli@<version>`          |
+| `pnpm-lock.yaml`                                  | `pnpm add --save-dev @cuilo/cli@<version>`    |
+| `yarn.lock`                                       | `yarn add --dev @cuilo/cli@<version>`         |
+| `package-lock.json`, `npm-shrinkwrap.json`, none  | `npm install --save-dev @cuilo/cli@<version>` |
+
+Without a lockfile, cuilo goes by how `node_modules` is laid out, such as pnpm's `.pnpm` folder, and names npm when nothing says otherwise.
+
+cuilo tells these copies apart by the folder the binary is in. A `node_modules` with no `package.json` next to it is an npm prefix, such as `/usr/local/lib` or `%APPDATA%\npm`, so that copy counts as global. With `--json`, `kind` is `global`, `ephemeral` or `project`, and `project` names the project folder.
+
 ### Automatic updates
 
 When you use cuilo in a terminal, it looks for a new release at most once a day. The check runs in the background, so no command waits for it or fails because of it. What happens next depends on `updates` in your [user config](/reference/user-config/#updates), `config.toml` in your cuilo config folder:
@@ -193,7 +212,11 @@ When you use cuilo in a terminal, it looks for a new release at most once a day.
 updates = "notify"
 ```
 
-`CUILO_UPDATES` overrides the config, for example `CUILO_UPDATES=off cuilo status`. cuilo prints these lines on stderr, after the command's own output. It never checks or prints them with `--json`, when stderr is not a terminal, when `CI` is set, or for `cuilo mcp`, `cuilo completions` and `cuilo upgrade`. A failed check or update is noted in `update.json` in your cache folder and tried again the next day. Until then, a copy that could not update itself prints the notice, so you can run `cuilo upgrade` and see why. See [Environment variables](/reference/environment/).
+A project's copy gets a notice that names the project's command, and a one-off runner's copy never looks. See [copies cuilo does not upgrade](#copies-cuilo-does-not-upgrade).
+
+`CUILO_UPDATES` overrides the config, for example `CUILO_UPDATES=off cuilo status`. It takes `auto`, `notify` or `off` in any letter case, and an empty value counts as unset. cuilo ignores any other value, so the config applies, and warns about it at most once a day: ``CUILO_UPDATES=yes is not `auto`, `notify` or `off`; using the config's `auto`.``
+
+cuilo prints these lines on stderr, after the command's own output. It never checks or prints them with `--json`, when stderr is not a terminal, when `CI` is set, or for `cuilo mcp`, `cuilo completions` and `cuilo upgrade`. A failed check or update is noted in `update.json` in your cache folder and tried again the next day. Until then, a copy that could not update itself prints the notice, so you can run `cuilo upgrade` and see why. See [Environment variables](/reference/environment/).
 
 ## Shell completions
 

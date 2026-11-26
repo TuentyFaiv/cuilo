@@ -179,15 +179,18 @@ Edits to existing project files.
 
 #### `patches[].anchor`
 
-**Type:** `string` · required
+**Type:** `string` or `array of string` · required
 
-Text identifying the anchor line.
+Text the anchor line contains, or a list of alternatives tried in order: the first one in the file
+is used, and one on more than one line fails the patch without trying the rest.
 
 #### `patches[].file`
 
-**Type:** `string` · required
+**Type:** `string` or `array of string` · required
 
-Project file to edit; may contain examples.
+Project file to edit, or a list of alternatives in order of preference: the first one the project has
+is used. A step's patches, or the piece's own, that share a file must list the same alternatives in the
+same order. May contain examples.
 
 #### `patches[].insert`
 
@@ -261,15 +264,18 @@ user config; the same kinds and fields as `patches`.
 
 ##### `steps[].patches[].anchor`
 
-**Type:** `string` · required
+**Type:** `string` or `array of string` · required
 
-Text identifying the anchor line.
+Text the anchor line contains, or a list of alternatives tried in order: the first one in the file
+is used, and one on more than one line fails the patch without trying the rest.
 
 ##### `steps[].patches[].file`
 
-**Type:** `string` · required
+**Type:** `string` or `array of string` · required
 
-Project file to edit; may contain examples.
+Project file to edit, or a list of alternatives in order of preference: the first one the project has
+is used. A step's patches, or the piece's own, that share a file must list the same alternatives in the
+same order. May contain examples.
 
 ##### `steps[].patches[].insert`
 

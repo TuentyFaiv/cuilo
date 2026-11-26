@@ -4,8 +4,11 @@ use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
 
 use super::{Engine, EngineError, PieceRequest};
-use crate::model::{Digest, Input, Name, Permissions, RelPath, Stack, Values};
-use crate::pack::{Pack, Piece, RenderRequest, Rendered, RenderedFile, RenderedStep, render, resolve_inputs};
+use crate::model::{Digest, Input, Name, Permissions, RelPath, Stack, Values, or_list};
+use crate::pack::{
+	Pack, Piece, RenderRequest, Rendered, RenderedFile, RenderedPatch, RenderedStep, render, resolve_inputs,
+	target as render_target,
+};
 use crate::patch::{Patch, PatchError, Patched};
 use crate::plan::{Draft, OnConflict, Plan, Rules, Validated};
 use crate::workspace::{FileRecord, Instance, Lockfile, PackRecord, PatchRecord, instance_id};
@@ -86,13 +89,15 @@ impl Engine {
 		target: Option<&RelPath>,
 		stack: &Stack,
 	) -> Result<(), EngineError> {
-		let rendered = render(&RenderRequest {
+		let request = RenderRequest {
 			piece,
 			values,
 			stack,
 			variant,
 			target: target.or_else(|| self.config.paths.get(piece.manifest().name.as_str())),
-		})?;
+		};
+		let stack = &self.piece_stack(stack, render_target(&request)?.as_ref());
+		let rendered = render(&RenderRequest { stack, ..request })?;
 		let Rendered {
 			variant,
 			target,
@@ -102,6 +107,7 @@ impl Engine {
 			steps,
 			at_default_target,
 		} = rendered;
+		self.adapt_files(stack, &mut files, Some(plan));
 		self.format_files(stack, &mut files, Some(plan));
 		for dependency in dependencies {
 			plan.depend(dependency);
@@ -112,8 +118,14 @@ impl Engine {
 		} else {
 			add_files(plan, files)?
 		};
+		let aimed = self.aim(&patches, &[])?;
+		if !aimed.missing.is_empty() {
+			return Err(EngineError::PatchTarget(aimed.missing));
+		}
 		let index = added.instances.len();
-		added.patches.extend(patches.into_iter().map(|patch| (index, patch)));
+		added
+			.patches
+			.extend(aimed.patches.into_iter().map(|patch| (index, patch)));
 		if !added.adopt {
 			added.steps.extend(steps.into_iter().map(|step| PendingStep {
 				instance: index,
@@ -145,20 +157,23 @@ impl Engine {
 	/// Applies every patch, grouped by file, then the patches of each wiring step all or none when `added.wire`,
 	/// recording the regions on their instances; the other steps become next steps.
 	pub(super) fn add_patches(&self, plan: &mut Plan<Draft>, added: &mut Added) -> Result<(), EngineError> {
-		let mut by_file: BTreeMap<&RelPath, Vec<&(usize, Patch)>> = BTreeMap::new();
-		for entry in &added.patches {
-			by_file.entry(entry.1.file()).or_default().push(entry);
+		let patches = std::mem::take(&mut added.patches);
+		let mut by_file: BTreeMap<&RelPath, Vec<(usize, &Patch)>> = BTreeMap::new();
+		for (index, patch) in &patches {
+			by_file.entry(patch.file()).or_default().push((*index, patch));
 		}
 		let mut texts = Texts::new();
 		for (file, file_patches) in by_file {
 			let before = self
 				.workspace
 				.read(file)?
-				.ok_or_else(|| EngineError::PatchTarget(file.clone()))?;
+				.ok_or_else(|| EngineError::PatchTarget(vec![file.clone()]))?;
 			let mut edited = Edited::new(before);
 			for (index, patch) in file_patches {
-				let record = self.patch(plan, &mut edited.text, patch)?;
-				added.instances[*index].patches.push(record);
+				let mut patch = patch.clone();
+				self.adapt_patch(&added.instances[index].stack, &mut patch, plan);
+				let record = self.patch(plan, &mut edited.text, &patch)?;
+				added.instances[index].patches.push(record);
 			}
 			texts.insert(file.clone(), edited);
 		}
@@ -174,13 +189,17 @@ impl Engine {
 			};
 			if !at_default_target {
 				plan.note(
-					first.file().clone(),
+					first.preferred_file().clone(),
 					"the piece is not in its default folder, so cuilo did not wire it here; wire it by hand",
 				);
 				plan.next_step(step.text);
 				continue;
 			}
-			match self.wire(&mut texts, &step.patches)? {
+			let mut aimed = self.aim(&step.patches, &[])?;
+			for patch in &mut aimed.patches {
+				self.adapt_patch(&added.instances[index].stack, patch, plan);
+			}
+			match self.wire(&mut texts, &aimed)? {
 				Wiring::Applied(regions) => {
 					let instance = &mut added.instances[index];
 					for (record, region) in regions {
@@ -188,7 +207,7 @@ impl Engine {
 						plan.keep(region.into_bytes());
 					}
 					instance.wired = true;
-					let mut files: Vec<RelPath> = step.patches.iter().map(|patch| patch.file().clone()).collect();
+					let mut files: Vec<RelPath> = aimed.patches.iter().map(|patch| patch.file().clone()).collect();
 					files.sort();
 					files.dedup();
 					plan.wired(&instance.id, files, step.text);
@@ -205,11 +224,14 @@ impl Engine {
 		Ok(())
 	}
 
-	/// Applies a wiring step's `patches` to `texts` only if every one of them applies.
-	pub(super) fn wire(&self, texts: &mut Texts, patches: &[Patch]) -> Result<Wiring, EngineError> {
+	/// Applies a wiring step's patches to `texts` only if the project has a file for each and every one applies.
+	pub(super) fn wire(&self, texts: &mut Texts, step: &Aimed) -> Result<Wiring, EngineError> {
+		if let Some(file) = step.missing.first() {
+			return Ok(Wiring::skipped(file, &absent(&step.missing)));
+		}
 		let mut trial = Texts::new();
-		let mut regions = Vec::with_capacity(patches.len());
-		for patch in patches {
+		let mut regions = Vec::with_capacity(step.patches.len());
+		for patch in &step.patches {
 			let file = patch.file();
 			let edited = match trial.entry(file.clone()) {
 				Entry::Occupied(entry) => entry.into_mut(),
@@ -228,6 +250,47 @@ impl Engine {
 		}
 		texts.extend(trial);
 		Ok(Wiring::Applied(regions))
+	}
+
+	/// Picks the file each of `patches` edits with [`Self::target`], once for each list of alternatives, so
+	/// patches that list the same ones edit the same file.
+	pub(super) fn aim(&self, patches: &[RenderedPatch], records: &[PatchRecord]) -> Result<Aimed, EngineError> {
+		let mut picked: Vec<(&[RelPath], Option<&RelPath>)> = Vec::new();
+		let mut aimed = Aimed::default();
+		for patch in patches {
+			let files = patch.files();
+			let target = if let Some((_, target)) = picked.iter().find(|(listed, _)| *listed == files) {
+				*target
+			} else {
+				let target = self.target(files, records)?;
+				picked.push((files, target));
+				target
+			};
+			if target.is_none() && aimed.missing.is_empty() {
+				aimed.missing = files.to_vec();
+			}
+			aimed
+				.patches
+				.push(patch.at(target.unwrap_or_else(|| patch.preferred_file())));
+		}
+		Ok(aimed)
+	}
+
+	/// The alternative of `files` to edit: the first one an instance's patch `records` name, so an update keeps
+	/// editing the file it was patched in, or else the first one the project has.
+	fn target<'a>(&self, files: &'a [RelPath], records: &[PatchRecord]) -> Result<Option<&'a RelPath>, EngineError> {
+		if let Some(file) = files
+			.iter()
+			.find(|file| records.iter().any(|record| record.file == **file))
+		{
+			return Ok(Some(file));
+		}
+		for file in files {
+			if self.workspace.occupied(file)? {
+				return Ok(Some(file));
+			}
+		}
+		Ok(None)
 	}
 
 	/// Records the rendered files the project already has, keeping their content; creates the rest.
@@ -287,6 +350,15 @@ impl Engine {
 /// Project files being patched, by path.
 pub(super) type Texts = BTreeMap<RelPath, Edited>;
 
+/// Patches with the file each edits picked among its alternatives.
+#[derive(Debug, Default)]
+pub(super) struct Aimed {
+	/// Each patch, editing the file picked for it, or its preferred file when the project has none of them.
+	pub patches: Vec<Patch>,
+	/// The alternatives of the first patch the project has none of; empty when it has a file for each.
+	pub missing: Vec<RelPath>,
+}
+
 /// A file's content before the plan and its patched text so far.
 #[derive(Clone, Debug)]
 pub(super) struct Edited {
@@ -327,10 +399,18 @@ impl Wiring {
 	}
 }
 
+/// Why a patch has none of its `files` to edit, in plain words.
+fn absent(files: &[RelPath]) -> String {
+	match files {
+		[_] => "the file does not exist".to_owned(),
+		several => format!("none of {} exists", or_list(several)),
+	}
+}
+
 /// Why a wiring patch could not be applied, in plain words.
 fn unwired(error: &PatchError) -> String {
 	match error {
-		PatchError::MissingAnchor(anchor) => format!("no line contains `{anchor}`"),
+		PatchError::MissingAnchor(anchors) => format!("no line contains {anchors}"),
 		PatchError::AmbiguousAnchor { anchor, count } => {
 			format!("{count} lines contain `{anchor}`, so the place to wire is unclear")
 		}

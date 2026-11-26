@@ -14,10 +14,11 @@ The first version of cuilo 2. It is a rewrite of tfverse, the v1 CLI, under a ne
 - Templates are real code. Each input names an example, and cuilo replaces it in every case form, file names included. Optional code uses `@cuilo if`, `@cuilo else` and `@cuilo end` comment directives.
 - Pieces declare typed inputs once. The same definition drives terminal prompts, `-i key=value` flags and what `describe_piece` tells agents.
 - Pieces adapt to the detected stack through variants and stack conditions such as `default_when`. `cuilo detect` shows what was found.
-- A piece can require other pieces of its pack, list the packages its code imports, and patch existing files with `anchor`, `import` and `css_vars` patches.
+- Generated JavaScript and TypeScript write relative imports the way the project resolves them: `./foo` for bundlers, `./foo.js` under `NodeNext` or `Node16`, and `./foo.ts` in Deno or with `allowImportingTsExtensions` or `rewriteRelativeImportExtensions`. cuilo reads the `tsconfig.json` that governs each piece's folder, with what it extends, and records the style as the `import_style` fact, which `cuilo detect` shows, `cuilo.json` can set and `cuilo.lock` keeps for updates. It reads those configs through symlinks and Windows junctions, such as pnpm's links in `node_modules`, when the real file is inside the project. Pack templates keep extensionless imports. See [relative imports in generated code](/guides/stack-detection/#relative-imports-in-generated-code).
+- A piece can require other pieces of its pack, list the packages its code imports, and patch existing files with `anchor`, `import` and `css_vars` patches. A patch's `file` can list alternatives, and the first one the project has is used; an `anchor` can too, and the first one the file contains is used.
 - Pieces list next steps after `cuilo add`, such as mounting new routes, instead of setup hints in the generated code. With `--wire`, or `wire = true` in the user config, cuilo does the steps it can as patches in the plan. See [next steps and wiring](/guides/packs-and-pieces/#next-steps-and-wiring).
 - Pack sources: official packs built into the binary, folders, `gh:` tags or commits, HTTPS tarballs, `git:` over SSH, `registry:` items and namespaces from the project config. See [Pack sources](/packs/sources/).
-- Two official packs ship with cuilo: `ui` 0.2.0 (`atom`, `molecule`, `organism`) and `backend` 0.1.0 (`resource`, `error`, `middleware`, `database`).
+- Two official packs ship with cuilo: `ui` 0.2.0 (`atom`, `molecule`, `organism`) and `backend` 0.2.0 (`resource`, `error`, `middleware`, `database`).
 - `cuilo adopt` takes over existing code as a piece. `cuilo pack capture` turns project files into a piece of a local pack. See [Adopt and capture](/guides/adopt-and-capture/).
 - `cuilo pack list`, `cuilo pack show` and `cuilo pack add` list, describe and load packs.
 
@@ -71,8 +72,8 @@ These channels open with the first release.
 - npm (`@cuilo/cli`) with no dependencies and nothing run at install time; the package manager picks the platform package.
 - Install scripts for macOS, Linux and Windows that check the SHA-256, and the signature when `minisign` is installed. `CUILO_REQUIRE_SIGNATURE=1` makes the signature required.
 - Homebrew (`tuentyfaiv/tap/cuilo`) and cargo (`cargo binstall cuilo`, `cargo install cuilo --locked`).
-- `cuilo upgrade` replaces a script-installed copy with a newer signed release, and runs npm, pnpm, Bun, Yarn, Homebrew or cargo for copies they installed. `cuilo upgrade --check` only reports what is available.
-- In a terminal, cuilo looks for a new release once a day in the background. Script-installed copies update themselves, and other copies print a notice. `updates` in the user config, or `CUILO_UPDATES`, picks `auto`, `notify` or `off`.
+- `cuilo upgrade` replaces a script-installed copy with a newer signed release, and runs npm, pnpm, Bun, Yarn, Homebrew or cargo for copies they installed globally. For a copy from `npx`, `bunx`, `pnpm dlx` or `yarn dlx`, or one in a project's `node_modules`, it runs nothing and prints the command to run instead. `cuilo upgrade --check` only reports what is available.
+- In a terminal, cuilo looks for a new release once a day in the background. Script-installed copies update themselves, other copies print a notice, and copies from one-off runners do neither. `updates` in the user config, or `CUILO_UPDATES`, picks `auto`, `notify` or `off`; cuilo warns about any other `CUILO_UPDATES` value and ignores it.
 - `cuilo completions <bash|zsh|fish|powershell|elvish>` prints a shell completion script.
 
 See [Install](/install/).

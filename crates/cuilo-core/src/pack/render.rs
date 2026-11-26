@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use serde::Serialize;
 
 use super::Piece;
-use crate::model::{Dependency, Name, PatchSpec, PathError, RelPath, Stack, Values, Variant};
+use crate::model::{Dependency, Name, PatchSpec, PathError, RelPath, Stack, Values, Variant, shared_alternative};
 use crate::patch::Patch;
 use crate::template::{self, BlockError, Expr, ExprError, ReplaceError, Replacer};
 
@@ -34,7 +34,7 @@ pub(crate) struct Rendered {
 	/// Files to create.
 	pub files: Vec<RenderedFile>,
 	/// Edits to existing files.
-	pub patches: Vec<Patch>,
+	pub patches: Vec<RenderedPatch>,
 	/// Packages the files import.
 	pub dependencies: Vec<Dependency>,
 	/// Steps whose variants and conditions hold.
@@ -49,7 +49,37 @@ pub(crate) struct RenderedStep {
 	/// What the user does.
 	pub text: String,
 	/// Edits that do it; empty when only the user can.
-	pub patches: Vec<Patch>,
+	pub patches: Vec<RenderedPatch>,
+}
+
+/// A patch with examples replaced and the project files it may edit, in order of preference.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct RenderedPatch {
+	/// Never empty.
+	files: Vec<RelPath>,
+	/// Edits the first of `files`.
+	patch: Patch,
+}
+
+impl RenderedPatch {
+	/// The project files it may edit, in order of preference; never empty.
+	pub fn files(&self) -> &[RelPath] {
+		&self.files
+	}
+
+	/// The first of [`Self::files`].
+	pub fn preferred_file(&self) -> &RelPath {
+		self.patch.file()
+	}
+
+	/// The patch editing `file`, one of [`Self::files`].
+	pub fn at(&self, file: &RelPath) -> Patch {
+		let mut patch = self.patch.clone();
+		let (Patch::Anchor { file: edited, .. } | Patch::Import { file: edited, .. } | Patch::CssVars { file: edited, .. }) =
+			&mut patch;
+		edited.clone_from(file);
+		patch
+	}
 }
 
 /// One rendered file.
@@ -109,10 +139,20 @@ pub enum RenderError {
 	/// Two templates render to the same path.
 	#[error("two templates render to `{0}`")]
 	Collision(RelPath),
+	/// Two patches of one step, or of the piece itself, render different file alternatives that share a file.
+	#[error("two patches list `{0}` among different file alternatives")]
+	SharedAlternative(RelPath),
 }
 
-/// Renders `request`.
-pub(crate) fn render(request: &RenderRequest<'_>) -> Result<Rendered, RenderError> {
+/// The output folder `request` renders into, or `None` for the project root.
+pub(crate) fn target(request: &RenderRequest<'_>) -> Result<Option<RelPath>, RenderError> {
+	let (_, own_target, _) = choose(request)?;
+	Ok(request.target.cloned().or(own_target))
+}
+
+/// The variant `request` uses, if the piece has variants, the piece's or that variant's own output
+/// folder, and the replacer of its examples.
+fn choose<'a>(request: &RenderRequest<'a>) -> Result<(Option<&'a Variant>, Option<RelPath>, Replacer), RenderError> {
 	let manifest = request.piece.manifest();
 	let variant = if manifest.variants.is_empty() {
 		None
@@ -139,10 +179,6 @@ pub(crate) fn render(request: &RenderRequest<'_>) -> Result<Rendered, RenderErro
 				})?,
 		)
 	};
-
-	let mut conditions = request.stack.condition_values();
-	conditions.extend(request.values.iter().map(|(name, value)| (name.clone(), value.clone())));
-
 	let replacer = Replacer::new(&request.piece.examples(request.values))?;
 	let own_target = default_target(
 		variant
@@ -150,6 +186,17 @@ pub(crate) fn render(request: &RenderRequest<'_>) -> Result<Rendered, RenderErro
 			.unwrap_or(&manifest.target),
 		&replacer,
 	)?;
+	Ok((variant, own_target, replacer))
+}
+
+/// Renders `request`.
+pub(crate) fn render(request: &RenderRequest<'_>) -> Result<Rendered, RenderError> {
+	let manifest = request.piece.manifest();
+	let (variant, own_target, replacer) = choose(request)?;
+
+	let mut conditions = request.stack.condition_values();
+	conditions.extend(request.values.iter().map(|(name, value)| (name.clone(), value.clone())));
+
 	let target = request.target.cloned().or_else(|| own_target.clone());
 
 	let dir = Piece::files_dir(variant);
@@ -235,8 +282,9 @@ fn default_target(target: &str, replacer: &Replacer) -> Result<Option<RelPath>, 
 	}
 }
 
-/// The patches whose conditions hold, with examples replaced in their files and text.
-fn patches(specs: &[PatchSpec], replacer: &Replacer, conditions: &Values) -> Result<Vec<Patch>, RenderError> {
+/// The patches whose conditions hold, with examples replaced in their files and text; patches that share a file
+/// alternative must render the same alternatives.
+fn patches(specs: &[PatchSpec], replacer: &Replacer, conditions: &Values) -> Result<Vec<RenderedPatch>, RenderError> {
 	let mut patches = Vec::new();
 	for spec in specs {
 		if let Some(when) = spec.when()
@@ -244,8 +292,16 @@ fn patches(specs: &[PatchSpec], replacer: &Replacer, conditions: &Values) -> Res
 		{
 			continue;
 		}
-		let file = rel_path(&replacer.apply(spec.file()))?;
-		patches.push(match spec {
+		let files = spec
+			.file()
+			.as_slice()
+			.iter()
+			.map(|file| rel_path(&replacer.apply(file)))
+			.collect::<Result<Vec<_>, _>>()?;
+		let Some(file) = files.first().cloned() else {
+			continue;
+		};
+		let patch = match spec {
 			PatchSpec::Anchor {
 				anchor,
 				position,
@@ -266,9 +322,14 @@ fn patches(specs: &[PatchSpec], replacer: &Replacer, conditions: &Values) -> Res
 				selector: selector.clone(),
 				vars: vars.clone(),
 			},
-		});
+		};
+		patches.push(RenderedPatch { files, patch });
 	}
-	Ok(patches)
+	let lists: Vec<&[RelPath]> = patches.iter().map(RenderedPatch::files).collect();
+	match shared_alternative(&lists) {
+		Some(shared) => Err(RenderError::SharedAlternative(shared.clone())),
+		None => Ok(patches),
+	}
 }
 
 fn rel_path(path: &str) -> Result<RelPath, RenderError> {
@@ -323,6 +384,65 @@ mod tests {
 		stack.insert(Fact::Framework, "flutter");
 
 		assert_eq!(paths(&pack, &stack), ["lib/ui/user_card.dart"]);
+	}
+
+	fn render_named(pack: &Pack, name: &str) -> Result<Rendered, RenderError> {
+		let values = Values::from([("name".to_owned(), Value::String(name.to_owned()))]);
+		render(&RenderRequest {
+			piece: pack.piece("thing").unwrap(),
+			values: &values,
+			stack: &Stack::default(),
+			variant: None,
+			target: None,
+		})
+	}
+
+	const THING: &str =
+		"schema_version = 1\nname = \"thing\"\ntarget = \"src\"\n[inputs.name]\ntype = \"string\"\nexample = \"MyThing\"\n";
+
+	#[test]
+	fn render_should_replace_examples_in_every_file_alternative() {
+		let pack = pack(
+			&format!(
+				"{THING}[[steps]]\ntext = \"Wire `MyThing`.\"\n[[steps.patches]]\nkind = \"import\"\n\
+				 file = [\"src/my-thing/index.ts\", \"src/my-thing/index.tsx\"]\nimport = \"import {{ myThing }} from './my-thing';\"\n"
+			),
+			&["files/my-thing.ts"],
+		);
+
+		let rendered = render_named(&pack, "UserCard").unwrap();
+		let patch = &rendered.steps[0].patches[0];
+
+		let tsx = RelPath::new("src/user-card/index.tsx").unwrap();
+		assert_eq!(
+			patch.files(),
+			[RelPath::new("src/user-card/index.ts").unwrap(), tsx.clone()]
+		);
+		assert_eq!(patch.preferred_file().as_str(), "src/user-card/index.ts");
+		assert_eq!(
+			patch.at(&tsx),
+			Patch::Import {
+				file: tsx,
+				import: "import { userCard } from './user-card';".to_owned()
+			}
+		);
+	}
+
+	#[test]
+	fn render_should_refuse_alternatives_that_share_a_file_only_once_examples_are_replaced() {
+		let pack = pack(
+			&format!(
+				"{THING}[[steps]]\ntext = \"x\"\n[[steps.patches]]\nkind = \"import\"\nfile = [\"src/my-thing.ts\", \"src/my-thing.tsx\"]\n\
+				 import = \"import a from 'a';\"\n[[steps.patches]]\nkind = \"import\"\nfile = \"src/index.tsx\"\nimport = \"import b from 'b';\"\n"
+			),
+			&["files/my-thing.ts"],
+		);
+
+		assert!(render_named(&pack, "UserCard").is_ok());
+		assert!(matches!(
+			render_named(&pack, "Index"),
+			Err(RenderError::SharedAlternative(file)) if file.as_str() == "src/index.tsx"
+		));
 	}
 
 	#[test]
