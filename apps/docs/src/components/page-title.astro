@@ -1,0 +1,43 @@
+---
+import Default from "@astrojs/starlight/components/PageTitle.astro";
+
+import { ui } from "../i18n/ui";
+
+const { entry, locale } = Astro.locals.starlightRoute;
+const t = ui(locale);
+const { generated } = entry.data;
+---
+
+<Default />
+{generated && (
+	<p class="generated">
+		<span class="dot" aria-hidden="true" />
+		{t.generatedFrom} <code>{generated}</code>
+	</p>
+)}
+
+<style>
+	.generated {
+		display: inline-flex;
+		gap: 0.5rem;
+		align-items: center;
+		padding: 0.25rem 0.75rem;
+		margin-top: 0.75rem;
+		font-size: 0.8rem;
+		color: var(--cu-muted);
+		background: var(--cu-surface-2);
+		border-radius: 999px;
+	}
+
+	.generated code {
+		font-family: var(--cu-font-mono);
+		font-size: 0.78rem;
+	}
+
+	.dot {
+		width: 0.45rem;
+		height: 0.45rem;
+		background: var(--cu-accent);
+		border-radius: 50%;
+	}
+</style>

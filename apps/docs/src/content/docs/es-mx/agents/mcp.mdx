@@ -1,0 +1,147 @@
+---
+title: Conecta un agente por MCP
+description: Sirve cuilo a agentes de IA por MCP, las herramientas que ofrece y cuándo un agente debe preguntarte antes de escribir archivos o ejecutar código.
+---
+
+import { Steps, Tabs, TabItem } from "@astrojs/starlight/components";
+
+`cuilo mcp` les da a los agentes de IA el mismo flujo de plan, revisión y aplicación que tienes en la terminal. Habla el Model Context Protocol por stdio: un mensaje JSON-RPC por línea en stdin y stdout. Cada herramienta es una llamada al motor. No se escribe nada en el proyecto hasta que el agente llama a `apply_plan`.
+
+## Antes de empezar
+
+- Pon `cuilo` en tu `PATH`. Todavía no hay versiones publicadas, así que [compílalo desde el código](/es-mx/install/).
+- Elige el proyecto. cuilo trabaja en la carpeta donde el cliente lo inicia. Para usar otra carpeta, agrega `--root /path/to/project` después de `mcp`.
+
+## Conecta un cliente
+
+<Tabs>
+<TabItem label="Claude Code">
+
+```sh
+claude mcp add cuilo -- cuilo mcp
+```
+
+Todo lo que va después de `--` es el comando que ejecuta Claude Code. Para fijar el servidor a un proyecto:
+
+```sh
+claude mcp add cuilo -- cuilo mcp --root /path/to/project
+```
+
+</TabItem>
+<TabItem label="Otros clientes">
+
+Cualquier cliente MCP que inicie servidores stdio puede ejecutar cuilo. Dale este comando y estos argumentos:
+
+- comando: `cuilo`
+- argumentos: `["mcp"]`, o `["mcp", "--root", "/path/to/project"]`
+
+Muchos clientes describen un servidor stdio con un objeto como este. La documentación de tu cliente dice dónde va y qué lo rodea.
+
+```json
+{ "command": "cuilo", "args": ["mcp"] }
+```
+
+</TabItem>
+</Tabs>
+
+### Qué ofrece el servidor
+
+- Las versiones del protocolo `2025-11-25`, `2025-06-18`, `2025-03-26` y `2024-11-05`. Cuando un cliente pide otra versión, el servidor responde con `2025-11-25`.
+- Solo herramientas. La lista de herramientas no cambia durante una sesión.
+- Instrucciones en `initialize`, que le explican al agente el flujo y las reglas de consentimiento de abajo.
+- Cada resultado como texto JSON con formato legible, más `structuredContent` cuando el resultado es un objeto.
+- Las fallas del motor, como un plan rechazado o una entrada que falta, como resultados de herramienta con `isError: true`. Un plan rechazado también lista cada problema. Un nombre de herramienta desconocido es un error de protocolo.
+
+El servidor lee tu [configuración de usuario](/es-mx/reference/user-config/) una sola vez, al iniciar, así que reinícialo después de cambiar ese archivo. Un cambio que hagas con `cuilo trust` aplica desde la siguiente llamada que use el proyecto, sin reiniciar.
+
+### Planes y packs en una sesión
+
+Los planes pendientes viven en la memoria del servidor. Los ids de plan empiezan en `1` en cada sesión. Un plan sale de la lista cuando se aplica o se descarta, y todos los planes pendientes desaparecen cuando termina la sesión.
+
+`list_packs` muestra los packs oficiales más los que cargó esta sesión, por ejemplo con `add_pack`. Un pack de cualquier otro origen necesita `add_pack` otra vez en cada sesión nueva. Cuando el lockfile fija ese origen, `add_pack` carga los archivos fijados.
+
+## Cómo debe trabajar un agente
+
+<Steps>
+
+1. **Encuentra una pieza.** `detect_project` muestra el stack. `list_packs` muestra packs y piezas. `add_pack` carga un pack desde un origen. `describe_piece` muestra las entradas, variantes, archivos y parches de una pieza.
+
+2. **Planéala.** Llama a `plan_add`, o a `plan_adopt`, `plan_update` o `plan_capture`. El resultado trae un id de plan y un reporte: un `summary`, los `changes` (cada uno con `path` y `action`, más `risk` y `diff` cuando aplican), las `instances`, las `dependencies` y las `notes` que haya. Todavía no se escribe nada.
+
+3. **Muéstrale el plan al usuario.** Muestra cada cambio, cada razón de `risk` y cada nota. `plan_hunks` devuelve las líneas de cada cambio. Para conservar solo una parte del plan, llama a `select_hunks` con `all`, `none` o una lista de índices de fragmentos por ruta, por ejemplo `{"plan": 1, "keep": {"src/a.ts": [0, 2], "src/b.ts": "none"}}`. Las rutas que no incluyas conservan su cambio completo. `discard_plan` descarta el plan.
+
+4. **Verifica, solo si el usuario está de acuerdo.** `verify_plan` ejecuta las comprobaciones del propio proyecto en una copia desechable, con los archivos del plan en su lugar. Ahí el código del pack puede ejecutarse como el usuario, así que el agente pregunta primero. Necesita un proyecto en el que el usuario confíe. La [guía de verificación](/es-mx/guides/verify/) explica la copia y las comprobaciones.
+
+5. **Aplica.** Si el plan lista dependencias, llama a `install_commands` antes de aplicar: un plan deja de estar pendiente en cuanto se aplica. Luego llama a `apply_plan`. Escribe el plan como una sola transacción y se niega si un archivo cambió después de planear. Muéstrale al usuario los comandos de instalación y ejecútalos solo si está de acuerdo.
+
+6. **Deshaz si hace falta.** `history` lista las transacciones. `undo` revierte la última y se niega si sus archivos cambiaron desde entonces. `status` y `why` explican qué hay ahora en el proyecto.
+
+</Steps>
+
+## Herramientas
+
+Las anotaciones de cada herramienta le dicen al cliente qué hace: `readOnlyHint` es true solo en las herramientas de solo lectura, y `destructiveHint` es true en las demás. `idempotentHint` es false en todas. `openWorldHint` es true en `add_pack` y `plan_update`, las dos herramientas que pueden descargar packs.
+
+### Solo lectura
+
+Estas no cambian nada en el proyecto. `add_pack` y `plan_update` pueden descargar un pack a tu caché de cuilo.
+
+| Herramienta | Argumentos | Qué hace |
+| --- | --- | --- |
+| `detect_project` | ninguno | Detecta el stack del proyecto: lenguaje, framework, estilos, gestor de paquetes y más. |
+| `list_packs` | ninguno | Lista los packs cargados y sus piezas. |
+| `add_pack` | `source` | Carga un pack desde un origen: `./folder`, `gh:owner/repo@tag`, un `.tar.gz` por HTTPS, `git:` por SSH, elementos de `registry:` o `@namespace/pack`. |
+| `describe_piece` | `pack`, `piece` | Describe una pieza: sus entradas, variantes, archivos y parches. |
+| `plan_add` | `pack`, `piece`; opcionales `inputs`, `variant`, `target`, `force` | Planea generar una pieza (y las piezas que requiere). Devuelve un id de plan y sus cambios; no se escribe nada. |
+| `plan_adopt` | `pack`, `piece`; opcionales `inputs`, `variant`, `target`, `force` | Planea tomar código existente como una pieza, para que las actualizaciones posteriores se fusionen con él. Los archivos existentes no cambian. |
+| `plan_update` | `pack`; opcionales `source`, `on_conflict` (`refuse`, `markers`, `ours`, `theirs`), `force`, `migrate` (por defecto `true`) | Planea actualizar todo lo generado desde un pack a su versión cargada más nueva, o a `source`, y fusiona las ediciones del usuario. |
+| `plan_capture` | `pack_dir`, `pack`, `piece`, `files`; opcionales `example`, `force` | Planea convertir archivos del proyecto en una pieza nueva de un pack local. |
+| `plan_hunks` | `plan` | Lista cada cambio de un plan pendiente como fragmentos que puedes conservar u omitir. |
+| `select_hunks` | `plan`, `keep` | Conserva solo algunos cambios de un plan pendiente: por ruta, `all`, `none` o una lista de índices de fragmentos. |
+| `install_commands` | `plan` | Los comandos del gestor de paquetes que agregan los paquetes que lista un plan pendiente, sin los que el proyecto ya tiene. No ejecuta nada; muéstraselos al usuario antes de ejecutar alguno. |
+| `discard_plan` | `plan` | Descarta un plan pendiente. |
+| `status` | ninguno | Muestra cada archivo generado y si está limpio, modificado o si falta. |
+| `why` | `path`, `line` | Explica de dónde viene una línea de un archivo generado: del pack o del usuario. |
+| `history` | ninguno | Lista las transacciones aplicadas que se pueden deshacer. |
+
+### Escribe en el proyecto
+
+| Herramienta | Argumentos | Qué hace |
+| --- | --- | --- |
+| `apply_plan` | `plan` | Aplica un plan pendiente como una sola transacción. Muéstrale el plan al usuario primero. |
+| `undo` | opcional `force` | Deshace la última transacción; se niega si sus archivos cambiaron desde entonces, salvo con `force`. |
+
+### Ejecuta código
+
+| Herramienta | Argumentos | Qué hace |
+| --- | --- | --- |
+| `verify_plan` | `plan` | Aplica un plan pendiente a una copia desechable del proyecto y ahí ejecuta las comprobaciones del propio proyecto (revisión de tipos, lint, pruebas); el proyecto no cambia. El código del pack se ejecuta como el usuario, así que muéstrale el plan y pregúntale primero. Necesita un proyecto en el que el usuario confíe. |
+
+## Reglas de consentimiento
+
+Las instrucciones del servidor y las descripciones de las herramientas le dan al agente estas reglas. Los clientes que respetan las anotaciones también pueden preguntarte antes de usar cualquier herramienta que no sea de solo lectura.
+
+- **`apply_plan`**: el agente te muestra el plan primero.
+- **`verify_plan`**: las comprobaciones se ejecutan con los archivos del plan en su lugar, así que el código del pack, como un script de build o una prueba, se ejecuta como tú. El agente te muestra el plan y llama a `verify_plan` solo después de que aceptes.
+- **`install_commands`**: esta herramienta no ejecuta nada. El agente te muestra los comandos y los ejecuta solo si das tu consentimiento. Los paquetes que agrega un gestor de paquetes quedan fuera del historial de cuilo, así que `undo` no los quita.
+- **Confianza**: cuando un plan indica que algunos archivos no se formatearon porque el proyecto no es de confianza, el agente te avisa. Confiar en un proyecto deja que se ejecuten sus propias herramientas, así que solo tú deberías ejecutar `cuilo trust`. La [guía de formateadores y confianza](/es-mx/guides/formatters-and-trust/) explica qué permite la confianza.
+
+`undo` con `force` descarta las ediciones hechas después de la transacción. El servidor no pone ninguna regla para eso, así que pídele a tu agente que te consulte antes de pasar `force`.
+
+:::caution
+Las anotaciones y las instrucciones guían al agente y al cliente. No detienen a un agente que las ignora. Deja activadas las solicitudes de aprobación de tu cliente para las herramientas que no son de solo lectura.
+:::
+
+## Revocar la confianza
+
+`cuilo trust --revoke` también llega a las sesiones que ya están corriendo. En su siguiente llamada, una sesión de `cuilo mcp` en curso deja de ejecutar los formateadores y linters del proyecto, y `verify_plan` se niega hasta que vuelvas a confiar en el proyecto. No necesitas reiniciar el servidor.
+
+```sh
+cuilo trust --revoke --root /path/to/project
+```
+
+## Relacionado
+
+- Referencia de [`cuilo mcp`](/es-mx/reference/cli/mcp/)
+- [Seguridad](/es-mx/security/)
+- [llms.txt](/es-mx/agents/llms-txt/), para darle la documentación a un agente

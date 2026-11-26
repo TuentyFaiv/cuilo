@@ -1,0 +1,91 @@
+---
+import LanguageSelect from "@astrojs/starlight/components/LanguageSelect.astro";
+import Search from "@astrojs/starlight/components/Search.astro";
+import SocialIcons from "@astrojs/starlight/components/SocialIcons.astro";
+import ThemeSelect from "@astrojs/starlight/components/ThemeSelect.astro";
+
+import { localized, ui } from "../i18n/ui";
+import SiteTitle from "./site-title.astro";
+
+const { locale } = Astro.locals.starlightRoute;
+const t = ui(locale);
+const here = Astro.url.pathname;
+const links = [
+	{ label: t.navDocs, path: "/introduction/", section: ["/introduction/", "/install/", "/first-piece/", "/guides/"] },
+	{ label: t.navDirectory, path: "/packs/directory/", section: ["/packs/"] },
+	{ label: t.navCli, path: "/reference/cli/", section: ["/reference/"] },
+	{ label: t.navAgents, path: "/agents/mcp/", section: ["/agents/"] },
+	{ label: t.navChangelog, path: "/changelog/", section: ["/changelog/"] },
+].map((link) => ({
+	...link,
+	href: localized(locale, link.path),
+	current: link.section.some((prefix) => here.startsWith(localized(locale, prefix))),
+}));
+---
+
+<div class="header">
+	<div class="brand">
+		<SiteTitle />
+		<nav class="links" aria-label="Sections">
+			{links.map((link) => (
+				<a href={link.href} aria-current={link.current ? "page" : undefined}>
+					{link.label}
+				</a>
+			))}
+		</nav>
+	</div>
+	<div class="tools">
+		<div class="search print:hidden"><Search /></div>
+		<div class="right sl-hidden md:sl-flex print:hidden">
+			<LanguageSelect />
+			<SocialIcons />
+			<ThemeSelect />
+		</div>
+	</div>
+</div>
+
+<style>
+	.header {
+		display: flex;
+		gap: 1.5rem;
+		align-items: center;
+		justify-content: space-between;
+		height: 100%;
+	}
+
+	.brand,
+	.tools,
+	.right {
+		display: flex;
+		gap: 1.25rem;
+		align-items: center;
+		min-width: 0;
+	}
+
+	.links {
+		display: none;
+		gap: 1.5rem;
+	}
+
+	.links a {
+		font-size: 0.9rem;
+		font-weight: 500;
+		color: var(--cu-muted);
+		text-decoration: none;
+	}
+
+	.links a:hover,
+	.links a[aria-current="page"] {
+		color: var(--cu-ink);
+	}
+
+	@media (min-width: 72rem) {
+		.links {
+			display: flex;
+		}
+
+		.search {
+			min-width: 16rem;
+		}
+	}
+</style>

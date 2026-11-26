@@ -4,6 +4,7 @@ mod cli;
 mod commands;
 mod context;
 mod inputs;
+mod reference;
 mod ui;
 mod upgrade;
 
@@ -70,6 +71,10 @@ fn run(cli: &Cli) -> anyhow::Result<()> {
 			let mut script = Vec::new();
 			clap_complete::generate(*shell, &mut Cli::command(), brand::BINARY_NAME, &mut script);
 			io::stdout().write_all(&script)?;
+			Ok(())
+		}
+		Command::Man if cli.json => {
+			Output::json(&reference::describe(Cli::command()));
 			Ok(())
 		}
 		Command::Man => {

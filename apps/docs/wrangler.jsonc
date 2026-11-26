@@ -1,0 +1,16 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "cuilo",
+	"compatibility_date": "2026-11-01",
+	// The site is static: Workers serves dist/ as assets, with no Worker code.
+	"assets": {
+		"directory": "./dist",
+		"not_found_handling": "404-page",
+		"html_handling": "auto-trailing-slash"
+	},
+	// Production lives only on cuilo.dev; every deploy keeps the domain attached.
+	"routes": [{ "pattern": "cuilo.dev", "custom_domain": true }],
+	"workers_dev": false,
+	// Builds of other branches get workers.dev preview URLs, which Cloudflare Access keeps private.
+	"preview_urls": true
+}

@@ -123,7 +123,7 @@
           ]
         },
         "source": {
-          "description": "Where it came from, e.g. `gh:acme/packs@v1.2.0`; absent for a folder on this machine.",
+          "description": "Where it came from, e.g. `gh:acme/packs@v1.2.0` or `path:./packs/mine`; absent for a folder given by absolute path.",
           "type": [
             "string",
             "null"

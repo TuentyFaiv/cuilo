@@ -1,0 +1,290 @@
+---
+import { Icon } from "@astrojs/starlight/components";
+
+import "../styles/landing.css";
+
+import packs from "../data/packs.json" with { type: "json" };
+import { localized, stackName, ui } from "../i18n/ui";
+
+/** The first `code` span of a description. */
+const CODE_SPAN = /`([^`]+)`/;
+const { locale } = Astro.locals.starlightRoute;
+const t = ui(locale);
+
+/** The example a piece's `name` input gives in its description, e.g. `status-badge`. */
+const exampleName = (description: string | null | undefined, fallback: string) =>
+	description?.match(CODE_SPAN)?.[1] ?? fallback;
+
+const pieces = packs.flatMap((pack) =>
+	pack.pieces.map((piece) => {
+		const name = piece.inputs.find((input) => input.name === "name");
+		return {
+			pack: pack.name,
+			name: piece.name,
+			description: piece.description,
+			stacks: [...new Set(piece.variants.map((variant) => stackName(variant)))],
+			command: `cuilo add ${pack.name}/${piece.name} ${exampleName(name?.description, "example")}`,
+			icon: pack.name === "ui" ? ("puzzle" as const) : ("setting" as const),
+		};
+	})
+);
+const stacks = [...new Set(pieces.flatMap((piece) => piece.stacks))].sort((a, b) => a.localeCompare(b));
+/** The stacks the `ui` pieces support, by display name: two variants can share one stack. */
+const uiStacks = [
+	...new Set(packs.find((pack) => pack.name === "ui")?.pieces[0]?.variants.map((variant) => stackName(variant)) ?? []),
+];
+const chipLimit = 6;
+const outputs = [
+	{
+		stack: "React",
+		dir: "src/ui/atoms/status-badge/",
+		files: ["status-badge.tsx", "status-badge.module.css", "status-badge.test.tsx", "index.ts"],
+	},
+	{
+		stack: "Svelte",
+		dir: "src/ui/atoms/status-badge/",
+		files: ["status-badge.svelte", "status-badge.test.ts", "index.ts"],
+	},
+	{ stack: "Flutter", dir: "lib/ · test/", files: ["ui/atoms/status_badge.dart", "ui/atoms/status_badge_test.dart"] },
+	{ stack: "SwiftUI", dir: "MyApp/UI/Atoms/", files: ["StatusBadge.swift"] },
+];
+const merged = [
+	{ code: "export function Button(props) {" },
+	{ code: "  return <button {...props} />;", tone: "pack" },
+	{ code: "}" },
+	{ code: " " },
+	{ code: "export const Save = () => <Button />;", tone: "yours" },
+];
+const panes = [
+	{
+		key: "generated",
+		title: t.layersGenerated,
+		meta: "ui 0.2.0",
+		lines: [{ code: "export function Button(props) {" }, { code: "  return <span {...props} />;" }, { code: "}" }],
+	},
+	{
+		key: "pack",
+		title: t.layersPack,
+		meta: "ui 0.3.0",
+		lines: [
+			{ code: "export function Button(props) {" },
+			{ code: "  return <button {...props} />;", tone: "pack" },
+			{ code: "}" },
+		],
+	},
+	{ key: "yours", title: t.layersYours, meta: t.layersMerged, lines: merged },
+];
+const review = [
+	[["$ ", "accent"], ["cuilo status"]],
+	[["clean     ", "muted"], ["src/ui/atoms/button/button.module.css"]],
+	[["modified  ", "warn"], ["src/ui/atoms/button/button.tsx"]],
+	[[" "]],
+	[["$ ", "accent"], ["cuilo update ui --review"]],
+	[["modify ", "muted"], ["src/ui/atoms/button/button.tsx"]],
+	[["@@ -12,7 +12,8 @@", "muted"]],
+	[["   export function Button({ tone, busy, ...props }) {"]],
+	[["-    return <span {...props} data-tone={tone} />;", "del"]],
+	[["+    return <span {...props} data-tone={tone}", "ok"]],
+	[["+      aria-busy={busy} />;", "ok"]],
+	[["   }"]],
+	[["   // my tweak", "muted"]],
+	[[" "]],
+	[["Keep this hunk? [y]es, [n]o, [a]ll in file, [d]rop rest of file, [q]uit: ", "muted"], ["y"]],
+];
+const features = [
+	{ icon: "puzzle", title: t.featurePacksTitle, body: t.featurePacksBody },
+	{ icon: "approve-check", title: t.featureSignedTitle, body: t.featureSignedBody },
+	{ icon: "rocket", title: t.featureChecksTitle, body: t.featureChecksBody },
+	{ icon: "laptop", title: t.featureAgentsTitle, body: t.featureAgentsBody },
+] as const;
+---
+
+<div class="cu-landing not-content">
+	<section class="cu-layers" aria-label={t.layersYours}>
+		<div class="cu-panes">
+			{panes.map((pane) => (
+				<figure class:list={["cu-pane", `cu-pane--${pane.key}`]}>
+					<figcaption>
+						<span class="cu-tone" />
+						<strong>{pane.title}</strong>
+						<span class="cu-mono cu-pane-meta">{pane.meta}</span>
+					</figcaption>
+					<ol>
+						{pane.lines.map((line) => (
+							<li class:list={[line.tone && `cu-line--${line.tone}`]}>
+								<code class:list={[line.tone && `cu-code--${line.tone}`]}>{line.code}</code>
+							</li>
+						))}
+					</ol>
+				</figure>
+			))}
+		</div>
+		<ul class="cu-legend">
+			<li><span class="cu-tone cu-tone--generated"></span>{t.layersLegendGenerated}</li>
+			<li><span class="cu-tone cu-tone--pack"></span>{t.layersLegendPack}</li>
+			<li><span class="cu-tone cu-tone--yours"></span>{t.layersLegendYours}</li>
+		</ul>
+	</section>
+
+	<div class="cu-strata cu-rule" aria-hidden="true"><span></span><span></span><span></span></div>
+
+	<section class="cu-section cu-find">
+		<h2>{t.searchTitle}</h2>
+		<p class="cu-lead">{t.searchLead}</p>
+		<div class="cu-palette" data-finder>
+			<div class="cu-query">
+				<label>
+					<span class="sr-only">{t.searchLabel}</span>
+					<Icon name="magnifier" />
+					<input type="search" placeholder={t.searchPlaceholder} data-query autocomplete="off">
+				</label>
+				<label class="cu-stack">
+					<span>{t.stackLabel}</span>
+					<select data-stack>
+						<option value="">{t.stackAny}</option>
+						{stacks.map((stack) => <option value={stack}>{stack}</option>)}
+					</select>
+				</label>
+			</div>
+			<ul class="cu-results">
+				{pieces.map((piece) => (
+					<li
+						data-text={`${piece.pack} ${piece.name} ${piece.description}`.toLowerCase()}
+						data-stacks={piece.stacks.join("|")}
+					>
+						<span class="cu-piece-icon">
+							<Icon name={piece.icon} />
+						</span>
+						<span class="cu-result-text">
+							<span class="cu-result-title">
+								<a href={localized(locale, `/packs/${piece.pack}/#${piece.name}`)}>{piece.name}</a>
+								<span class="cu-mono cu-result-path">{`${piece.pack}/${piece.name}`}</span>
+								<span class="cu-official">{t.official}</span>
+								<span class="cu-not-for" hidden>
+									{t.notForStack}
+								</span>
+							</span>
+							<span class="cu-result-desc">{piece.description}</span>
+						</span>
+						<span class="cu-chips">
+							{piece.stacks.slice(0, chipLimit).map((stack) => (
+								<span class="cu-chip">{stack}</span>
+							))}
+							{piece.stacks.length > chipLimit && <span class="cu-chip">+{piece.stacks.length - chipLimit}</span>}
+						</span>
+						<code class="cu-command">{piece.command}</code>
+					</li>
+				))}
+			</ul>
+			<p class="cu-empty" data-empty hidden>{t.searchEmpty}</p>
+		</div>
+	</section>
+
+	<div class="cu-strata cu-rule" aria-hidden="true"><span></span><span></span><span></span></div>
+
+	<section class="cu-section cu-split">
+		<div class="cu-copy">
+			<p class="cu-eyebrow-mono">{t.stacksEyebrow}</p>
+			<h2 class="cu-pre">{t.stacksTitle.replace("{count}", String(uiStacks.length))}</h2>
+			<p class="cu-lead">{t.stacksLead}</p>
+			<p class="cu-stack-chips">{uiStacks.map((stack) => <span class="cu-chip">{stack}</span>)}</p>
+		</div>
+		<div class="cu-outputs">
+			{outputs.map((output) => (
+				<div class="cu-card cu-output">
+					<p class="cu-output-head">
+						<strong>{output.stack}</strong>
+						<span class="cu-mono cu-output-count">
+							{output.files.length} {output.files.length === 1 ? t.file : t.files}
+						</span>
+					</p>
+					<p class="cu-mono cu-output-dir">{output.dir}</p>
+					<ul>
+						{output.files.map((file) => (
+							<li class="cu-mono">
+								<span class="cu-plus">+</span> {file}
+							</li>
+						))}
+					</ul>
+				</div>
+			))}
+		</div>
+	</section>
+
+	<section class="cu-section cu-split cu-updates">
+		<div class="cu-copy">
+			<p class="cu-eyebrow-mono">cuilo update</p>
+			<h2>{t.updatesTitle}</h2>
+			<p class="cu-lead">{t.updatesLead}</p>
+			<ul class="cu-points">
+				<li><code>cuilo why src/a.ts:12</code> {t.updatesWhy}</li>
+				<li><code>cuilo undo</code> {t.updatesUndo}</li>
+				<li><code>--json</code> {t.updatesJson}</li>
+			</ul>
+		</div>
+		<div class="cu-terminal" role="img" aria-label="cuilo update ui --review">
+			<p class="cu-terminal-bar"><span></span><span></span><span></span> ~/web</p>
+			<pre>{
+				review.map((line) => (
+	<span class="cu-terminal-line">
+		{line.map(([text, tone]) => (
+			<span class:list={[tone && `cu-t-${tone}`]}>{text}</span>
+		))}
+	</span>
+))
+			}</pre>
+		</div>
+	</section>
+
+	<div class="cu-strata cu-rule" aria-hidden="true"><span></span><span></span><span></span></div>
+
+	<section class="cu-section">
+		<h2>{t.featuresTitle}</h2>
+		<div class="cu-features">
+			{features.map((feature) => (
+				<div class="cu-feature">
+					<span class="cu-feature-icon">
+						<Icon name={feature.icon} />
+					</span>
+					<h3>{feature.title}</h3>
+					<p>{feature.body}</p>
+				</div>
+			))}
+		</div>
+	</section>
+</div>
+
+<script>
+	const WHITESPACE = /\s+/;
+	const finder = document.querySelector<HTMLElement>("[data-finder]");
+	const query = finder?.querySelector<HTMLInputElement>("[data-query]");
+	const stack = finder?.querySelector<HTMLSelectElement>("[data-stack]");
+	const empty = finder?.querySelector<HTMLElement>("[data-empty]");
+	const items = [...(finder?.querySelectorAll<HTMLLIElement>("li[data-text]") ?? [])];
+
+	function filter() {
+		const words = (query?.value ?? "").toLowerCase().split(WHITESPACE).filter(Boolean);
+		const chosen = stack?.value ?? "";
+		let shown = 0;
+		for (const item of items) {
+			const text = item.dataset.text ?? "";
+			const matches = words.every((word) => text.includes(word));
+			const fits = !chosen || (item.dataset.stacks ?? "").split("|").includes(chosen);
+			item.hidden = !matches;
+			item.classList.toggle("cu-dim", matches && !fits);
+			const label = item.querySelector<HTMLElement>(".cu-not-for");
+			if (label) {
+				label.hidden = fits;
+			}
+			if (matches) {
+				shown += 1;
+			}
+		}
+		if (empty) {
+			empty.hidden = shown > 0;
+		}
+	}
+
+	query?.addEventListener("input", filter);
+	stack?.addEventListener("change", filter);
+</script>

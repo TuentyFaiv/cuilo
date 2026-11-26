@@ -62,7 +62,7 @@ pub(crate) enum Command {
 		/// The shell.
 		shell: clap_complete::Shell,
 	},
-	/// Print the man page (roff), for packagers.
+	/// Print the man page (roff), for packagers; with `--json`, the commands and flags the docs reference is built from.
 	#[command(hide = true)]
 	Man,
 	/// Replace this cuilo with the newest signed release; only for copies the install script made.

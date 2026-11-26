@@ -1,0 +1,318 @@
+---
+title: Escribe un pack
+description: Arma un pack a partir de código real con entradas tipadas, variantes por stack, parches y permisos, y pruébalo desde una carpeta local.
+---
+
+import { FileTree, Steps } from "@astrojs/starlight/components";
+
+Un pack es una carpeta con un `pack.toml` y una carpeta por cada pieza. Las plantillas son código que funciona en tu lenguaje, no un lenguaje de plantillas. En esta página armas un pack pequeño, `acme-ui`, con una pieza, `card`, y lo pruebas desde una carpeta.
+
+## Estructura de carpetas
+
+<FileTree>
+- my-pack/
+  - pack.toml nombre, versión, permisos
+  - pack.minisig firma opcional
+  - pieces/
+    - card/
+      - piece.toml entradas, variantes, reglas de archivos, parches
+      - files/
+        - react/
+          - example-card/
+            - example-card.tsx
+            - example-card.module.css
+        - plain/
+          - example-card/
+            - example-card.ts
+  - migrations/ reglas opcionales de ast-grep para actualizaciones
+</FileTree>
+
+- Cada carpeta dentro de `pieces/` es una pieza, y el `name` de su `piece.toml` tiene que coincidir con el nombre de la carpeta.
+- Los nombres de packs, piezas y variantes tienen de 1 a 64 caracteres entre letras minúsculas, dígitos y `-`, y empiezan con una letra.
+- Un pack no puede tener enlaces simbólicos. Tiene como máximo 4096 archivos, 1 MiB por archivo y 64 MiB en total.
+- Cuando cuilo carga una carpeta, omite `.git` y `.DS_Store`. Todos los demás archivos, excepto `pack.minisig`, cuentan para el digest SHA-256 del pack.
+
+## `pack.toml`
+
+```toml
+schema_version = 1
+name = "acme-ui"
+version = "0.1.0"
+description = "Cards for Acme apps."
+license = "MIT"
+
+[permissions]
+write = ["src/components/**", "src/app.ts"]
+dependencies = true
+```
+
+`version` es una versión semántica. Cámbiala cada vez que cambien los archivos: en cuanto un proyecto fija una versión en `cuilo.lock`, cuilo rechaza archivos distintos con esa misma versión. Los nombres `ui` y `backend` son de los packs oficiales, así que un pack de cualquier otro origen tiene que usar otro nombre. Todas las claves están en la [referencia del manifiesto del pack](/es-mx/reference/pack-manifest/).
+
+### Permisos
+
+`permissions.write` lista, como globs, las rutas que el pack puede crear o parchear: `*` coincide dentro de un solo segmento de la ruta, `?` coincide con un carácter y `**` coincide con cualquier número de segmentos. Un plan que escribe en cualquier otro lugar se rechaza con `the pack does not declare permission to write here`, y cuilo sale con el [código `3`](/es-mx/reference/exit-codes/).
+
+Ningún pack puede escribir en `.git/`, `.cuilo/` ni `cuilo.lock`, sin importar mayúsculas o minúsculas. Los planes también marcan rutas riesgosas, como `package.json`, los workflows de CI, los archivos `.env` y la configuración de agentes de IA, para que el usuario las revise con calma.
+
+Define `permissions.dependencies = true` si alguna pieza declara `[[dependencies]]`. Sin eso, el pack no carga.
+
+## `piece.toml`
+
+```toml
+schema_version = 1
+name = "card"
+description = "A card with a title."
+target = "src/components"
+
+[inputs.name]
+type = "string"
+description = "Component name, e.g. `user-card`."
+example = "ExampleCard"
+
+[inputs.styled]
+type = "bool"
+description = "Add a CSS module."
+default = true
+
+[inputs.size]
+type = "enum"
+choices = ["small", "large"]
+default = "small"
+
+[[variants]]
+name = "react"
+when = { framework = "react" }
+
+[[variants]]
+name = "plain"
+
+[[files]]
+path = "example-card/example-card.module.css"
+when = "styled"
+```
+
+`target` es la carpeta en la que escribe la pieza, relativa a la raíz del proyecto. Es obligatoria; usa `""` para escribir desde la raíz. Puede contener ejemplos, como `src/modules/example-items`. Los usuarios pueden elegir otra carpeta con `--target`, o por pieza con `paths` en [`cuilo.json`](/es-mx/reference/configuration/). Todas las claves están en la [referencia del manifiesto de la pieza](/es-mx/reference/piece-manifest/).
+
+## Las plantillas son código real
+
+Cada entrada de texto puede indicar un `example`: un texto que aparece en las plantillas. cuilo lo reemplaza con el valor que da el usuario en el contenido de los archivos, en los nombres de archivos y carpetas, en `target` y en `file`, `insert` e `import` de los parches. Un ejemplo de dos o más palabras se reemplaza en todos sus estilos de nombre, y también tal como está escrito:
+
+| Estilo     | Con `UserProfile`, `ExampleCard` queda como |
+| ---------- | ------------------------------------------- |
+| PascalCase | `UserProfile`                               |
+| camelCase  | `userProfile`                               |
+| kebab-case | `user-profile`                              |
+| snake_case | `user_profile`                              |
+| CONSTANTE  | `USER_PROFILE`                              |
+| Title Case | `User Profile`                              |
+| minúsculas | `user profile`                              |
+| todo junto | `userprofile`                               |
+| ruta       | `user/profile`                              |
+
+El tipo oración (`Example card`) no es un estilo de nombre y se queda como está. Un ejemplo de una sola palabra solo se reemplaza donde aparece exactamente como está escrito, así que las palabras comunes, como una etiqueta `<header>` de HTML, no se tocan. Los ejemplos con puntos también funcionan: `com.example.app` se reemplaza tal como está escrito y como la carpeta `com/example/app`.
+
+El reemplazo aplica en cualquier parte, incluso dentro de palabras más largas: `useExampleCard` se vuelve `useUserProfile`. Elige un ejemplo que no aparezca en ningún otro lado. El ejemplo de una entrada `number`, como `3000`, se reemplaza tal como está escrito. Los archivos binarios se copian sin cambios; solo cambian sus nombres.
+
+Las plantillas no pueden leer archivos ni el entorno, y no pueden correr código.
+
+### Condiciones en las plantillas
+
+Conserva u omite líneas con directivas dentro de comentarios. Sirve cualquier estilo de comentario: `//`, `#`, `--`, `;`, `/* */`, `<!-- -->` y `{/* */}`.
+
+```tsx
+import styles from "./example-card.module.css"; // @cuilo if styled
+
+export type ExampleCardProps = { title: string };
+
+export function ExampleCard({ title }: ExampleCardProps) {
+	// @cuilo if size == "large"
+	const level = 1;
+	// @cuilo else
+	const level = 3;
+	// @cuilo end
+	// @cuilo if styled
+	return <h2 className={styles.exampleCard} data-level={level}>{title}</h2>;
+	// @cuilo else
+	return <h2 className="example-card" data-level={level}>{title}</h2>;
+	// @cuilo end
+}
+```
+
+Con las entradas por defecto y el nombre `UserProfile`, cuilo escribe `src/components/user-profile/user-profile.tsx`:
+
+```tsx
+import styles from "./user-profile.module.css";
+
+export type UserProfileProps = { title: string };
+
+export function UserProfile({ title }: UserProfileProps) {
+	const level = 3;
+	return <h2 className={styles.userProfile} data-level={level}>{title}</h2>;
+}
+```
+
+- Una directiva que va después de código, en la misma línea, conserva esa línea sin el comentario solo cuando se cumple la condición.
+- `@cuilo else` y `@cuilo end` tienen que ir en su propia línea. Los bloques se pueden anidar hasta 16 niveles.
+- `@cuilo` seguido de un espacio fuera de un comentario es un error. Sin el espacio, como en `// @cuilo:routes`, es texto normal, y por eso sirve como un ancla segura para los parches.
+
+Una condición lee las entradas y el stack del proyecto:
+
+- `styled` es verdadero cuando la entrada es `true`, un número distinto de `0` o un texto que no está vacío. `!styled` lo niega.
+- `size == "large"` y `size != 'large'` comparan con un texto entre comillas, un número entero, `true` o `false`.
+- `&&` tiene más precedencia que `||`. Los paréntesis agrupan.
+- `stack.<value>` es verdadero cuando el stack del proyecto tiene ese valor en cualquiera de sus datos, por ejemplo `stack.tailwind`, `stack.vitest` o `stack.rust`.
+
+Una condición solo puede nombrar las entradas de su propia pieza y valores `stack.`; cualquier otra cosa hace que el pack no cargue. Las condiciones tienen como máximo 256 caracteres.
+
+## Entradas
+
+| `type`   | Claves además de `description` y `prompt` | Notas                                                                          |
+| -------- | ----------------------------------------- | ------------------------------------------------------------------------------ |
+| `string` | `example`, `default`                      | Con un `example` de varias palabras, el valor tiene que ser un identificador.  |
+| `bool`   | `default`, `default_when`                 | Por defecto es `false`. `default_when` es una condición sobre valores `stack.`. |
+| `enum`   | `choices` (obligatoria), `default`        | El valor tiene que ser uno de `choices`.                                       |
+| `number` | `example`, `default`, `min`, `max`        | Un número entero entre `min` y `max`.                                          |
+
+Los valores de texto son una sola línea de máximo 256 caracteres. Cuando un `bool` tiene `default_when`, este toma el lugar de `default`.
+
+Los nombres de las entradas usan letras, dígitos y `_`, y empiezan con una letra. Una entrada `string`, `enum` o `number` sin `default` es obligatoria. El argumento posicional de `cuilo add pack/piece <NAME>` define la entrada `name`; las demás entradas se pasan como `-i key=value`. Un `bool` acepta `true`, `false`, `yes`, `no`, `y`, `n`, `1`, `0`, `on` y `off`.
+
+En una terminal, cuilo pide las entradas obligatorias que falten con el texto de `prompt`, o con `description` si no hay `prompt`. Con `--no-input` se detiene con ``input `name` is required``. Los proyectos pueden definir valores por defecto para cada pieza con `defaults` en `cuilo.json`.
+
+`default_when` permite que una pieza agregue solo lo que el proyecto puede usar:
+
+```toml
+[inputs.tests]
+type = "bool"
+prompt = "Add tests?"
+default_when = "stack.vitest || !(stack.javascript || stack.typescript)"
+```
+
+## Variantes
+
+Una pieza con `[[variants]]` tiene una carpeta de plantillas por stack. cuilo prueba las variantes en orden y usa la primera en la que se cumplen todos los datos de su `when`. Una variante sin `when` coincide con cualquier proyecto, así que ponla al final como respaldo. `--variant <name>` elige una por su nombre.
+
+- `when` acepta los datos `framework`, `language`, `runtime`, `database`, `styling`, `package_manager`, `testing` y `formatter`. Corre `cuilo detect` para ver los datos de un proyecto, y lee [detección del stack](/es-mx/guides/stack-detection/) para saber cómo se obtienen.
+- Las plantillas de una variante están en `files/<name>`, a menos que `files` indique otra carpeta. Así, varias variantes pueden compartir una, por ejemplo `files = "files/typescript"`.
+- El `target` de una variante reemplaza el de la pieza. La variante de Compose del pack `ui` escribe en `app/src/main/java/com/example/app/ui/atoms`, y su variante de Flutter usa `""` porque también agrega archivos en `test/`.
+- Una pieza sin variantes guarda sus plantillas en `files/`.
+
+Si ninguna variante coincide, cuilo se detiene con `no variant matches this project; available: …` y lista los nombres de las variantes.
+
+## Archivos opcionales
+
+`[[files]]` conserva una plantilla solo cuando se cumple su condición `when`. Su `path` es relativo a la carpeta de la variante y tiene que coincidir con una plantilla en al menos una de ellas. En el ejemplo, `example-card.module.css` solo se escribe cuando `styled` es verdadero.
+
+## Parches
+
+Los parches editan archivos que el proyecto ya tiene. El archivo tiene que existir y estar cubierto por `permissions.write`. Cada parche acepta una condición `when` opcional, y `file`, `insert` e `import` pueden contener ejemplos.
+
+```toml
+[[patches]]
+kind = "import"
+file = "src/app.ts"
+import = 'import { ExampleCard } from "./components/example-card/example-card";'
+
+[[patches]]
+kind = "anchor"
+file = "src/app.ts"
+anchor = "// cuilo:cards"
+insert = "cards.push(ExampleCard);"
+
+[[patches]]
+kind = "css_vars"
+file = "src/styles.css"
+selector = ":root"
+vars = { card-radius = "0.5rem", card-border = "220 13% 91%" }
+```
+
+- `anchor` inserta `insert` en las líneas que siguen a la única línea que contiene el texto del ancla, con la sangría de esa línea. Define `position = "before"` para insertarlo antes. El ancla tiene que aparecer exactamente una vez.
+- `import` agrega un import de JavaScript o TypeScript después de los que ya existen. En los archivos `.svelte` y `.vue` va dentro del bloque `<script>`, y en los archivos `.astro`, en el frontmatter.
+- `css_vars` agrega propiedades personalizadas, sin el `--` inicial, al bloque de `selector`. Si el bloque no existe, lo crea, y conserva los valores que el archivo ya define.
+
+Un parche cuyo texto ya está en el archivo no cambia nada.
+
+## Piezas que se apoyan en otras
+
+```toml
+requires = ["theme"]
+```
+
+cuilo agrega primero las piezas requeridas del mismo pack, a menos que el proyecto ya las tenga. Una pieza requerida recibe los valores que diste para las entradas que ella también declara, como `tests`. Las entradas de texto con un `example`, como `name`, no se pasan, así que dale un `default` a cada entrada con ejemplo de la pieza requerida.
+
+## Paquetes que importa el código
+
+```toml
+[[dependencies]]
+ecosystem = "npm"
+name = "clsx"
+version = "^2.1"
+variants = ["react"]
+```
+
+`ecosystem` es `npm`, `cargo`, `pypi`, `go`, `pub`, `rubygems` o `packagist`. Las claves opcionales son `dev`, `features`, `variants` y `when`. Los planes listan estos paquetes y ofrecen agregarlos con el gestor de paquetes del proyecto; consulta [dependencias](/es-mx/guides/dependencies/).
+
+Un pack también puede incluir migraciones que corren al actualizar; consulta [actualizaciones](/es-mx/guides/updates/).
+
+## Pruébalo localmente
+
+Estos pasos corren en un proyecto de React cuyo `src/app.ts` tiene la línea `// cuilo:cards` que necesitan los parches.
+
+<Steps>
+
+1. Carga la carpeta para comprobar que es válida:
+
+   ```sh
+   cuilo pack add ./my-pack
+   ```
+
+   ```text
+   Loaded acme-ui 0.1.0 from path:./my-pack (not signed by a trusted key)
+   ```
+
+2. Arma el plan de una pieza sin escribir nada:
+
+   ```sh
+   cuilo add acme-ui/card UserProfile --from ./my-pack --dry-run
+   ```
+
+   ```text
+   add acme-ui/card
+     create  src/components/user-profile/user-profile.module.css
+     create  src/components/user-profile/user-profile.tsx
+     modify  src/app.ts
+   Packages to add (offered after applying; --install adds them without asking):
+     npm      clsx ^2.1
+   ```
+
+   Agrega `--diff` para ver los cambios en `src/app.ts`.
+
+3. Prueba otras entradas y variantes, por ejemplo `-i size=large -i styled=false` o `--variant plain`.
+
+4. Aplícalo con `--yes` en un proyecto desechable y corre las revisiones de ese proyecto.
+
+</Steps>
+
+Una carpeta relativa se lee desde la raíz del proyecto, y `cuilo.lock` la registra como `path:./my-pack`. En cuanto aplicas, el lockfile fija el digest del pack, y volver a cargar la carpeta editada falla con `` `path:./my-pack` changed: the lockfile pinned sha256:…, the source now has sha256:… ``. Mientras iteras, usa `--dry-run`, o `cuilo undo` para deshacer lo último que aplicaste. Para pasar un proyecto a tus cambios, sube `version` y corre `cuilo update acme-ui --from ./my-pack`.
+
+:::tip
+Los errores de carga indican el archivo y el problema, por ejemplo `` `pieces/card/piece.toml`: declares dependencies, but `pack.toml` does not set `permissions.dependencies` `` o `` `files/plain/example-card/example-card.ts`: line 3: `@cuilo if` is never closed with `@cuilo end` ``.
+:::
+
+## Empieza con código que ya tienes
+
+`cuilo pack capture` convierte archivos del proyecto en una pieza de un pack local. `--name` indica el texto que se va a reemplazar, que necesita dos o más palabras:
+
+```sh
+cuilo pack capture src/components/user-card/user-card.tsx src/components/user-card/user-card.css --piece card --name UserCard
+```
+
+```text
+capture card into packs/local
+  create  packs/local/pieces/card/files/user-card/user-card.tsx
+  create  packs/local/pieces/card/files/user-card/user-card.css
+  create  packs/local/pieces/card/piece.toml
+  create  packs/local/pack.toml
+```
+
+El `piece.toml` nuevo tiene `target = "src/components"` y una entrada `name` con `example = "UserCard"`, y el `pack.toml` nuevo permite escribir en `src/components/**`, la carpeta que comparten los archivos. A partir de ahí, agrega variantes, condiciones y entradas. Consulta [adoptar y capturar](/es-mx/guides/adopt-and-capture/) y [`cuilo pack capture`](/es-mx/reference/cli/pack/#cuilo-pack-capture).

@@ -1,0 +1,4 @@
+[install]
+# Astro bundles Starlight's Markdown parser (satteri) into the docs' prerender chunks, which then load the
+# parser's native binary from the docs folder; bun's isolated layout keeps that binary out of reach.
+linker = "hoisted"

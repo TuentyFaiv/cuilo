@@ -1,54 +1,36 @@
-# Starlight Starter Kit: Basics
+# cuilo.dev docs
 
-[![Built with Starlight](https://astro.badg.es/v2/built-with-starlight/tiny.svg)](https://starlight.astro.build)
+Astro + Starlight, in English and Spanish (`src/content/docs/es-mx/`), served as static files from Cloudflare
+Workers.
 
-```
-npm create astro@latest -- --template starlight
-```
-
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/withastro/starlight/tree/main/examples/basics)
-[![Open with CodeSandbox](https://assets.codesandbox.io/github/button-edit-lime.svg)](https://codesandbox.io/p/sandbox/github/withastro/starlight/tree/main/examples/basics)
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fwithastro%2Fstarlight%2Ftree%2Fmain%2Fexamples%2Fbasics&project-name=my-starlight-docs&repository-name=my-starlight-docs)
-
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
-
-## 🚀 Project Structure
-
-Inside of your Astro + Starlight project, you'll see the following folders and files:
-
-```
-.
-├── public/
-├── src/
-│   ├── assets/
-│   ├── content/
-│   │   ├── docs/
-│   │   └── config.ts
-│   └── env.d.ts
-├── astro.config.mjs
-├── package.json
-└── tsconfig.json
+```bash
+bun run docs           # from the repository root: dev server
+bun run docs:build     # type check and build into apps/docs/dist
+cargo xtask docs       # regenerate the CLI and schema reference and src/data/packs.json
 ```
 
-Starlight looks for `.md` or `.mdx` files in the `src/content/docs/` directory. Each file is exposed as a route based on its file name.
+The CLI reference, the file references and `src/data/packs.json` are generated; CI fails when they differ from the
+code (`cargo xtask docs --check`).
 
-Images can be added to `src/assets/` and embedded in Markdown with a relative link.
+## Deployment
 
-Static assets, like favicons, can be placed in the `public/` directory.
+[Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) builds and deploys the site from GitHub: a
+push to `main` deploys `cuilo.dev`, and a push to any other branch builds a private preview. Nothing is deployed by
+hand.
 
-## 🧞 Commands
+The settings live in the Cloudflare dashboard (**Workers & Pages** → `cuilo` → **Settings** → **Builds**):
 
-All commands are run from the root of the project, from a terminal:
+| Setting           | Value                                                                                    |
+| ----------------- | ---------------------------------------------------------------------------------------- |
+| Repository        | `TuentyFaiv/cuilo`                                                                       |
+| Production branch | `main`                                                                                   |
+| Root directory    | `/` (the repository root, where `bun.lock` and `bunfig.toml` are)                        |
+| Build command     | `bun install --frozen-lockfile && bun run docs:build`                                    |
+| Deploy command    | `bun run docs:deploy`                                                                    |
+| Preview command   | `bun run docs:deploy-preview`                                                            |
+| Build variables   | `BUN_VERSION` = `1.4.4` (the build image ships an older Bun)                             |
+| Build watch paths | Include `apps/docs/*`, `package.json`, `bun.lock`, `bunfig.toml`, `npm/cli/package.json` |
 
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
-
-## 👀 Want to learn more?
-
-Check out [Starlight’s docs](https://starlight.astro.build/), read [the Astro documentation](https://docs.astro.build), or jump into the [Astro Discord server](https://astro.build/chat).
+`wrangler.jsonc` attaches the `cuilo.dev` custom domain on every deploy and turns on `workers.dev` preview URLs.
+Preview URLs stay private through Cloudflare Access (**Settings** → **Domains & Routes** → **Preview URLs** →
+**Enable Cloudflare Access**, with a policy that allows only the maintainer's email).

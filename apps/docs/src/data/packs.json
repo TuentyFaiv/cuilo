@@ -1,0 +1,600 @@
+[
+  {
+    "description": "Layered backend pieces: REST resources, problem-details errors and middleware for Hono, Express, Axum, FastAPI, chi and Echo.",
+    "license": "MIT",
+    "name": "backend",
+    "permissions": {
+      "dependencies": true,
+      "write": [
+        "src/**",
+        "app/**",
+        "tests/**",
+        "internal/**"
+      ]
+    },
+    "pieces": [
+      {
+        "dependencies": [
+          {
+            "dev": null,
+            "ecosystem": "pypi",
+            "name": "sqlalchemy",
+            "version": ">=2.0"
+          }
+        ],
+        "description": "SQLAlchemy async engine, sessions and the declarative base for FastAPI.",
+        "inputs": [],
+        "kind": "piece",
+        "name": "database",
+        "target": "app",
+        "variants": [
+          "fastapi"
+        ]
+      },
+      {
+        "dependencies": [
+          {
+            "dev": null,
+            "ecosystem": "npm",
+            "name": "zod",
+            "version": "^4.1"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "vitest",
+            "version": "^4.0"
+          },
+          {
+            "dev": null,
+            "ecosystem": "cargo",
+            "name": "thiserror",
+            "version": "2"
+          },
+          {
+            "dev": null,
+            "ecosystem": "cargo",
+            "name": "tracing",
+            "version": "0.1"
+          },
+          {
+            "dev": null,
+            "ecosystem": "cargo",
+            "name": "serde",
+            "version": "1"
+          },
+          {
+            "dev": true,
+            "ecosystem": "cargo",
+            "name": "tokio",
+            "version": "1"
+          },
+          {
+            "dev": true,
+            "ecosystem": "cargo",
+            "name": "serde_json",
+            "version": "1"
+          },
+          {
+            "dev": true,
+            "ecosystem": "pypi",
+            "name": "pytest",
+            "version": ">=8"
+          },
+          {
+            "dev": true,
+            "ecosystem": "pypi",
+            "name": "httpx",
+            "version": ">=0.28"
+          }
+        ],
+        "description": "Application errors rendered as RFC 9457 problem details, with the framework's error handler.",
+        "inputs": [
+          {
+            "default": null,
+            "description": "Add tests; on by default when the project can run them.",
+            "example": null,
+            "name": "tests",
+            "type": "bool"
+          }
+        ],
+        "kind": "piece",
+        "name": "error",
+        "target": "src/shared",
+        "variants": [
+          "hono",
+          "express",
+          "axum",
+          "fastapi",
+          "chi",
+          "echo"
+        ]
+      },
+      {
+        "dependencies": [
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "vitest",
+            "version": "^4.0"
+          },
+          {
+            "dev": null,
+            "ecosystem": "cargo",
+            "name": "uuid",
+            "version": "1"
+          },
+          {
+            "dev": true,
+            "ecosystem": "cargo",
+            "name": "tokio",
+            "version": "1"
+          },
+          {
+            "dev": true,
+            "ecosystem": "cargo",
+            "name": "tower",
+            "version": "0.5"
+          },
+          {
+            "dev": true,
+            "ecosystem": "pypi",
+            "name": "pytest",
+            "version": ">=8"
+          },
+          {
+            "dev": true,
+            "ecosystem": "pypi",
+            "name": "httpx",
+            "version": ">=0.28"
+          },
+          {
+            "dev": null,
+            "ecosystem": "go",
+            "name": "github.com/google/uuid",
+            "version": "v1.6.0"
+          }
+        ],
+        "description": "Middleware that propagates or creates a request header, e.g. `request-id`, and exposes it to handlers.",
+        "inputs": [
+          {
+            "default": null,
+            "description": "Header name without `x-`, e.g. `request-id` or `correlation-id`.",
+            "example": "RequestId",
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "default": null,
+            "description": "Add tests; on by default when the project can run them.",
+            "example": null,
+            "name": "tests",
+            "type": "bool"
+          }
+        ],
+        "kind": "piece",
+        "name": "middleware",
+        "target": "src/shared/middleware",
+        "variants": [
+          "hono",
+          "express",
+          "axum",
+          "fastapi",
+          "chi",
+          "echo"
+        ]
+      },
+      {
+        "dependencies": [
+          {
+            "dev": null,
+            "ecosystem": "npm",
+            "name": "zod",
+            "version": "^4.1"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "vitest",
+            "version": "^4.0"
+          },
+          {
+            "dev": null,
+            "ecosystem": "cargo",
+            "name": "serde",
+            "version": "1"
+          },
+          {
+            "dev": null,
+            "ecosystem": "cargo",
+            "name": "chrono",
+            "version": "0.4"
+          },
+          {
+            "dev": null,
+            "ecosystem": "cargo",
+            "name": "uuid",
+            "version": "1"
+          },
+          {
+            "dev": true,
+            "ecosystem": "cargo",
+            "name": "tokio",
+            "version": "1"
+          },
+          {
+            "dev": true,
+            "ecosystem": "cargo",
+            "name": "tower",
+            "version": "0.5"
+          },
+          {
+            "dev": true,
+            "ecosystem": "cargo",
+            "name": "serde_json",
+            "version": "1"
+          },
+          {
+            "dev": true,
+            "ecosystem": "pypi",
+            "name": "pytest",
+            "version": ">=8"
+          },
+          {
+            "dev": true,
+            "ecosystem": "pypi",
+            "name": "httpx",
+            "version": ">=0.28"
+          },
+          {
+            "dev": null,
+            "ecosystem": "go",
+            "name": "github.com/google/uuid",
+            "version": "v1.6.0"
+          }
+        ],
+        "description": "A REST resource in layers: model, repository, service, routes and tests; adds the `error` piece if missing.",
+        "inputs": [
+          {
+            "default": null,
+            "description": "Singular name, e.g. `blog-post`.",
+            "example": "ExampleItem",
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "default": "example.com/app",
+            "description": "Go module path from `go.mod`.",
+            "example": "example.com/app",
+            "name": "module",
+            "type": "string"
+          },
+          {
+            "default": null,
+            "description": "Plural name for routes, tables and folders, e.g. `blog-posts`.",
+            "example": "ExampleItems",
+            "name": "plural",
+            "type": "string"
+          },
+          {
+            "default": null,
+            "description": "Add tests; on by default when the project can run them.",
+            "example": null,
+            "name": "tests",
+            "type": "bool"
+          }
+        ],
+        "kind": "piece",
+        "name": "resource",
+        "target": "src/modules/example-items",
+        "variants": [
+          "hono",
+          "express",
+          "axum",
+          "fastapi",
+          "chi",
+          "echo"
+        ]
+      }
+    ],
+    "source": "official:backend",
+    "version": "0.1.0"
+  },
+  {
+    "description": "Atomic design UI pieces (atoms, molecules, organisms) for web, Rust and native apps.",
+    "license": "MIT",
+    "name": "ui",
+    "permissions": {
+      "dependencies": true,
+      "write": [
+        "src/ui/**",
+        "lib/ui/**",
+        "test/ui/**",
+        "app/src/main/java/**",
+        "composeApp/src/commonMain/kotlin/**",
+        "Sources/**",
+        "*/UI/**"
+      ]
+    },
+    "pieces": [
+      {
+        "dependencies": [
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "vitest",
+            "version": "^4.0"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@testing-library/react",
+            "version": "^16.3"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@testing-library/dom",
+            "version": "^10.4"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@solidjs/testing-library",
+            "version": "^0.8"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@testing-library/svelte",
+            "version": "^5.2"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@vue/test-utils",
+            "version": "^2.4"
+          }
+        ],
+        "description": "The smallest UI building block, such as a badge, icon or label.",
+        "inputs": [
+          {
+            "default": null,
+            "description": "Component name, e.g. `status-badge`.",
+            "example": "ExampleAtom",
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "default": "app",
+            "description": "App name: the SwiftUI app folder or the Flutter package.",
+            "example": "ExampleApp",
+            "name": "app",
+            "type": "string"
+          },
+          {
+            "default": "com.example.app",
+            "description": "Kotlin package for Jetpack Compose.",
+            "example": "com.example.app",
+            "name": "package",
+            "type": "string"
+          },
+          {
+            "default": null,
+            "description": "Add a test file; on by default when the project can run it.",
+            "example": null,
+            "name": "tests",
+            "type": "bool"
+          }
+        ],
+        "kind": "piece",
+        "name": "atom",
+        "target": "src/ui/atoms",
+        "variants": [
+          "angular",
+          "qwik",
+          "solid",
+          "astro",
+          "svelte",
+          "vue",
+          "react",
+          "lit",
+          "leptos",
+          "dioxus",
+          "yew",
+          "flutter",
+          "compose-multiplatform",
+          "compose",
+          "swiftui-package",
+          "swiftui"
+        ]
+      },
+      {
+        "dependencies": [
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "vitest",
+            "version": "^4.0"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@testing-library/react",
+            "version": "^16.3"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@testing-library/dom",
+            "version": "^10.4"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@solidjs/testing-library",
+            "version": "^0.8"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@testing-library/svelte",
+            "version": "^5.2"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@vue/test-utils",
+            "version": "^2.4"
+          }
+        ],
+        "description": "A small group of atoms with one job, such as a labelled field.",
+        "inputs": [
+          {
+            "default": null,
+            "description": "Component name, e.g. `search-field`.",
+            "example": "ExampleMolecule",
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "default": "app",
+            "description": "App name: the SwiftUI app folder or the Flutter package.",
+            "example": "ExampleApp",
+            "name": "app",
+            "type": "string"
+          },
+          {
+            "default": "com.example.app",
+            "description": "Kotlin package for Jetpack Compose.",
+            "example": "com.example.app",
+            "name": "package",
+            "type": "string"
+          },
+          {
+            "default": null,
+            "description": "Add a test file; on by default when the project can run it.",
+            "example": null,
+            "name": "tests",
+            "type": "bool"
+          }
+        ],
+        "kind": "piece",
+        "name": "molecule",
+        "target": "src/ui/molecules",
+        "variants": [
+          "angular",
+          "qwik",
+          "solid",
+          "astro",
+          "svelte",
+          "vue",
+          "react",
+          "lit",
+          "leptos",
+          "dioxus",
+          "yew",
+          "flutter",
+          "compose-multiplatform",
+          "compose",
+          "swiftui-package",
+          "swiftui"
+        ]
+      },
+      {
+        "dependencies": [
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "vitest",
+            "version": "^4.0"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@testing-library/react",
+            "version": "^16.3"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@testing-library/dom",
+            "version": "^10.4"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@solidjs/testing-library",
+            "version": "^0.8"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@testing-library/svelte",
+            "version": "^5.2"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@vue/test-utils",
+            "version": "^2.4"
+          }
+        ],
+        "description": "A distinct section of an interface built from molecules, such as a header.",
+        "inputs": [
+          {
+            "default": null,
+            "description": "Component name, e.g. `site-header`.",
+            "example": "ExampleOrganism",
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "default": "app",
+            "description": "App name: the SwiftUI app folder or the Flutter package.",
+            "example": "ExampleApp",
+            "name": "app",
+            "type": "string"
+          },
+          {
+            "default": "com.example.app",
+            "description": "Kotlin package for Jetpack Compose.",
+            "example": "com.example.app",
+            "name": "package",
+            "type": "string"
+          },
+          {
+            "default": null,
+            "description": "Add a test file; on by default when the project can run it.",
+            "example": null,
+            "name": "tests",
+            "type": "bool"
+          }
+        ],
+        "kind": "piece",
+        "name": "organism",
+        "target": "src/ui/organisms",
+        "variants": [
+          "angular",
+          "qwik",
+          "solid",
+          "astro",
+          "svelte",
+          "vue",
+          "react",
+          "lit",
+          "leptos",
+          "dioxus",
+          "yew",
+          "flutter",
+          "compose-multiplatform",
+          "compose",
+          "swiftui-package",
+          "swiftui"
+        ]
+      }
+    ],
+    "source": "official:ui",
+    "version": "0.2.0"
+  }
+]

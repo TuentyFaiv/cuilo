@@ -1,0 +1,87 @@
+---
+import Default from "@astrojs/starlight/components/Footer.astro";
+
+import { localized, ui } from "../i18n/ui";
+
+const { locale, entry } = Astro.locals.starlightRoute;
+const t = ui(locale);
+const landing = Boolean(entry.data.hero);
+const links = [
+	{ label: "GitHub", href: "https://github.com/TuentyFaiv/cuilo" },
+	{ label: "llms.txt", href: "/llms.txt" },
+	{ label: t.footerSecurity, href: localized(locale, "/security/") },
+	{ label: t.navChangelog, href: localized(locale, "/changelog/") },
+];
+const markSize = 22;
+---
+
+{!landing && <Default />}
+<div class:list={["site-footer", { landing }]}>
+	<div class="cu-strata" aria-hidden="true"><span /><span /><span /></div>
+	<div class="row">
+		<p class="brand">
+			<img src="/mark.svg" alt="" width={markSize} height={markSize}>
+			<span class="wordmark">cuilo</span>
+			<span class="note">{t.footerNote}</span>
+		</p>
+		<nav class="links" aria-label="Footer">
+			{links.map((link) => <a href={link.href}>{link.label}</a>)}
+		</nav>
+	</div>
+</div>
+
+<style>
+	.site-footer {
+		display: grid;
+		gap: 1.5rem;
+		margin-top: 3rem;
+	}
+
+	.site-footer.landing {
+		padding: 0 clamp(1.25rem, 5vw, 4rem) 2.5rem;
+		margin-top: 0;
+	}
+
+	.row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 1rem 2rem;
+		align-items: center;
+		justify-content: space-between;
+	}
+
+	.brand {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.6rem;
+		align-items: center;
+		margin: 0;
+	}
+
+	.wordmark {
+		font-family: var(--cu-font-display);
+		font-size: 1.1rem;
+		font-weight: 700;
+		color: var(--cu-ink);
+	}
+
+	.note,
+	.links a {
+		font-size: 0.85rem;
+		color: var(--cu-muted);
+	}
+
+	.links {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 1.25rem;
+	}
+
+	.links a {
+		text-decoration: none;
+	}
+
+	.links a:hover {
+		color: var(--cu-ink);
+	}
+</style>

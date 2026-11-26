@@ -1,0 +1,242 @@
+/* Strata: graphite and cochineal. Tokens are `--cu-*`; Starlight's own variables are mapped onto them. */
+
+:root {
+	--cu-font-display: "Bricolage Grotesque Variable", "Inter Variable", system-ui, sans-serif;
+	--cu-font-body: "Inter Variable", system-ui, sans-serif;
+	--cu-font-mono: "Fragment Mono", ui-monospace, "SFMono-Regular", monospace;
+
+	--cu-accent: rgb(184 36 63);
+	--cu-accent-2: rgb(219 110 131);
+	--cu-accent-3: rgb(242 185 196);
+	--cu-accent-ink: rgb(255 255 255);
+
+	--cu-code-bg: rgb(19 22 27);
+	--cu-code-line: rgb(38 42 49);
+	--cu-code-ink: rgb(230 234 240);
+	--cu-code-muted: rgb(138 148 162);
+
+	--cu-radius: 0.75rem;
+	--cu-radius-small: 0.5rem;
+
+	/* Dark theme, Starlight's default. */
+	--cu-bg: rgb(12 13 16);
+	--cu-surface: rgb(21 23 28);
+	--cu-surface-2: rgb(27 30 36);
+	--cu-line: rgb(38 42 49);
+	--cu-ink: rgb(242 242 243);
+	--cu-muted: rgb(139 143 152);
+	--cu-accent-text: rgb(231 121 141);
+	--cu-accent-soft: rgb(42 18 24);
+	--cu-ok: rgb(79 214 156);
+	--cu-del: rgb(242 160 107);
+	--cu-warn: rgb(242 193 78);
+
+	--sl-font: var(--cu-font-body);
+	--sl-font-mono: var(--cu-font-mono);
+	--sl-color-accent-low: var(--cu-accent-soft);
+	--sl-color-accent: var(--cu-accent-text);
+	--sl-color-accent-high: var(--cu-accent-3);
+	--sl-color-white: var(--cu-ink);
+	--sl-color-gray-1: rgb(231 232 235);
+	--sl-color-gray-2: rgb(200 203 209);
+	--sl-color-gray-3: var(--cu-muted);
+	--sl-color-gray-4: rgb(84 89 99);
+	--sl-color-gray-5: var(--cu-line);
+	--sl-color-gray-6: var(--cu-surface);
+	--sl-color-black: var(--cu-bg);
+	--sl-color-bg-nav: var(--cu-bg);
+	--sl-color-bg-sidebar: var(--cu-bg);
+	--sl-color-hairline: var(--cu-line);
+	--sl-color-hairline-light: var(--cu-line);
+	--sl-color-hairline-shade: var(--cu-line);
+
+	--sl-content-width: 48rem;
+	--sl-sidebar-width: 17.5rem;
+	--sl-nav-height: 4rem;
+	--sl-line-height: 1.7;
+	--sl-text-h1: 2.75rem;
+	--sl-text-h2: 1.75rem;
+	--sl-text-h3: 1.3rem;
+}
+
+:root[data-theme="light"] {
+	--cu-bg: rgb(250 250 251);
+	--cu-surface: rgb(255 255 255);
+	--cu-surface-2: rgb(241 242 244);
+	--cu-line: rgb(227 229 233);
+	--cu-ink: rgb(12 13 16);
+	--cu-muted: rgb(91 96 107);
+	--cu-accent-text: rgb(161 31 56);
+	--cu-accent-soft: rgb(251 234 238);
+	--cu-ok: rgb(17 128 79);
+	--cu-del: rgb(180 84 31);
+	--cu-warn: rgb(138 97 0);
+
+	--sl-color-white: var(--cu-ink);
+	--sl-color-gray-1: rgb(27 30 36);
+	--sl-color-gray-2: rgb(58 63 72);
+	--sl-color-gray-3: var(--cu-muted);
+	--sl-color-gray-4: rgb(139 143 152);
+	--sl-color-gray-5: var(--cu-line);
+	--sl-color-gray-6: var(--cu-surface-2);
+	--sl-color-gray-7: rgb(247 247 249);
+	--sl-color-black: var(--cu-bg);
+	--sl-color-accent-low: var(--cu-accent-soft);
+	--sl-color-accent: var(--cu-accent);
+	--sl-color-accent-high: rgb(143 28 49);
+	--sl-color-bg-nav: var(--cu-bg);
+	--sl-color-bg-sidebar: var(--cu-bg);
+}
+
+body {
+	background: var(--cu-bg);
+}
+
+/* Headings in the display face, tightly set. */
+h1,
+h2,
+h3,
+.sl-markdown-content :is(h1, h2, h3, h4) {
+	font-family: var(--cu-font-display);
+	font-weight: 700;
+	letter-spacing: -0.02em;
+}
+
+.sl-markdown-content :is(h2, h3) {
+	font-weight: 650;
+}
+
+.sl-markdown-content a {
+	text-underline-offset: 0.2em;
+}
+
+.sl-markdown-content :not(pre) > code {
+	padding: 0.1em 0.35em;
+	font-size: 0.875em;
+	background: var(--cu-surface-2);
+	border-radius: 0.3rem;
+}
+
+.sl-markdown-content table {
+	display: table;
+	width: 100%;
+	font-size: 0.9375rem;
+	border-collapse: collapse;
+}
+
+.sl-markdown-content :is(th, td) {
+	padding: 0.6rem 0.75rem;
+	vertical-align: top;
+	border-bottom: 1px solid var(--cu-line);
+}
+
+.sl-markdown-content th {
+	font-weight: 600;
+	color: var(--cu-muted);
+	text-align: start;
+}
+
+.sl-markdown-content td:first-child {
+	white-space: nowrap;
+}
+
+/* Sidebar: the active page sits on cochineal, like the design. */
+nav.sidebar a[aria-current="page"],
+nav.sidebar a[aria-current="page"]:hover,
+nav.sidebar a[aria-current="page"]:focus {
+	font-weight: 600;
+	color: var(--cu-ink);
+	background: var(--cu-accent-soft);
+}
+
+nav.sidebar .group-label .large {
+	font-size: 0.75rem;
+	font-weight: 600;
+	color: var(--cu-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+/* Asides take the brand's three tones. */
+.starlight-aside--tip,
+.starlight-aside--note {
+	--sl-color-asides-text-accent: var(--cu-accent-text);
+	--sl-color-asides-border: var(--cu-accent);
+	background: var(--cu-accent-soft);
+}
+
+/* The three-stripe rule used between sections. */
+.cu-strata {
+	display: grid;
+	gap: 3px;
+}
+
+.cu-strata > span {
+	height: 1px;
+}
+
+.cu-strata > span:nth-child(1) {
+	background: var(--cu-accent);
+}
+
+.cu-strata > span:nth-child(2) {
+	background: var(--cu-accent-2);
+}
+
+.cu-strata > span:nth-child(3) {
+	background: var(--cu-accent-3);
+}
+
+/* Shared pieces of the landing, directory and pack pages. */
+.cu-button {
+	display: inline-flex;
+	gap: 0.5rem;
+	align-items: center;
+	padding: 0.75rem 1.25rem;
+	font-weight: 600;
+	text-decoration: none;
+	border: 1px solid transparent;
+	border-radius: var(--cu-radius);
+}
+
+.cu-button--primary {
+	color: var(--cu-accent-ink);
+	background: var(--cu-accent);
+}
+
+.cu-button--primary:hover {
+	color: var(--cu-accent-ink);
+	background: rgb(160 30 54);
+}
+
+.cu-button--secondary {
+	color: var(--cu-ink);
+	border-color: var(--cu-line);
+}
+
+.cu-button--secondary:hover {
+	color: var(--cu-ink);
+	border-color: var(--cu-muted);
+}
+
+.cu-chip {
+	display: inline-block;
+	padding: 0.15rem 0.5rem;
+	font-size: 0.75rem;
+	line-height: 1.5;
+	color: var(--cu-muted);
+	white-space: nowrap;
+	background: var(--cu-surface-2);
+	border-radius: 0.375rem;
+}
+
+.cu-mono {
+	font-family: var(--cu-font-mono);
+}
+
+.cu-card {
+	padding: 1.25rem;
+	background: var(--cu-surface);
+	border: 1px solid var(--cu-line);
+	border-radius: var(--cu-radius);
+}

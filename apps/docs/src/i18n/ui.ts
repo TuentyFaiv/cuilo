@@ -1,0 +1,211 @@
+/** Text of the site's own components, in every locale the docs ship. Starlight translates its own UI. */
+const english = {
+	navDocs: "Docs",
+	navDirectory: "Directory",
+	navCli: "CLI",
+	navAgents: "Agents",
+	navChangelog: "Changelog",
+	versionLabel: "alpha",
+	footerNote: "MIT License · built with Astro and Starlight",
+	footerSecurity: "Security",
+	generatedFrom: "Generated from",
+	heroEyebrow: "Three-way merges for generated code",
+	installNote: "Checks the SHA-256, and the minisign signature when minisign is installed.",
+	installUnix: "macOS and Linux",
+	installWindows: "Windows",
+	layersGenerated: "Generated",
+	layersPack: "The pack changed",
+	layersYours: "You get",
+	layersMerged: "merged · no conflicts",
+	layersLegendGenerated: "what cuilo generated",
+	layersLegendPack: "what the pack changed",
+	layersLegendYours: "what you changed",
+	searchTitle: "Find a piece for your stack.",
+	searchLead: "Search the official pieces and filter them by the framework you use.",
+	searchLabel: "Search pieces",
+	searchPlaceholder: "Search pieces: resource, atom, middleware…",
+	stackLabel: "Stack",
+	stackAny: "Any stack",
+	searchEmpty: "No piece matches. Try another word or stack.",
+	notForStack: "Not for this stack",
+	official: "official",
+	stacksEyebrow: "cuilo add ui/atom StatusBadge",
+	stacksTitle: "One piece.\n{count} stacks.",
+	stacksLead:
+		"Cuilo detects your framework, language and tools, then writes the variant that fits: file names, folders, tests and styles included.",
+	file: "file",
+	files: "files",
+	updatesTitle: "Pack updates that keep your edits.",
+	updatesLead:
+		"The lockfile remembers what each file looked like when it was generated. Cuilo merges new pack versions three ways, like git, so your edits stay. With --review you keep or skip each hunk; where both sides changed the same lines, --on-conflict decides: refuse (the default), git's markers, yours or theirs.",
+	updatesWhy: "explains where a line came from",
+	updatesUndo: "reverts the whole transaction",
+	updatesJson: "gives agents the same diffs",
+	featuresTitle: "Safe by default, all the way down.",
+	featurePacksTitle: "Packs from anywhere",
+	featurePacksBody:
+		"Official packs ship inside the binary. Add more from gh:, git:, a tarball or a folder, each pinned in cuilo.lock.",
+	featureSignedTitle: "Signed and pinned",
+	featureSignedBody:
+		"Packs can be signed with minisign. Cuilo records the key and refuses a later version signed by another.",
+	featureChecksTitle: "Checks before writes",
+	featureChecksBody:
+		"--verify runs your project's own checks on a private copy, after you agree, before anything lands.",
+	featureAgentsTitle: "Made for agents",
+	featureAgentsBody: "cuilo mcp gives agents plan, apply, status and why. They see the same plan you do.",
+	directoryCount: "packs",
+	directoryTrust: "Trust",
+	directoryBuiltIn: "Built in",
+	directoryReviewed: "Reviewed",
+	directorySigned: "Signed, not reviewed",
+	directoryCommunity:
+		"The community directory opens with the first release: anyone will be able to list a pack they host, as Reviewed or Signed.",
+	pieces: "pieces",
+	stacks: "stacks",
+	packPieces: "Pieces",
+	packDetails: "Details",
+	packSource: "Source",
+	packVersion: "Version",
+	packLicense: "License",
+	packSignature: "Signature",
+	packShipsInside: "Ships inside cuilo",
+	packLockfile: "Lockfile",
+	packPinned: "pinned by SHA-256",
+	packMayWrite: "May write",
+	packDependencies: "May add packages; you approve them in the plan.",
+	packStacks: "Stacks",
+	packInputs: "Inputs",
+	packWritesTo: "Writes to",
+	packNeeds: "Packages it may add",
+	required: "required",
+	copy: "Copy",
+	copied: "Copied",
+};
+
+type UiStrings = typeof english;
+
+const spanish: UiStrings = {
+	navDocs: "Docs",
+	navDirectory: "Directorio",
+	navCli: "CLI",
+	navAgents: "Agentes",
+	navChangelog: "Cambios",
+	versionLabel: "alfa",
+	footerNote: "Licencia MIT · hecho con Astro y Starlight",
+	footerSecurity: "Seguridad",
+	generatedFrom: "Generado desde",
+	heroEyebrow: "Fusiones de tres vías para código generado",
+	installNote: "Revisa el SHA-256, y la firma de minisign si lo tienes instalado.",
+	installUnix: "macOS y Linux",
+	installWindows: "Windows",
+	layersGenerated: "Generado",
+	layersPack: "El pack cambió",
+	layersYours: "Obtienes",
+	layersMerged: "fusionado · sin conflictos",
+	layersLegendGenerated: "lo que cuilo generó",
+	layersLegendPack: "lo que cambió el pack",
+	layersLegendYours: "lo que cambiaste tú",
+	searchTitle: "Encuentra una pieza para tu stack.",
+	searchLead: "Busca entre las piezas oficiales y fíltralas por el framework que usas.",
+	searchLabel: "Buscar piezas",
+	searchPlaceholder: "Busca piezas: resource, atom, middleware…",
+	stackLabel: "Stack",
+	stackAny: "Cualquier stack",
+	searchEmpty: "Ninguna pieza coincide. Prueba otra palabra u otro stack.",
+	notForStack: "No es para este stack",
+	official: "oficial",
+	stacksEyebrow: "cuilo add ui/atom StatusBadge",
+	stacksTitle: "Una pieza.\n{count} stacks.",
+	stacksLead:
+		"Cuilo detecta tu framework, lenguaje y herramientas, y escribe la variante que encaja: nombres de archivo, carpetas, pruebas y estilos incluidos.",
+	file: "archivo",
+	files: "archivos",
+	updatesTitle: "Actualizaciones de packs que conservan tus cambios.",
+	updatesLead:
+		"El lockfile recuerda cómo era cada archivo cuando se generó. Cuilo fusiona las versiones nuevas del pack en tres vías, como git, para que tus cambios se queden. Con --review conservas u omites cada fragmento; donde ambos lados cambiaron las mismas líneas, --on-conflict decide: rechazar (por defecto), los marcadores de git, lo tuyo o lo del pack.",
+	updatesWhy: "explica de dónde viene una línea",
+	updatesUndo: "revierte toda la transacción",
+	updatesJson: "da a los agentes los mismos diffs",
+	featuresTitle: "Seguro por defecto, de principio a fin.",
+	featurePacksTitle: "Packs de cualquier lugar",
+	featurePacksBody:
+		"Los packs oficiales vienen dentro del binario. Agrega más desde gh:, git:, un tarball o una carpeta, cada uno fijado en cuilo.lock.",
+	featureSignedTitle: "Firmados y fijados",
+	featureSignedBody:
+		"Los packs pueden firmarse con minisign. Cuilo guarda la llave y rechaza una versión posterior firmada por otra.",
+	featureChecksTitle: "Revisiones antes de escribir",
+	featureChecksBody:
+		"--verify corre las revisiones de tu proyecto en una copia privada, después de que aceptas, antes de escribir nada.",
+	featureAgentsTitle: "Hecho para agentes",
+	featureAgentsBody: "cuilo mcp da a los agentes plan, apply, status y why. Ven el mismo plan que tú.",
+	directoryCount: "packs",
+	directoryTrust: "Confianza",
+	directoryBuiltIn: "Incluido",
+	directoryReviewed: "Revisado",
+	directorySigned: "Firmado, sin revisar",
+	directoryCommunity:
+		"El directorio de la comunidad abre con la primera versión: cualquiera podrá listar un pack que hospede, como Revisado o Firmado.",
+	pieces: "piezas",
+	stacks: "stacks",
+	packPieces: "Piezas",
+	packDetails: "Detalles",
+	packSource: "Origen",
+	packVersion: "Versión",
+	packLicense: "Licencia",
+	packSignature: "Firma",
+	packShipsInside: "Viene dentro de cuilo",
+	packLockfile: "Lockfile",
+	packPinned: "fijado por SHA-256",
+	packMayWrite: "Puede escribir",
+	packDependencies: "Puede agregar paquetes; los apruebas en el plan.",
+	packStacks: "Stacks",
+	packInputs: "Entradas",
+	packWritesTo: "Escribe en",
+	packNeeds: "Paquetes que puede agregar",
+	required: "obligatoria",
+	copy: "Copiar",
+	copied: "Copiado",
+};
+
+const byLocale: Record<string, UiStrings> = { "es-mx": spanish };
+
+/** The strings for a Starlight locale (`undefined` for the root, English). */
+export function ui(locale: string | undefined): UiStrings {
+	return (locale && byLocale[locale]) || english;
+}
+
+/** `path` under the locale's prefix, e.g. `/es-mx/install/`. */
+export function localized(locale: string | undefined, path: string): string {
+	return locale ? `/${locale}${path}` : path;
+}
+
+/** Display names of the variants packs declare, which are also the stacks they support. */
+const stackNames: Record<string, string> = {
+	angular: "Angular",
+	astro: "Astro",
+	axum: "Axum",
+	chi: "chi",
+	compose: "Jetpack Compose",
+	"compose-multiplatform": "Compose Multiplatform",
+	dioxus: "Dioxus",
+	echo: "Echo",
+	express: "Express",
+	fastapi: "FastAPI",
+	flutter: "Flutter",
+	hono: "Hono",
+	leptos: "Leptos",
+	lit: "Lit",
+	qwik: "Qwik",
+	react: "React",
+	solid: "Solid",
+	svelte: "Svelte",
+	swiftui: "SwiftUI",
+	"swiftui-package": "SwiftUI",
+	vue: "Vue",
+	yew: "Yew",
+};
+
+/** The display name of a variant. */
+export function stackName(variant: string): string {
+	return stackNames[variant] ?? variant;
+}

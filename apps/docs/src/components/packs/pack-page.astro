@@ -1,0 +1,277 @@
+---
+import { Icon } from "@astrojs/starlight/components";
+
+import packs from "../../data/packs.json" with { type: "json" };
+import { stackName, ui } from "../../i18n/ui";
+
+interface Props {
+	/** The pack to show, by name. */
+	name: string;
+}
+
+const { name } = Astro.props;
+const { locale } = Astro.locals.starlightRoute;
+const t = ui(locale);
+const pack = packs.find((candidate) => candidate.name === name);
+if (!pack) {
+	throw new Error(`no pack named ${name} in src/data/packs.json; run cargo xtask docs`);
+}
+const stacks = [...new Set(pack.pieces.flatMap((piece) => piece.variants.map((variant) => stackName(variant))))];
+/** The first `code` span of a description. */
+const CODE_SPAN = /`([^`]+)`/;
+const exampleName = (description: string | null | undefined) => description?.match(CODE_SPAN)?.[1] ?? "example";
+const pieces = pack.pieces.map((piece) => ({
+	...piece,
+	command: `cuilo add ${pack.name}/${piece.name} ${exampleName(piece.inputs.find((input) => input.name === "name")?.description)}`,
+	packages: [...new Set(piece.dependencies.map((dependency) => `${dependency.name} (${dependency.ecosystem})`))],
+}));
+const details = [
+	[t.packSource, pack.source],
+	[t.packVersion, pack.version],
+	[t.packLicense, pack.license ?? "—"],
+	[t.packSignature, t.packShipsInside],
+	[t.packLockfile, t.packPinned],
+];
+---
+
+<div class="pack not-content">
+	<div class="overview">
+		<section class="cu-card">
+			<h2>{t.packDetails}</h2>
+			<dl>
+				{details.map(([key, value]) => (
+					<>
+						<dt>{key}</dt>
+						<dd class="cu-mono">{value}</dd>
+					</>
+				))}
+			</dl>
+		</section>
+		<section class="cu-card">
+			<h2>{t.packMayWrite}</h2>
+			<ul class="globs">
+				{(pack.permissions.write ?? []).map((glob) => <li class="cu-mono">{glob}</li>)}
+			</ul>
+			{pack.permissions.dependencies && (
+				<p class="note">
+					<Icon name="information" size="1rem" />
+					{t.packDependencies}
+				</p>
+			)}
+		</section>
+		<section class="cu-card">
+			<h2>{t.packStacks}</h2>
+			<p class="chips">{stacks.map((stack) => <span class="cu-chip">{stack}</span>)}</p>
+		</section>
+	</div>
+
+	<h2 class="pieces-title">{t.packPieces}</h2>
+	{pieces.map((piece) => (
+		<section class="cu-card piece" id={piece.name}>
+			<div class="piece-head">
+				<h3 class="cu-mono">{`${pack.name}/${piece.name}`}</h3>
+				<code class="command">{piece.command}</code>
+			</div>
+			<p>{piece.description}</p>
+			<table>
+				<caption class="sr-only">{t.packInputs}</caption>
+				<tbody>
+					{piece.inputs.map((input) => (
+						<tr>
+							<th scope="row">
+								<code>{input.name}</code> <span class="type">{input.type}</span>
+							</th>
+							<td>
+								{input.description}
+								{input.default !== null && input.default !== undefined && (
+									<span class="default">
+										{" "}
+										= <code>{String(input.default)}</code>
+									</span>
+								)}
+							</td>
+						</tr>
+					))}
+				</tbody>
+			</table>
+			<p class="meta">
+				<Icon name="document" size="1rem" />
+				{t.packWritesTo} <code>{piece.target || "/"}</code>
+			</p>
+			<p class="chips">
+				{[...new Set(piece.variants.map((variant) => stackName(variant)))].map((stack) => (
+					<span class="cu-chip">{stack}</span>
+				))}
+			</p>
+			{piece.packages.length > 0 && (
+				<details>
+					<summary>{t.packNeeds}</summary>
+					<ul>
+						{piece.packages.map((item) => (
+							<li class="cu-mono">{item}</li>
+						))}
+					</ul>
+				</details>
+			)}
+		</section>
+	))}
+</div>
+
+<style>
+	.pack {
+		display: grid;
+		gap: 1rem;
+		margin-top: 2rem;
+	}
+
+	.overview {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+		gap: 1rem;
+	}
+
+	h2 {
+		margin: 0 0 0.75rem;
+		font-family: var(--cu-font-body);
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: var(--cu-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+
+	.pieces-title {
+		margin-top: 1.5rem;
+	}
+
+	dl {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: 0.4rem 0.75rem;
+		margin: 0;
+		font-size: 0.85rem;
+	}
+
+	dt {
+		color: var(--cu-muted);
+	}
+
+	dd {
+		margin: 0;
+		text-align: end;
+		word-break: break-all;
+	}
+
+	.globs {
+		display: grid;
+		gap: 0.25rem;
+		padding: 0;
+		margin: 0;
+		font-size: 0.8rem;
+		list-style: none;
+	}
+
+	.note,
+	.meta {
+		display: flex;
+		gap: 0.5rem;
+		align-items: center;
+		margin: 0.75rem 0 0;
+		font-size: 0.85rem;
+		color: var(--cu-muted);
+	}
+
+	.chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.3rem;
+		margin: 0.75rem 0 0;
+	}
+
+	.piece {
+		display: grid;
+		gap: 0.5rem;
+		scroll-margin-top: calc(var(--sl-nav-height) + 1rem);
+	}
+
+	.piece > p {
+		margin: 0;
+	}
+
+	.piece-head {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem 1rem;
+		align-items: center;
+		justify-content: space-between;
+	}
+
+	.piece-head h3 {
+		margin: 0;
+		font-size: 1.05rem;
+		color: var(--cu-ink);
+	}
+
+	.command {
+		padding: 0.25rem 0.6rem;
+		font-family: var(--cu-font-mono);
+		font-size: 0.78rem;
+		background: var(--cu-surface-2);
+		border-radius: var(--cu-radius-small);
+	}
+
+	table {
+		width: 100%;
+		margin-top: 0.5rem;
+		font-size: 0.88rem;
+		border-collapse: collapse;
+	}
+
+	th,
+	td {
+		padding: 0.55rem 0;
+		vertical-align: top;
+		text-align: start;
+		border-top: 1px solid var(--cu-line);
+	}
+
+	th {
+		width: 11rem;
+		font-weight: 500;
+		white-space: nowrap;
+	}
+
+	th code {
+		font-family: var(--cu-font-mono);
+		color: var(--cu-accent-text);
+	}
+
+	td {
+		color: var(--cu-muted);
+	}
+
+	.type {
+		font-family: var(--cu-font-mono);
+		font-size: 0.75rem;
+		color: var(--cu-muted);
+	}
+
+	.default code {
+		font-family: var(--cu-font-mono);
+	}
+
+	details {
+		margin-top: 0.5rem;
+		font-size: 0.85rem;
+	}
+
+	summary {
+		color: var(--cu-muted);
+		cursor: pointer;
+	}
+
+	details ul {
+		padding-left: 1.25rem;
+		margin: 0.5rem 0 0;
+	}
+</style>

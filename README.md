@@ -145,24 +145,30 @@ packs/
   ui/                official atomic UI pieces: atom, molecule, organism (web, Rust, native)
   backend/           official backend pieces: resource, error, middleware, database
 schemas/             JSON Schemas for pack.toml, piece.toml, cuilo.lock and config
-apps/docs/           legacy v1 docs starter, replaced in Phase 7
+apps/docs/           the cuilo.dev docs site (Astro + Starlight, English and Spanish), served as
+                       static files from Cloudflare Workers
 install/             install.sh and install.ps1, served from the download host
 ```
 
 ## Development
 
 Requirements: [rustup](https://rustup.rs) (the pinned toolchain in `rust-toolchain.toml` installs automatically) and
-[Bun](https://bun.sh) ≥ 1.4.4 for Biome.
+[Bun](https://bun.sh) ≥ 1.4.4 for Biome and the docs site.
 
 ```bash
-bun install            # Biome only, for JSON/JS formatting and linting
+bun install            # Biome and the docs site
 cargo xtask ci         # everything CI runs: fmt, clippy, rustdoc, tests, cargo-deny, Biome
 cargo xtask fmt        # or a single step: fmt | lint | doc | test | deny | js
 cargo xtask schema     # regenerate schemas/ after changing a file format
+cargo xtask docs       # regenerate the docs site's CLI and schema reference and pack data
+bun run docs           # run the docs site locally; bun run docs:build builds it
 cargo run -- --help    # run the CLI
 ```
 
 `cargo xtask deny` needs [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) on your `PATH`.
+
+The docs site deploys through Cloudflare Workers Builds on every push to `main`; its settings are in
+[`apps/docs/README.md`](apps/docs/README.md).
 
 ### Conventions
 

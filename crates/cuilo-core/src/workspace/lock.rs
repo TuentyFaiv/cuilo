@@ -35,7 +35,7 @@ pub struct PackRecord {
 	pub name: Name,
 	/// Pack version.
 	pub version: Version,
-	/// Where it came from, e.g. `gh:acme/packs@v1.2.0`; absent for a folder on this machine.
+	/// Where it came from, e.g. `gh:acme/packs@v1.2.0` or `path:./packs/mine`; absent for a folder given by absolute path.
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub source: Option<String>,
 	/// SHA-256 of every file in the pack; a different hash for the same version is refused.
