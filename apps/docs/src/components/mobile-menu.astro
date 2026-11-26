@@ -1,0 +1,56 @@
+---
+import MobileMenuFooter from "@astrojs/starlight/components/MobileMenuFooter.astro";
+import MobileMenuToggle from "@astrojs/starlight/components/MobileMenuToggle.astro";
+
+import SectionTabs from "./section-tabs.astro";
+---
+
+<div class="menu lg:sl-hidden print:hidden">
+	<MobileMenuToggle />
+	<div popover id="starlight__sidebar" class="pane" data-mobile-menu>
+		<div class="pane-content">
+			<SectionTabs />
+			<div class="md:sl-hidden"><MobileMenuFooter /></div>
+		</div>
+	</div>
+</div>
+
+<script>
+	/** Keeps keyboard focus in the header and menu while the menu is open, as Starlight's own menu does. */
+	function trapFocus(open: boolean) {
+		for (const element of document.querySelectorAll(".main-frame, .sl-skip-link")) {
+			element.toggleAttribute("inert", open);
+		}
+	}
+
+	document
+		.querySelector("[data-mobile-menu]")
+		?.addEventListener("toggle", (event) => trapFocus((event as ToggleEvent).newState === "open"));
+</script>
+
+<style>
+	.menu :global(.sl-menu-button) {
+		display: flex;
+	}
+
+	.pane {
+		position: fixed;
+		inset-block: var(--sl-nav-height) 0;
+		inset-inline-start: 0;
+		width: 100%;
+		height: unset;
+		padding: unset;
+		overflow-y: auto;
+		scrollbar-gutter: stable;
+		color: unset;
+		background: var(--cu-bg);
+		border: unset;
+	}
+
+	.pane-content {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		padding: 1rem var(--sl-sidebar-pad-x) 0;
+	}
+</style>

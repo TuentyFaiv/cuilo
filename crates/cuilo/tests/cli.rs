@@ -383,7 +383,8 @@ fn copy_in(bin: &std::path::Path) -> Result<std::path::PathBuf, Box<dyn Error>> 
 }
 
 /// A copy of this build where a global npm install puts it, and a `PATH` whose fake `npm` prints
-/// `npm says hi`, saves its arguments in `npm-args` and exits with `status`.
+/// `npm says hi`, saves its arguments in `npm-args` and the folder it runs in in `npm-pwd`, and exits
+/// with `status`.
 #[cfg(unix)]
 fn npm_install(dir: &std::path::Path, status: u8) -> Result<(std::path::PathBuf, String), Box<dyn Error>> {
 	let exe = copy_in(&dir.join("lib/node_modules/@cuilo/cli-test/bin"))?;
@@ -392,8 +393,9 @@ fn npm_install(dir: &std::path::Path, status: u8) -> Result<(std::path::PathBuf,
 	write_executable(
 		&fakes.join("npm"),
 		&format!(
-			"#!/bin/sh\necho \"$@\" > '{}'\necho npm says hi\nexit {status}\n",
-			dir.join("npm-args").display()
+			"#!/bin/sh\necho \"$@\" > '{}'\npwd -P > '{}'\necho npm says hi\nexit {status}\n",
+			dir.join("npm-args").display(),
+			dir.join("npm-pwd").display()
 		),
 	)?;
 	Ok((exe, format!("{}:/usr/bin:/bin", fakes.display())))
@@ -408,6 +410,7 @@ fn upgrade_should_run_npm_for_an_npm_install_and_keep_stdout_json() -> TestResul
 	let output = Command::new(&exe)
 		.args(["--json", "upgrade", "--version", "99.0.0"])
 		.env("PATH", &path)
+		.env("CUILO_CACHE_DIR", dir.path().join("cache"))
 		.output()?;
 
 	let stderr = String::from_utf8_lossy(&output.stderr);
@@ -436,10 +439,47 @@ fn upgrade_should_fail_naming_the_npm_command_that_failed() -> TestResult {
 	Command::new(&exe)
 		.args(["upgrade", "--version", "99.0.0"])
 		.env("PATH", &path)
+		.env("CUILO_CACHE_DIR", dir.path().join("cache"))
 		.assert()
 		.code(1)
 		.stdout(contains("npm says hi"))
 		.stderr(contains("`npm install --global @cuilo/cli@99.0.0` failed"));
+	Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn upgrade_should_run_the_package_manager_in_the_cache_folder_never_the_caller_s() -> TestResult {
+	let dir = tempfile::tempdir()?;
+	let (exe, path) = npm_install(dir.path(), 0)?;
+	let project = dir.path().join("project");
+	let home = dir.path().join("home");
+	std::fs::create_dir_all(&project)?;
+	std::fs::create_dir_all(&home)?;
+	let cache = dir.path().join("cache");
+	let upgrade = |cache: &std::path::Path| -> Result<String, Box<dyn Error>> {
+		Command::new(&exe)
+			.args(["upgrade", "--version", "99.0.0"])
+			.current_dir(&project)
+			.env("PATH", &path)
+			.env("HOME", &home)
+			.env("CUILO_CACHE_DIR", cache)
+			.assert()
+			.success();
+		Ok(
+			std::fs::read_to_string(dir.path().join("npm-pwd"))?
+				.trim_end()
+				.to_owned(),
+		)
+	};
+
+	assert_eq!(upgrade(&cache)?, cache.canonicalize()?.to_string_lossy());
+	assert_eq!(
+		upgrade(std::path::Path::new("cache"))?,
+		home.canonicalize()?.to_string_lossy(),
+		"a relative cache folder is inside the caller's"
+	);
+	assert!(!project.join("cache").exists());
 	Ok(())
 }
 

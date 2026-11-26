@@ -41,6 +41,8 @@ tempfile.workspace = true
 [package.metadata.binstall]
 pkg-url = "https://dl.cuilo.dev/v{ version }/{ name }-{ target }{ binary-ext }"
 pkg-fmt = "bin"
+# QuickInstall serves third-party builds that the release key never signed.
+disabled-strategies = ["quick-install"]
 
 # cargo-binstall refuses a binary whose minisign signature does not match this key.
 [package.metadata.binstall.signing]

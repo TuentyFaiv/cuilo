@@ -20,7 +20,7 @@ Un origen es un texto que indica de dónde viene un pack. Pásalo a `--from` en 
 
 ### Oficial
 
-`ui` y `backend` vienen dentro del binario de cuilo, así que cargan sin descargar nada, y una versión más nueva de cuilo trae su siguiente versión. Un nombre sin prefijo se lee como un pack oficial; `official:<name>` lo indica de forma explícita. Consulta [ui](/es-mx/packs/ui/) y [backend](/es-mx/packs/backend/).
+`ui` y `backend` vienen dentro del binario de cuilo, así que cargan sin descargar nada, y una versión más nueva de cuilo trae su siguiente versión. Un nombre sin prefijo se lee como un pack oficial; `official:<name>` lo indica de forma explícita. Consulta [ui](/es-mx/directory/ui/) y [backend](/es-mx/directory/backend/).
 
 ### Carpeta
 

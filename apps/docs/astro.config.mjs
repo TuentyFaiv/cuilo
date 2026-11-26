@@ -64,8 +64,12 @@ export default defineConfig({
 				// biome-ignore lint/style/useNamingConvention: Starlight component override key
 				PageTitle: "./src/components/page-title.astro",
 				// biome-ignore lint/style/useNamingConvention: Starlight component override key
+				Sidebar: "./src/components/sidebar.astro",
+				// biome-ignore lint/style/useNamingConvention: Starlight component override key
 				SiteTitle: "./src/components/site-title.astro",
 			},
+			routeMiddleware: "./src/route-data.ts",
+			// Each page shows only the groups of its section in src/sections.ts.
 			sidebar: [
 				{
 					label: "Start here",
@@ -87,40 +91,36 @@ export default defineConfig({
 					],
 				},
 				{
-					label: "Reference",
-					translations: { [spanish]: "Referencia" },
+					label: "Build packs",
+					translations: { [spanish]: "Crear packs" },
+					items: ["packs/write-a-pack", "packs/sources", "packs/signing", "packs/registry-items"],
+				},
+				{
+					label: "More",
+					translations: { [spanish]: "Más" },
+					items: ["security", "migrating-from-v1"],
+				},
+				{ label: "CLI", items: [{ autogenerate: { directory: "reference/cli" } }] },
+				{
+					label: "Files",
+					translations: { [spanish]: "Archivos" },
 					items: [
-						{ label: "CLI", collapsed: true, items: [{ autogenerate: { directory: "reference/cli" } }] },
 						page("reference/configuration", "Configuration", "Configuración"),
 						page("reference/user-config", "User config", "Configuración de usuario"),
 						page("reference/lockfile", "Lockfile", "Lockfile"),
 						page("reference/pack-manifest", "Pack manifest", "Manifiesto del pack"),
 						page("reference/piece-manifest", "Piece manifest", "Manifiesto de la pieza"),
-						"reference/environment",
-						"reference/exit-codes",
 					],
 				},
 				{
-					label: "Packs",
-					items: [
-						"packs/directory",
-						"packs/ui",
-						"packs/backend",
-						"packs/write-a-pack",
-						"packs/sources",
-						"packs/signing",
-						"packs/registry-items",
-					],
+					label: "Runtime",
+					translations: { [spanish]: "Ejecución" },
+					items: ["reference/environment", "reference/exit-codes"],
 				},
 				{
 					label: "Agents",
 					translations: { [spanish]: "Agentes" },
 					items: ["agents/mcp", "agents/llms-txt"],
-				},
-				{
-					label: "More",
-					translations: { [spanish]: "Más" },
-					items: ["security", "migrating-from-v1", "changelog"],
 				},
 			],
 		}),

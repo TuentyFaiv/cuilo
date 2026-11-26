@@ -1,13 +1,25 @@
 ---
 import Default from "@astrojs/starlight/components/PageTitle.astro";
 
-import { ui } from "../i18n/ui";
+import { localized, ui } from "../i18n/ui";
+import { parentSection } from "../sections";
 
 const { entry, locale } = Astro.locals.starlightRoute;
 const t = ui(locale);
 const { generated } = entry.data;
+const parent = parentSection(Astro.url.pathname, locale);
 ---
 
+{parent && (
+	<nav class="breadcrumb" aria-label={t.breadcrumb}>
+		<ol>
+			<li>
+				<a href={localized(locale, parent.link)}>{t[parent.label]}</a>
+			</li>
+			<li aria-current="page">{entry.data.title}</li>
+		</ol>
+	</nav>
+)}
 <Default />
 {generated && (
 	<p class="generated">
@@ -17,6 +29,36 @@ const { generated } = entry.data;
 )}
 
 <style>
+	.breadcrumb ol {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		padding: 0;
+		margin: 0;
+		font-size: 0.9rem;
+		color: var(--cu-muted);
+		list-style: none;
+	}
+
+	.breadcrumb li + li::before {
+		margin-inline-end: 0.5rem;
+		content: "›";
+	}
+
+	.breadcrumb a {
+		color: var(--cu-muted);
+		text-decoration: none;
+	}
+
+	.breadcrumb a:hover {
+		color: var(--cu-ink);
+	}
+
+	.breadcrumb [aria-current="page"] {
+		font-family: var(--cu-font-mono);
+		color: var(--cu-ink);
+	}
+
 	.generated {
 		display: inline-flex;
 		gap: 0.5rem;

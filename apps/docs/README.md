@@ -12,6 +12,13 @@ cargo xtask docs       # regenerate the CLI and schema reference and src/data/pa
 The CLI reference, the file references and `src/data/packs.json` are generated; CI fails when they differ from the
 code (`cargo xtask docs --check`).
 
+## Navigation
+
+The header tabs come from the sections in `src/sections.ts`, keyed by path prefix. The sidebar groups live in
+`astro.config.mjs`, and `src/route-data.ts` shows each page only its own section's groups, with Previous and Next
+links that stay inside the section. When a page moves, add its old URL to `public/_redirects`, with and without the
+trailing slash.
+
 ## Deployment
 
 [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) builds and deploys the site from GitHub: a

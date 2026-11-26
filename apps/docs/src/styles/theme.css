@@ -116,10 +116,18 @@ h3,
 }
 
 .sl-markdown-content table {
-	display: table;
-	width: 100%;
+	display: block;
+	max-width: 100%;
+	overflow-x: auto;
 	font-size: 0.9375rem;
 	border-collapse: collapse;
+}
+
+@media (min-width: 50rem) {
+	.sl-markdown-content table {
+		display: table;
+		width: 100%;
+	}
 }
 
 .sl-markdown-content :is(th, td) {

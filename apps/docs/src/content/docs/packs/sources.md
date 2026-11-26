@@ -20,7 +20,7 @@ A source is one string that says where a pack comes from. Pass it to `--from` on
 
 ### Official
 
-`ui` and `backend` ship inside the cuilo binary, so they load without a download, and a newer cuilo brings their next version. A bare name is read as an official pack; `official:<name>` says so explicitly. See [ui](/packs/ui/) and [backend](/packs/backend/).
+`ui` and `backend` ship inside the cuilo binary, so they load without a download, and a newer cuilo brings their next version. A bare name is read as an official pack; `official:<name>` says so explicitly. See [ui](/directory/ui/) and [backend](/directory/backend/).
 
 ### Folder
 

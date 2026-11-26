@@ -451,9 +451,10 @@ fn check(proposal: Proposal, workspace: &Workspace, rules: &Rules<'_>) -> Result
 	};
 
 	let unsafe_entry = |error: WorkspaceError| match error {
-		WorkspaceError::Symlink(_) | WorkspaceError::NotADir(_) | WorkspaceError::NotAFile(_) => {
-			problem(ProblemKind::Unsafe, &error.to_string())
-		}
+		WorkspaceError::Symlink(_)
+		| WorkspaceError::NotADir(_)
+		| WorkspaceError::NotAFile(_)
+		| WorkspaceError::Special(_) => problem(ProblemKind::Unsafe, &error.to_string()),
 		WorkspaceError::Io { .. } => problem(ProblemKind::Conflict, &error.to_string()),
 	};
 

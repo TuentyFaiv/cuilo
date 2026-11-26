@@ -9,6 +9,7 @@ use std::{env, fmt, fs, io};
 use anyhow::{Context as _, anyhow, bail, ensure};
 use cuilo_core::brand;
 use cuilo_core::model::Digest;
+use cuilo_core::workspace::user_cache_dir;
 use cuilo_packs::transport::Fetch;
 use minisign_verify::{PublicKey, Signature};
 use semver::Version;
@@ -17,7 +18,7 @@ use serde::{Serialize, Serializer};
 
 use crate::ui::{self, Output};
 
-/// The minisign public key that signs every release's `SHA256SUMS`; empty until the first release.
+/// The minisign public key that signs every release's `SHA256SUMS`.
 pub(crate) const RELEASE_KEY: &str = include_str!("../release-key.pub");
 
 /// The target triple this binary was built for, e.g. `aarch64-apple-darwin`.
@@ -111,9 +112,11 @@ const LOCKFILES: [(&str, Manager); 6] = [
 ];
 
 impl Install {
-	/// How the binary at `exe` was installed.
+	/// How the binary at `exe` was installed: by the install script when its receipt beside `exe` is
+	/// a regular file, not a link.
 	pub(crate) fn of(exe: &Path) -> Self {
-		if exe.with_file_name(brand::INSTALL_RECEIPT).is_file() {
+		let receipt = fs::symlink_metadata(exe.with_file_name(brand::INSTALL_RECEIPT));
+		if receipt.is_ok_and(|receipt| receipt.file_type().is_file()) {
 			return Self::Script;
 		}
 		let search: Vec<String> = env::var_os("PATH")
@@ -244,7 +247,18 @@ impl Install {
 				Manager::Yarn => ("yarn", vec!["add", "--dev", &package]),
 			},
 			Self::Homebrew => ("brew", vec!["upgrade", HOMEBREW_FORMULA]),
-			Self::Cargo if binstall => ("cargo", vec!["binstall", CRATE, "--version", &version, "--no-confirm"]),
+			Self::Cargo if binstall => (
+				"cargo",
+				vec![
+					"binstall",
+					CRATE,
+					"--version",
+					&version,
+					"--disable-strategies",
+					"quick-install",
+					"--no-confirm",
+				],
+			),
 			Self::Cargo => ("cargo", vec!["install", CRATE, "--locked", "--version", &version]),
 			Self::Script | Self::Unknown => return None,
 		};
@@ -464,6 +478,8 @@ pub(crate) trait Runner {
 }
 
 /// Runs commands in this terminal, printing each first; with `json`, their stdout goes to stderr.
+/// They run in the user cache folder, so the config of the project the caller is in cannot steer
+/// them.
 #[derive(Debug)]
 pub(crate) struct System {
 	/// Whether stdout carries JSON.
@@ -478,15 +494,19 @@ impl Runner for System {
 
 	fn run(&self, invocation: &Invocation) -> anyhow::Result<()> {
 		eprintln!("$ {invocation}");
-		let program = if cfg!(windows) {
-			let extensions = extensions(true, env::var_os("PATHEXT").as_deref());
-			find(&invocation.program, env::var_os("PATH").as_deref(), &extensions)
-				.unwrap_or_else(|| PathBuf::from(&invocation.program))
-		} else {
-			PathBuf::from(&invocation.program)
-		};
+		let program = program(
+			&invocation.program,
+			cfg!(windows),
+			env::var_os("PATH").as_deref(),
+			env::var_os("PATHEXT").as_deref(),
+		)?;
+		let folder = neutral_dir(user_cache_dir(), env::home_dir())
+			.ok_or_else(|| anyhow!("found no cache or home folder to run `{invocation}` in"))?;
 		let mut command = std::process::Command::new(program);
-		command.args(&invocation.args);
+		command.args(&invocation.args).current_dir(folder);
+		if cfg!(windows) {
+			command.env("NoDefaultCurrentDirectoryInExePath", "1");
+		}
 		if self.json {
 			command.stdout(io::stderr());
 		}
@@ -527,6 +547,24 @@ fn find(program: &str, path: Option<&OsStr>, extensions: &[String]) -> Option<Pa
 			.map(|extension| dir.join(format!("{program}{extension}")))
 			.find(|file| file.is_file())
 	})
+}
+
+/// What to start for the program `name`: on `windows`, the file [`find`] gets from `path` and
+/// `pathext`, since Windows would also search cuilo's own folder and relative `PATH` folders;
+/// elsewhere the name, for the system to look up.
+fn program(name: &str, windows: bool, path: Option<&OsStr>, pathext: Option<&OsStr>) -> anyhow::Result<PathBuf> {
+	if !windows {
+		return Ok(PathBuf::from(name));
+	}
+	find(name, path, &extensions(true, pathext)).ok_or_else(|| anyhow!("`{name}` is not on PATH"))
+}
+
+/// The folder to run a package manager in: `cache`, created when missing, else `home`; never a
+/// relative folder, which would name one inside the caller's.
+fn neutral_dir(cache: Option<PathBuf>, home: Option<PathBuf>) -> Option<PathBuf> {
+	cache
+		.filter(|cache| cache.is_absolute() && fs::create_dir_all(cache).is_ok())
+		.or_else(|| home.filter(|home| home.is_absolute()))
 }
 
 /// The running binary, with symbolic links resolved.
@@ -606,11 +644,18 @@ pub(crate) fn binary_name() -> String {
 }
 
 /// The newest release on the stable channel, or the pre-release one with `pre`; only a hint, since
-/// the signed `SHA256SUMS` names the version installed.
+/// the signed `SHA256SUMS` names the version installed. The channel file is not signed, and a
+/// signature binds only the version, so the stable channel refuses a pre-release.
 pub(crate) fn latest(fetch: &dyn Fetch, pre: bool) -> anyhow::Result<Version> {
 	let name = if pre { "latest-pre" } else { "latest" };
-	let body = fetch.get(&format!("{}/{name}", brand::DOWNLOAD_URL), &[])?;
-	channel(&body).ok_or_else(|| anyhow!("`{}/{name}` does not name a version", brand::DOWNLOAD_URL))
+	let url = format!("{}/{name}", brand::DOWNLOAD_URL);
+	let body = fetch.get(&url, &[])?;
+	let version = channel(&body).ok_or_else(|| anyhow!("`{url}` does not name a version"))?;
+	ensure!(
+		pre || version.pre.is_empty(),
+		"`{url}` names the pre-release {version}, but the stable channel offers only stable releases; refusing it"
+	);
+	Ok(version)
 }
 
 /// The version a channel file names on its first line.
@@ -641,26 +686,84 @@ pub(crate) fn download(fetch: &dyn Fetch, release: &Release) -> anyhow::Result<V
 	Ok(bytes)
 }
 
-/// Replaces the binary at `exe` with `bytes`, keeping the old one if anything fails.
+/// Replaces the binary at `exe` with `bytes`, keeping the old one if anything fails, and records
+/// `version` in the install receipt beside it.
 pub(crate) fn replace(exe: &Path, bytes: &[u8], version: &Version) -> anyhow::Result<()> {
-	let staged = sibling(exe, &format!("new-{}", std::process::id()));
-	fs::write(&staged, bytes).with_context(|| format!("could not write {}", staged.display()))?;
-	#[cfg(unix)]
-	{
-		use std::os::unix::fs::PermissionsExt as _;
-		fs::set_permissions(&staged, fs::Permissions::from_mode(0o755))?;
-	}
+	let staged =
+		stage(exe, 0o755, bytes).with_context(|| format!("could not write a new binary beside {}", exe.display()))?;
 	if let Err(error) = swap(exe, &staged) {
 		let _ = fs::remove_file(&staged);
 		return Err(error).with_context(|| format!("could not replace {}", exe.display()));
 	}
 	let receipt = exe.with_file_name(brand::INSTALL_RECEIPT);
 	let record = serde_json::json!({ "installer": "upgrade", "version": version.to_string(), "target": TARGET });
-	fs::write(&receipt, format!("{record:#}\n")).with_context(|| format!("could not write {}", receipt.display()))?;
+	stage(&receipt, 0o644, format!("{record:#}\n").as_bytes())
+		.and_then(|staged| {
+			fs::rename(&staged, &receipt).inspect_err(|_| {
+				let _ = fs::remove_file(&staged);
+			})
+		})
+		.with_context(|| format!("could not write {}", receipt.display()))?;
 	Ok(())
 }
 
-/// A file beside `exe`, e.g. `.cuilo.new`.
+/// Writes `bytes` to a new file beside `target`, `.<name>.new-<random>`, with `mode` on Unix, and
+/// returns its path. The file must not exist yet, so nothing left or planted there, such as a link,
+/// is written through, and the random name keeps such a file from blocking it.
+fn stage(target: &Path, mode: u32, bytes: &[u8]) -> io::Result<PathBuf> {
+	use std::io::Write as _;
+
+	let mut attempts = 0;
+	let (staged, mut file) = loop {
+		let staged = sibling(target, &format!("new-{:016x}", random()));
+		match create_new(&staged, mode) {
+			Err(error) if error.kind() == io::ErrorKind::AlreadyExists && attempts < 8 => attempts += 1,
+			created => break (staged, created?),
+		}
+	};
+	let written = file.write_all(bytes).and_then(|()| file.sync_all());
+	drop(file);
+	match written {
+		Ok(()) => Ok(staged),
+		Err(error) => {
+			let _ = fs::remove_file(&staged);
+			Err(error)
+		}
+	}
+}
+
+/// Creates a file at `path` that does not exist yet, with exactly `mode` whatever the umask.
+#[cfg(unix)]
+fn create_new(path: &Path, mode: u32) -> io::Result<fs::File> {
+	use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
+
+	let file = fs::OpenOptions::new()
+		.write(true)
+		.create_new(true)
+		.mode(mode)
+		.open(path)?;
+	file
+		.set_permissions(fs::Permissions::from_mode(mode))
+		.inspect_err(|_| {
+			let _ = fs::remove_file(path);
+		})?;
+	Ok(file)
+}
+
+/// Creates a file at `path` that does not exist yet.
+#[cfg(not(unix))]
+fn create_new(path: &Path, _mode: u32) -> io::Result<fs::File> {
+	fs::OpenOptions::new().write(true).create_new(true).open(path)
+}
+
+/// A random number, from the keys std seeds each `HashMap` with.
+fn random() -> u64 {
+	use std::hash::{BuildHasher as _, Hasher as _, RandomState};
+
+	RandomState::new().build_hasher().finish()
+}
+
+/// A file beside `exe`, e.g. `.cuilo.old`.
 fn sibling(exe: &Path, suffix: &str) -> PathBuf {
 	let name = exe
 		.file_name()
@@ -706,21 +809,22 @@ pub(crate) struct Outcome {
 	pub(crate) command: Option<String>,
 }
 
-/// Runs `cuilo upgrade`: replaces a script install itself, runs the package manager for other global
-/// installs, and only reports the command for a one-off runner's or a project's copy.
+/// Runs `cuilo upgrade` for the binary at `exe`, of version `current`: replaces a script install
+/// itself, runs the package manager for other global installs, and only reports the command for a
+/// one-off runner's or a project's copy.
 pub(crate) fn run(
 	fetch: &dyn Fetch,
 	exe: &Path,
+	current: &Version,
 	check: bool,
 	wanted: Option<&Version>,
 	runner: &dyn Runner,
 ) -> anyhow::Result<Outcome> {
-	let current = Version::parse(env!("CARGO_PKG_VERSION"))?;
 	let install = Install::of(exe);
 	if !check && install == Install::Unknown {
 		bail!(
 			"this cuilo cannot upgrade itself: {}",
-			install.hint(&current, wanted.is_none())
+			install.hint(current, wanted.is_none())
 		);
 	}
 	if !check && install == Install::Homebrew && wanted.is_some() {
@@ -740,7 +844,7 @@ pub(crate) fn run(
 		upgraded: false,
 		command: None,
 	};
-	if (wanted.is_none() && target <= current) || wanted == Some(&current) {
+	if (wanted.is_none() && &target <= current) || wanted == Some(current) {
 		return Ok(outcome);
 	}
 	let binstall = outcome.install == Install::Cargo && runner.finds("cargo-binstall");
@@ -763,7 +867,8 @@ pub(crate) fn run(
 /// `cuilo upgrade [--check] [--version <v>]`, printing its outcome as text or, with `json`, as JSON.
 pub(crate) fn command(json: bool, check: bool, wanted: Option<&Version>) -> anyhow::Result<()> {
 	let fetch = cuilo_packs::transport::HttpsFetch::default();
-	let outcome = run(&fetch, &current_exe()?, check, wanted, &System { json })?;
+	let current = Version::parse(env!("CARGO_PKG_VERSION"))?;
+	let outcome = run(&fetch, &current_exe()?, &current, check, wanted, &System { json })?;
 	if json {
 		Output::json(&outcome);
 		return Ok(());
@@ -813,6 +918,8 @@ pub(crate) mod tests {
 	/// `SHA256SUMS` for version 99.0.0, listing [`BINARY`] for every release target.
 	const SUMS: &str = "d323d7e42e896bdc8f52482a9b8f8c91db37c37cc3c335b21ecc157568dcb32b  cuilo-aarch64-apple-darwin\nd323d7e42e896bdc8f52482a9b8f8c91db37c37cc3c335b21ecc157568dcb32b  cuilo-x86_64-apple-darwin\nd323d7e42e896bdc8f52482a9b8f8c91db37c37cc3c335b21ecc157568dcb32b  cuilo-x86_64-unknown-linux-gnu\nd323d7e42e896bdc8f52482a9b8f8c91db37c37cc3c335b21ecc157568dcb32b  cuilo-aarch64-unknown-linux-gnu\nd323d7e42e896bdc8f52482a9b8f8c91db37c37cc3c335b21ecc157568dcb32b  cuilo-x86_64-unknown-linux-musl\nd323d7e42e896bdc8f52482a9b8f8c91db37c37cc3c335b21ecc157568dcb32b  cuilo-aarch64-unknown-linux-musl\nd323d7e42e896bdc8f52482a9b8f8c91db37c37cc3c335b21ecc157568dcb32b  cuilo-x86_64-pc-windows-msvc.exe\nd323d7e42e896bdc8f52482a9b8f8c91db37c37cc3c335b21ecc157568dcb32b  cuilo-aarch64-pc-windows-msvc.exe\n";
 	pub(crate) const BINARY: &[u8] = b"new cuilo\n";
+	/// The version `run` is told is running, a stable one.
+	const CURRENT: Version = Version::new(2, 0, 0);
 
 	#[test]
 	fn release_key_should_be_a_minisign_public_key() {
@@ -958,11 +1065,46 @@ pub(crate) mod tests {
 		fs::write(&exe, "current")?;
 		fs::write(exe.with_file_name(brand::INSTALL_RECEIPT), "{}")?;
 
-		let outcome = run(&fetch, &exe, false, None, &Recorder::default())?;
+		let outcome = run(&fetch, &exe, &CURRENT, false, None, &Recorder::default())?;
 
 		assert!(!outcome.upgraded);
 		assert_eq!(fs::read(&exe)?, b"current");
 		assert_eq!(asked(&fetch), 1, "it downloaded more than the channel");
+		Ok(())
+	}
+
+	#[test]
+	fn run_should_refuse_a_pre_release_on_the_stable_channel() -> anyhow::Result<()> {
+		let dir = tempfile::tempdir()?;
+		let script = dir.path().join("cuilo");
+		fs::write(&script, "current")?;
+		fs::write(script.with_file_name(brand::INSTALL_RECEIPT), "{}")?;
+		let npm = Path::new("/usr/local/lib/node_modules/@cuilo/cli-linux-x64/bin/cuilo");
+		let fetch = channels("99.0.0-beta.1");
+		let runner = Recorder::default();
+
+		for exe in [script.as_path(), npm] {
+			let error = run(&fetch, exe, &CURRENT, false, None, &runner)
+				.err()
+				.map(|error| error.to_string())
+				.unwrap_or_default();
+			assert!(
+				error.contains("names the pre-release 99.0.0-beta.1") && error.contains("only stable releases"),
+				"{error}"
+			);
+		}
+		assert_eq!(fs::read(&script)?, b"current");
+		assert!(runner.ran.borrow().is_empty());
+		assert_eq!(asked(&fetch), 2, "it went past the channel");
+
+		let pre = run(&fetch, npm, &version("2.0.0-beta.1"), false, None, &runner)?;
+		assert_eq!(*runner.ran.borrow(), ["npm install --global @cuilo/cli@99.0.0-beta.1"]);
+		let stable = run(&channels("99.0.0"), npm, &CURRENT, false, None, &runner)?;
+		assert!(pre.upgraded && stable.upgraded);
+		assert_eq!(
+			runner.ran.borrow().last().map(String::as_str),
+			Some("npm install --global @cuilo/cli@99.0.0")
+		);
 		Ok(())
 	}
 
@@ -1000,6 +1142,23 @@ pub(crate) mod tests {
 			Install::Homebrew
 		);
 		assert_eq!(Install::of(Path::new("/home/me/.cargo/bin/cuilo")), Install::Cargo);
+		Ok(())
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn install_should_take_only_a_regular_receipt_as_the_install_script_s() -> anyhow::Result<()> {
+		let dir = tempfile::tempdir()?;
+		let exe = dir.path().join("bin/cuilo");
+		fs::create_dir_all(dir.path().join("bin"))?;
+		let elsewhere = dir.path().join("receipt.json");
+		fs::write(&elsewhere, "{}")?;
+
+		std::os::unix::fs::symlink(&elsewhere, exe.with_file_name(brand::INSTALL_RECEIPT))?;
+		assert_eq!(Install::of(&exe), Install::Unknown, "a linked receipt counted");
+		fs::remove_file(exe.with_file_name(brand::INSTALL_RECEIPT))?;
+		fs::create_dir(exe.with_file_name(brand::INSTALL_RECEIPT))?;
+		assert_eq!(Install::of(&exe), Install::Unknown, "a folder counted as the receipt");
 		Ok(())
 	}
 
@@ -1326,7 +1485,7 @@ pub(crate) mod tests {
 
 		assert_eq!(
 			command(Install::Cargo, true, true).as_deref(),
-			Some("cargo binstall cuilo --version 2.1.0-beta.1 --no-confirm")
+			Some("cargo binstall cuilo --version 2.1.0-beta.1 --disable-strategies quick-install --no-confirm")
 		);
 		assert_eq!(
 			command(Install::Ephemeral(Manager::Npm), false, false).as_deref(),
@@ -1468,6 +1627,56 @@ pub(crate) mod tests {
 	}
 
 	#[test]
+	fn program_should_take_only_a_file_on_path_on_windows() -> anyhow::Result<()> {
+		let dir = tempfile::tempdir()?;
+		fs::write(dir.path().join("npm.cmd"), "")?;
+		let path = env::join_paths([Path::new("relative"), dir.path()])?;
+		let relative = env::join_paths([Path::new("."), Path::new("relative")])?;
+		let error = |path: &OsStr| {
+			program("npm", true, Some(path), None)
+				.err()
+				.map(|error| error.to_string())
+		};
+
+		assert_eq!(program("npm", true, Some(&path), None)?, dir.path().join("npm.cmd"));
+		assert_eq!(error(&relative).as_deref(), Some("`npm` is not on PATH"));
+		assert_eq!(error(OsStr::new("")).as_deref(), Some("`npm` is not on PATH"));
+		assert_eq!(program("npm", false, Some(&relative), None)?, PathBuf::from("npm"));
+		Ok(())
+	}
+
+	#[test]
+	fn neutral_dir_should_take_the_cache_else_home_and_never_a_relative_folder() -> anyhow::Result<()> {
+		let dir = tempfile::tempdir()?;
+		let cache = dir.path().join("cache/cuilo");
+		let home = dir.path().join("home");
+		let file = dir.path().join("file");
+		fs::write(&file, "")?;
+
+		assert_eq!(
+			neutral_dir(Some(cache.clone()), Some(home.clone())),
+			Some(cache.clone())
+		);
+		assert!(cache.is_dir(), "the cache folder was not created");
+		assert_eq!(
+			neutral_dir(Some(PathBuf::from("cache")), Some(home.clone())),
+			Some(home.clone())
+		);
+		assert_eq!(neutral_dir(Some(file.join("cuilo")), Some(home.clone())), Some(home));
+		assert_eq!(neutral_dir(None, Some(PathBuf::from("home"))), None);
+		assert_eq!(neutral_dir(None, None), None);
+		assert!(!Path::new("cache").exists(), "it created a folder in the current one");
+		Ok(())
+	}
+
+	/// The names of the files in `dir`.
+	fn names(dir: &Path) -> anyhow::Result<Vec<String>> {
+		fs::read_dir(dir)?
+			.map(|entry| Ok(entry?.file_name().to_string_lossy().into_owned()))
+			.collect()
+	}
+
+	#[test]
 	fn replace_should_swap_the_binary_and_write_the_receipt() -> anyhow::Result<()> {
 		let dir = tempfile::tempdir()?;
 		let exe = dir.path().join("cuilo");
@@ -1481,9 +1690,65 @@ pub(crate) mod tests {
 		let receipt = fs::read_to_string(exe.with_file_name(brand::INSTALL_RECEIPT))?;
 		assert!(receipt.contains("\"version\": \"99.0.0\""), "{receipt}");
 		assert!(
-			!sibling(&exe, &format!("new-{}", std::process::id())).exists(),
-			"the staged file was left behind"
+			names(dir.path())?.iter().all(|name| !name.contains(".new-")),
+			"a staged file was left behind"
 		);
+		#[cfg(unix)]
+		{
+			use std::os::unix::fs::PermissionsExt as _;
+			assert_eq!(fs::metadata(&exe)?.permissions().mode() & 0o7777, 0o755);
+		}
+		Ok(())
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn replace_should_write_through_no_link_planted_beside_the_binary() -> anyhow::Result<()> {
+		let dir = tempfile::tempdir()?;
+		let bin = dir.path().join("bin");
+		fs::create_dir(&bin)?;
+		let exe = bin.join("cuilo");
+		fs::write(&exe, "old")?;
+		let victim = dir.path().join("victim");
+		fs::write(&victim, "mine")?;
+		let receipt = exe.with_file_name(brand::INSTALL_RECEIPT);
+		let staged = sibling(&exe, &format!("new-{}", std::process::id()));
+		std::os::unix::fs::symlink(&victim, &receipt)?;
+		std::os::unix::fs::symlink(&victim, &staged)?;
+
+		replace(&exe, BINARY, &version("99.0.0"))?;
+
+		assert_eq!(fs::read(&victim)?, b"mine", "it wrote through a link");
+		assert_eq!(fs::read(&exe)?, BINARY);
+		assert!(fs::symlink_metadata(&exe)?.file_type().is_file());
+		assert!(
+			fs::symlink_metadata(&receipt)?.file_type().is_file(),
+			"the receipt is still a link"
+		);
+		assert!(fs::read_to_string(&receipt)?.contains("\"version\": \"99.0.0\""));
+		assert!(
+			fs::symlink_metadata(&staged)?.file_type().is_symlink(),
+			"it touched the planted file"
+		);
+		assert_eq!(names(&bin)?.len(), 3, "a staged file was left behind");
+		Ok(())
+	}
+
+	#[test]
+	fn stage_should_never_reuse_a_file_and_keep_none_when_it_fails() -> anyhow::Result<()> {
+		let dir = tempfile::tempdir()?;
+		let target = dir.path().join("cuilo");
+
+		let first = stage(&target, 0o644, b"one")?;
+		let second = stage(&target, 0o644, b"two")?;
+
+		assert_ne!(first, second);
+		assert_eq!(
+			(fs::read(&first)?, fs::read(&second)?),
+			(b"one".to_vec(), b"two".to_vec())
+		);
+		assert!(stage(&dir.path().join("missing/cuilo"), 0o644, b"three").is_err());
+		assert_eq!(names(dir.path())?.len(), 2);
 		Ok(())
 	}
 
@@ -1501,10 +1766,17 @@ pub(crate) mod tests {
 		let fetch = Served::default();
 		let runner = Recorder::default();
 
-		let error = run(&fetch, Path::new("/usr/local/bin/cuilo"), false, None, &runner)
-			.err()
-			.map(|error| error.to_string())
-			.unwrap_or_default();
+		let error = run(
+			&fetch,
+			Path::new("/usr/local/bin/cuilo"),
+			&CURRENT,
+			false,
+			None,
+			&runner,
+		)
+		.err()
+		.map(|error| error.to_string())
+		.unwrap_or_default();
 
 		assert!(
 			error.contains("cannot upgrade itself") && error.contains("install script"),
@@ -1520,7 +1792,7 @@ pub(crate) mod tests {
 		let runner = Recorder::default();
 		let exe = Path::new("/Users/me/.bun/install/global/node_modules/@cuilo/cli-darwin-arm64/bin/cuilo");
 
-		let outcome = run(&fetch, exe, false, None, &runner)?;
+		let outcome = run(&fetch, exe, &CURRENT, false, None, &runner)?;
 
 		assert!(outcome.upgraded);
 		assert_eq!(*runner.ran.borrow(), ["bun add --global @cuilo/cli@99.0.0"]);
@@ -1539,10 +1811,9 @@ pub(crate) mod tests {
 	#[test]
 	fn run_should_run_nothing_when_the_wanted_version_is_running() -> anyhow::Result<()> {
 		let runner = Recorder::default();
-		let running = version(env!("CARGO_PKG_VERSION"));
 		let exe = Path::new("/home/me/.config/yarn/global/node_modules/@cuilo/cli-linux-x64/bin/cuilo");
 
-		let outcome = run(&Served::default(), exe, false, Some(&running), &runner)?;
+		let outcome = run(&Served::default(), exe, &CURRENT, false, Some(&CURRENT), &runner)?;
 
 		assert!(!outcome.upgraded);
 		assert_eq!(outcome.command, None);
@@ -1556,7 +1827,7 @@ pub(crate) mod tests {
 		let runner = Recorder::default();
 		let exe = Path::new(r"C:\Users\me\AppData\Roaming\npm\node_modules\@cuilo\cli-win32-x64\bin\cuilo.exe");
 
-		let outcome = run(&fetch, exe, true, None, &runner)?;
+		let outcome = run(&fetch, exe, &CURRENT, true, None, &runner)?;
 
 		assert!(!outcome.upgraded);
 		assert_eq!(
@@ -1573,8 +1844,15 @@ pub(crate) mod tests {
 		let runner = Recorder::default();
 		let exe = Path::new("/Users/me/.npm/_npx/0e5ad6a08e1e9350/node_modules/@cuilo/cli-darwin-arm64/bin/cuilo");
 
-		let newest = run(&fetch, exe, false, None, &runner)?;
-		let chosen = run(&Served::default(), exe, false, Some(&version("99.0.0")), &runner)?;
+		let newest = run(&fetch, exe, &CURRENT, false, None, &runner)?;
+		let chosen = run(
+			&Served::default(),
+			exe,
+			&CURRENT,
+			false,
+			Some(&version("99.0.0")),
+			&runner,
+		)?;
 
 		assert!(!newest.upgraded);
 		assert_eq!(newest.command.as_deref(), Some("npx @cuilo/cli@latest"));
@@ -1593,7 +1871,14 @@ pub(crate) mod tests {
 		let exe = dir.path().join("node_modules/@cuilo/cli-linux-x64/bin/cuilo");
 		let runner = Recorder::default();
 
-		let outcome = run(&Served::default(), &exe, false, Some(&version("99.0.0")), &runner)?;
+		let outcome = run(
+			&Served::default(),
+			&exe,
+			&CURRENT,
+			false,
+			Some(&version("99.0.0")),
+			&runner,
+		)?;
 
 		assert!(!outcome.upgraded);
 		assert_eq!(outcome.command.as_deref(), Some("bun add --dev @cuilo/cli@99.0.0"));
@@ -1610,7 +1895,7 @@ pub(crate) mod tests {
 		let runner = Recorder::default();
 		let exe = Path::new("/opt/homebrew/Cellar/cuilo/2.0.0/bin/cuilo");
 
-		let error = run(&fetch, exe, false, Some(&version("99.0.0")), &runner)
+		let error = run(&fetch, exe, &CURRENT, false, Some(&version("99.0.0")), &runner)
 			.err()
 			.map(|error| error.to_string())
 			.unwrap_or_default();
@@ -1618,7 +1903,7 @@ pub(crate) mod tests {
 		assert_eq!(asked(&fetch), 0);
 		assert!(runner.ran.borrow().is_empty());
 
-		let outcome = run(&fetch, exe, false, None, &runner)?;
+		let outcome = run(&fetch, exe, &CURRENT, false, None, &runner)?;
 		assert!(outcome.upgraded);
 		assert_eq!(*runner.ran.borrow(), ["brew upgrade tuentyfaiv/tap/cuilo"]);
 		Ok(())
@@ -1634,12 +1919,12 @@ pub(crate) mod tests {
 		};
 		let without = Recorder::default();
 
-		run(&Served::default(), exe, false, Some(&target), &with)?;
-		run(&Served::default(), exe, false, Some(&target), &without)?;
+		run(&Served::default(), exe, &CURRENT, false, Some(&target), &with)?;
+		run(&Served::default(), exe, &CURRENT, false, Some(&target), &without)?;
 
 		assert_eq!(
 			*with.ran.borrow(),
-			["cargo binstall cuilo --version 99.0.0 --no-confirm"]
+			["cargo binstall cuilo --version 99.0.0 --disable-strategies quick-install --no-confirm"]
 		);
 		assert_eq!(*without.ran.borrow(), ["cargo install cuilo --locked --version 99.0.0"]);
 		Ok(())
@@ -1653,10 +1938,17 @@ pub(crate) mod tests {
 		};
 		let exe = Path::new("/usr/local/lib/node_modules/@cuilo/cli-linux-x64/bin/cuilo");
 
-		let error = run(&Served::default(), exe, false, Some(&version("99.0.0")), &runner)
-			.err()
-			.map(|error| error.to_string())
-			.unwrap_or_default();
+		let error = run(
+			&Served::default(),
+			exe,
+			&CURRENT,
+			false,
+			Some(&version("99.0.0")),
+			&runner,
+		)
+		.err()
+		.map(|error| error.to_string())
+		.unwrap_or_default();
 
 		assert!(
 			error.contains("`npm install --global @cuilo/cli@99.0.0` failed"),

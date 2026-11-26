@@ -1,8 +1,8 @@
 //! How a project resolves relative imports: Deno, or the `tsconfig.json` that governs a folder with the
 //! configs it extends, and whether its `package.json` makes `.js` and `.ts` files `CommonJS`.
 //!
-//! Tsconfig files, and the `package.json` files that resolve `extends`, are read through links whose real
-//! path is inside the root, as in pnpm's `node_modules`; nothing else here follows links.
+//! Tsconfig files, and the `package.json` files that resolve `extends`, are read through links that stay
+//! inside the root, as in pnpm's `node_modules`; nothing else here follows links.
 
 use std::fmt;
 
@@ -16,8 +16,9 @@ use crate::model::{Fact, ImportStyle, RelPath, Stack};
 
 /// The most configs one `extends` chain goes through, the governing one included.
 const MAX_DEPTH: usize = 16;
-/// The most configs one lookup reads, across every branch of `extends` arrays.
-const MAX_CONFIGS: usize = 64;
+/// The most steps one lookup takes, across every branch of `extends` arrays: each file read, path resolved
+/// through links and folder walked up to find a package is one.
+const MAX_STEPS: usize = 256;
 /// The largest `tsconfig.json` or `package.json` read, in bytes.
 const MAX_SIZE: u64 = 1024 * 1024;
 /// The `exports` conditions TypeScript matches when it resolves a package in `extends`.
@@ -68,9 +69,11 @@ pub(crate) fn is_commonjs(workspace: &Workspace, folder: Option<&RelPath>) -> bo
 
 /// The import style the effective options of the `tsconfig.json` at the real path `path` give.
 fn tsconfig_style(workspace: &Workspace, path: &RelPath) -> ImportStyle {
-	let mut budget = MAX_CONFIGS;
-	let options = load(workspace, path, &mut Vec::new(), &mut budget);
-	options.style()
+	let mut lookup = Lookup {
+		workspace,
+		steps: MAX_STEPS,
+	};
+	lookup.load(path, &mut Vec::new()).style()
 }
 
 /// The `compilerOptions` that decide how relative imports are written; unset ones are `None`.
@@ -134,110 +137,149 @@ impl Options {
 	}
 }
 
-/// The effective options of the config at the real path `path`: those of each config it extends, in order,
-/// then its own. `chain` holds the configs being read, to stop cycles; `budget` counts the reads left.
-fn load(workspace: &Workspace, path: &RelPath, chain: &mut Vec<RelPath>, budget: &mut usize) -> Options {
-	if chain.len() >= MAX_DEPTH || *budget == 0 || chain.contains(path) {
-		return Options::default();
-	}
-	*budget -= 1;
-	let Some(config) = read(workspace, path).and_then(|text| parse_jsonc(&text)) else {
-		return Options::default();
-	};
-	let bases: Vec<&str> = match config.get("extends") {
-		Some(Json::String(base)) => vec![base.as_str()],
-		Some(Json::Array(bases)) => bases.iter().filter_map(Json::as_str).collect(),
-		_ => Vec::new(),
-	};
-	chain.push(path.clone());
-	let mut inherited = Options::default();
-	for base in bases {
-		if let Some(base) = extended(workspace, path, base) {
-			inherited = load(workspace, &base, chain, budget).over(inherited);
+/// One lookup of a config's effective options, with the steps it has left.
+struct Lookup<'a> {
+	workspace: &'a Workspace,
+	steps: usize,
+}
+
+impl Lookup<'_> {
+	/// The effective options of the config at the real path `path`: those of each config it extends, in
+	/// order, then its own. `chain` holds the configs being read, to stop cycles.
+	fn load(&mut self, path: &RelPath, chain: &mut Vec<RelPath>) -> Options {
+		if chain.len() >= MAX_DEPTH || chain.contains(path) {
+			return Options::default();
 		}
-	}
-	chain.pop();
-	Options::of(&config).over(inherited)
-}
-
-/// The real path of the config that `specifier`, an `extends` entry of the config at the real path `from`,
-/// names; `None` when it is missing, absolute or outside the project.
-fn extended(workspace: &Workspace, from: &RelPath, specifier: &str) -> Option<RelPath> {
-	let dir = from.parent();
-	if specifier.starts_with("./") || specifier.starts_with("../") {
-		return config_file(workspace, &RelPath::resolve(dir.as_ref(), specifier)?);
-	}
-	if specifier.is_empty()
-		|| specifier.starts_with(['/', '\\', '.'])
-		|| specifier.contains(':')
-		|| specifier.split('/').any(|segment| matches!(segment, "" | "." | ".."))
-	{
-		return None;
-	}
-	let scope_end = if specifier.starts_with('@') {
-		specifier.find('/')? + 1
-	} else {
-		0
-	};
-	let (name, subpath) = match specifier[scope_end..].split_once('/') {
-		Some((name, subpath)) => (&specifier[..scope_end + name.len()], subpath),
-		None => (specifier, ""),
-	};
-	upward(dir.as_ref()).find_map(|dir| {
-		let package = RelPath::resolve(dir.as_ref(), &format!("node_modules/{name}"))?;
-		package_config(workspace, &package, subpath)
-	})
-}
-
-/// The real path of the config `subpath` names in the package at `package`, through its `exports` when it
-/// has them, else its `tsconfig` field or `tsconfig.json` for the package itself.
-fn package_config(workspace: &Workspace, package: &RelPath, subpath: &str) -> Option<RelPath> {
-	let manifest: Manifest = workspace
-		.resolve_links_inside_root_for_reading(&package.join(&RelPath::constant("package.json")))
-		.and_then(|manifest| read(workspace, &manifest))
-		.and_then(|text| serde_json::from_str(&text).ok())
-		.unwrap_or_default();
-	if let Some(exports) = &manifest.exports {
-		let key = if subpath.is_empty() {
-			".".to_owned()
-		} else {
-			format!("./{subpath}")
+		let Some(config) = self.read(path).and_then(|text| parse_jsonc(&text)) else {
+			return Options::default();
 		};
-		let target = exports.resolve(&key)?;
-		let path = RelPath::resolve(Some(package), target.strip_prefix("./")?)?;
-		if !path.as_str().starts_with(&format!("{package}/")) {
+		let bases: Vec<&str> = match config.get("extends") {
+			Some(Json::String(base)) => vec![base.as_str()],
+			Some(Json::Array(bases)) => bases.iter().filter_map(Json::as_str).collect(),
+			_ => Vec::new(),
+		};
+		chain.push(path.clone());
+		let mut inherited = Options::default();
+		for base in bases {
+			if self.steps == 0 {
+				break;
+			}
+			if let Some(base) = self.extended(path, base) {
+				inherited = self.load(&base, chain).over(inherited);
+			}
+		}
+		chain.pop();
+		Options::of(&config).over(inherited)
+	}
+
+	/// The real path of the config that `specifier`, an `extends` entry of the config at the real path
+	/// `from`, names; `None` when it is missing, absolute, outside the project or too long to be a path.
+	fn extended(&mut self, from: &RelPath, specifier: &str) -> Option<RelPath> {
+		if specifier.len() > RelPath::MAX_LEN {
 			return None;
 		}
-		return workspace.resolve_links_inside_root_for_reading(&path);
-	}
-	if subpath.is_empty() {
-		if let Some(field) = manifest
-			.tsconfig
-			.as_deref()
-			.and_then(|field| RelPath::resolve(Some(package), field))
-		{
-			return config_file(workspace, &field);
+		let dir = from.parent();
+		if specifier.starts_with("./") || specifier.starts_with("../") {
+			return self.config_file(&RelPath::resolve(dir.as_ref(), specifier)?);
 		}
-		return config_file(workspace, &package.join(&RelPath::constant("tsconfig.json")));
+		if specifier.is_empty()
+			|| specifier.starts_with(['/', '\\', '.'])
+			|| specifier.contains(':')
+			|| specifier.split('/').any(|segment| matches!(segment, "" | "." | ".."))
+		{
+			return None;
+		}
+		let scope_end = if specifier.starts_with('@') {
+			specifier.find('/')? + 1
+		} else {
+			0
+		};
+		let (name, subpath) = match specifier[scope_end..].split_once('/') {
+			Some((name, subpath)) => (&specifier[..scope_end + name.len()], subpath),
+			None => (specifier, ""),
+		};
+		for dir in upward(dir.as_ref()) {
+			self.step()?;
+			let Some(package) = RelPath::resolve(dir.as_ref(), &format!("node_modules/{name}")) else {
+				continue;
+			};
+			if let Some(config) = self.package_config(&package, subpath) {
+				return Some(config);
+			}
+		}
+		None
 	}
-	let path = RelPath::resolve(Some(package), subpath)?;
-	config_file(workspace, &path).or_else(|| config_file(workspace, &path.join(&RelPath::constant("tsconfig.json"))))
-}
 
-/// The real path of `path` when it is a file, else of `path.json` when that is one, as TypeScript tries.
-fn config_file(workspace: &Workspace, path: &RelPath) -> Option<RelPath> {
-	if let Some(real) = workspace.resolve_links_inside_root_for_reading(path) {
-		return Some(real);
+	/// The real path of the config `subpath` names in the package at `package`, through its `exports` when it
+	/// has them, else its `tsconfig` field or `tsconfig.json` for the package itself.
+	fn package_config(&mut self, package: &RelPath, subpath: &str) -> Option<RelPath> {
+		let manifest: Manifest = self
+			.resolve(&package.join(&RelPath::constant("package.json")))
+			.and_then(|manifest| self.read(&manifest))
+			.and_then(|text| serde_json::from_str(&text).ok())
+			.unwrap_or_default();
+		if let Some(exports) = &manifest.exports {
+			let key = if subpath.is_empty() {
+				".".to_owned()
+			} else {
+				format!("./{subpath}")
+			};
+			let target = exports.resolve(&key)?;
+			let path = RelPath::resolve(Some(package), target.strip_prefix("./")?)?;
+			if !path.as_str().starts_with(&format!("{package}/")) {
+				return None;
+			}
+			return self.resolve(&path);
+		}
+		if subpath.is_empty() {
+			if let Some(field) = manifest
+				.tsconfig
+				.as_deref()
+				.and_then(|field| RelPath::resolve(Some(package), field))
+			{
+				return self.config_file(&field);
+			}
+			return self.config_file(&package.join(&RelPath::constant("tsconfig.json")));
+		}
+		let path = RelPath::resolve(Some(package), subpath)?;
+		self
+			.config_file(&path)
+			.or_else(|| self.config_file(&path.join(&RelPath::constant("tsconfig.json"))))
 	}
-	if path
-		.file_name()
-		.rsplit_once('.')
-		.is_some_and(|(_, extension)| extension.eq_ignore_ascii_case("json"))
-	{
-		return None;
+
+	/// The real path of `path` when it is a file, else of `path.json` when that is one, as TypeScript tries.
+	fn config_file(&mut self, path: &RelPath) -> Option<RelPath> {
+		if let Some(real) = self.resolve(path) {
+			return Some(real);
+		}
+		if path
+			.file_name()
+			.rsplit_once('.')
+			.is_some_and(|(_, extension)| extension.eq_ignore_ascii_case("json"))
+		{
+			return None;
+		}
+		let with_json = RelPath::new(&format!("{path}.json")).ok()?;
+		self.resolve(&with_json)
 	}
-	let with_json = RelPath::new(&format!("{path}.json")).ok()?;
-	workspace.resolve_links_inside_root_for_reading(&with_json)
+
+	/// The real path of the file at `path`, through links inside the root; one step.
+	fn resolve(&mut self, path: &RelPath) -> Option<RelPath> {
+		self.step()?;
+		self.workspace.resolve_links_inside_root_for_reading(path)
+	}
+
+	/// The text of the file at the real path `path`; one step.
+	fn read(&mut self, path: &RelPath) -> Option<String> {
+		self.step()?;
+		read(self.workspace, path)
+	}
+
+	/// Takes one step; `None` when none are left.
+	fn step(&mut self) -> Option<()> {
+		self.steps = self.steps.checked_sub(1)?;
+		Some(())
+	}
 }
 
 /// The fields of a package's `package.json` that pick the config `extends` names.
@@ -286,7 +328,7 @@ impl Exports {
 	/// The path this target gives, with `star` in place of `*`.
 	fn target(&self, star: &str) -> Option<String> {
 		match self {
-			Self::Path(path) => Some(path.replace('*', star)),
+			Self::Path(path) => substitute(path, star),
 			Self::Alternatives(alternatives) => alternatives.iter().find_map(|target| target.target(star)),
 			Self::Map(conditions) => conditions
 				.iter()
@@ -353,6 +395,13 @@ impl<'de> Visitor<'de> for ExportsVisitor {
 	}
 }
 
+/// `path` with `star` in place of each `*`; `None` when that is longer than a [`RelPath`] can be.
+fn substitute(path: &str, star: &str) -> Option<String> {
+	let stars = path.matches('*').count();
+	let len = (path.len() - stars).saturating_add(stars.saturating_mul(star.len()));
+	(len <= RelPath::MAX_LEN).then(|| path.replace('*', star))
+}
+
 /// `folder`, then each folder above it, then the root (`None`).
 fn upward(folder: Option<&RelPath>) -> impl Iterator<Item = Option<RelPath>> {
 	std::iter::successors(Some(folder.cloned()), |dir| dir.as_ref().map(RelPath::parent))
@@ -368,7 +417,8 @@ fn is_file(workspace: &Workspace, path: &RelPath) -> bool {
 	workspace.exists(path).unwrap_or(false)
 }
 
-/// The text of the file at `path`, unless it is missing, unreadable, a link or over [`MAX_SIZE`].
+/// The text of the file at `path`, unless it is missing, unreadable, a link, not a regular file or over
+/// [`MAX_SIZE`].
 fn read(workspace: &Workspace, path: &RelPath) -> Option<String> {
 	let bytes = workspace.read_limited(path, MAX_SIZE).ok()??;
 	String::from_utf8(bytes).ok()
@@ -376,9 +426,10 @@ fn read(workspace: &Workspace, path: &RelPath) -> Option<String> {
 
 impl Workspace {
 	/// Read-only, inside-root link resolution: the real path of the file at `path`, following symlinks and
-	/// Windows junctions in any segment, when it is inside the root; `None` when a link is broken, loops or
-	/// leads outside, or no file is there. The real path is link-free, so the usual reads take it. Private to
-	/// this module: only tsconfig files and the `package.json` files that resolve `extends` are read this way.
+	/// Windows junctions in any segment, when every link on the way stays inside the root; `None` when a link
+	/// is broken, loops or leads outside, or no regular file is there. The real path is link-free, so the usual
+	/// reads take it. Private to this module: only tsconfig files and the `package.json` files that resolve
+	/// `extends` are read this way.
 	fn resolve_links_inside_root_for_reading(&self, path: &RelPath) -> Option<RelPath> {
 		let real = self.fs.resolve_links_inside_root(path).ok()??;
 		self.exists(&real).unwrap_or(false).then_some(real)
@@ -388,11 +439,12 @@ impl Workspace {
 #[cfg(test)]
 mod tests {
 	use std::sync::Arc;
+	use std::sync::atomic::{AtomicUsize, Ordering};
 
 	use super::*;
-	use crate::workspace::MemoryFs;
 	#[cfg(any(unix, windows))]
-	use crate::workspace::{DiskFs, EntryKind, Fs};
+	use crate::workspace::DiskFs;
+	use crate::workspace::{EntryKind, Fs, MemoryFs};
 
 	fn workspace(files: &[(&str, &str)]) -> Workspace {
 		let fs = MemoryFs::new();
@@ -464,6 +516,84 @@ mod tests {
 			.map(|(path, text)| (path.as_str(), text.as_str()))
 			.collect();
 		linked_style(&files, links)
+	}
+
+	/// A [`MemoryFs`] that counts the files read and the paths resolved through links.
+	#[derive(Debug, Default)]
+	struct Counted {
+		memory: MemoryFs,
+		reads: AtomicUsize,
+		resolves: AtomicUsize,
+	}
+
+	impl Counted {
+		fn new(files: &[(String, String)]) -> Arc<Self> {
+			let fs = Self::default();
+			for (path, text) in files {
+				fs.memory.insert(&RelPath::new(path).unwrap(), text.as_bytes());
+			}
+			Arc::new(fs)
+		}
+
+		/// The style of `folder`, the root when `None`, with the files read and the paths resolved.
+		fn style(self: &Arc<Self>, folder: Option<&str>) -> (Option<ImportStyle>, usize, usize) {
+			let folder = folder.map(|folder| RelPath::new(folder).unwrap());
+			let style = import_style(&Workspace::new(self.clone()), folder.as_ref(), &typescript());
+			(
+				style,
+				self.reads.load(Ordering::Relaxed),
+				self.resolves.load(Ordering::Relaxed),
+			)
+		}
+	}
+
+	impl Fs for Counted {
+		fn entry(&self, path: &RelPath) -> std::io::Result<Option<EntryKind>> {
+			self.memory.entry(path)
+		}
+
+		fn read(&self, path: &RelPath) -> std::io::Result<Vec<u8>> {
+			self.reads.fetch_add(1, Ordering::Relaxed);
+			self.memory.read(path)
+		}
+
+		fn read_limited(&self, path: &RelPath, limit: u64) -> std::io::Result<Option<Vec<u8>>> {
+			self.reads.fetch_add(1, Ordering::Relaxed);
+			self.memory.read_limited(path, limit)
+		}
+
+		fn write(&self, path: &RelPath, bytes: &[u8]) -> std::io::Result<()> {
+			self.memory.write(path, bytes)
+		}
+
+		fn create_new(&self, path: &RelPath, bytes: &[u8]) -> std::io::Result<()> {
+			self.memory.create_new(path, bytes)
+		}
+
+		fn create_dir(&self, path: &RelPath) -> std::io::Result<()> {
+			self.memory.create_dir(path)
+		}
+
+		fn remove_file(&self, path: &RelPath) -> std::io::Result<()> {
+			self.memory.remove_file(path)
+		}
+
+		fn remove_dir(&self, path: &RelPath) -> std::io::Result<()> {
+			self.memory.remove_dir(path)
+		}
+
+		fn rename(&self, from: &RelPath, to: &RelPath) -> std::io::Result<()> {
+			self.memory.rename(from, to)
+		}
+
+		fn list(&self, dir: Option<&RelPath>) -> std::io::Result<Vec<String>> {
+			self.memory.list(dir)
+		}
+
+		fn resolve_links_inside_root(&self, path: &RelPath) -> std::io::Result<Option<RelPath>> {
+			self.resolves.fetch_add(1, Ordering::Relaxed);
+			self.memory.resolve_links_inside_root(path)
+		}
 	}
 
 	#[test]
@@ -730,6 +860,89 @@ mod tests {
 	}
 
 	#[test]
+	fn a_huge_extends_array_should_stop_after_a_bounded_number_of_steps() {
+		for (specifier, expected) in [
+			("./a", ImportStyle::RuntimeExtension),
+			("a", ImportStyle::Extensionless),
+		] {
+			let bases = vec![format!("\"{specifier}\""); 100_000].join(",");
+			let files = [
+				("tsconfig.json".to_owned(), format!("{{ \"extends\": [{bases}] }}")),
+				("a.json".to_owned(), tsconfig(r#""module": "nodenext""#)),
+			];
+			let (style, reads, resolves) = Counted::new(&files).style(None);
+
+			assert_eq!(style, Some(expected), "{specifier}");
+			assert!(
+				reads <= MAX_STEPS && resolves <= MAX_STEPS + 1,
+				"{specifier}: {reads} reads, {resolves} resolves"
+			);
+		}
+	}
+
+	#[test]
+	fn a_package_extends_in_a_deep_tree_should_stop_after_a_bounded_number_of_steps() {
+		let deep = vec!["d"; 300].join("/");
+		let mut files = vec![(format!("{deep}/tsconfig.json"), r#"{ "extends": "pkg" }"#.to_owned())];
+		files.extend((0..=300).map(|depth| {
+			(
+				format!("{}node_modules/pkg/package.json", "d/".repeat(depth)),
+				"{}".to_owned(),
+			)
+		}));
+		let (style, reads, resolves) = Counted::new(&files).style(Some(&deep));
+
+		assert_eq!(style, Some(ImportStyle::Extensionless));
+		assert!(
+			reads <= MAX_STEPS && resolves <= MAX_STEPS + 1,
+			"{reads} reads, {resolves} resolves"
+		);
+	}
+
+	#[test]
+	fn star_targets_longer_than_a_path_should_resolve_to_nothing() {
+		let pattern = |target: String| Exports::Map(vec![("./*".to_owned(), Exports::Path(target))]);
+		let stars = pattern(format!("./{}", "*".repeat(100_000)));
+		let one = pattern("./*".to_owned());
+		let fits = "x".repeat(RelPath::MAX_LEN - 2);
+		let over = "x".repeat(RelPath::MAX_LEN - 1);
+
+		assert_eq!(stars.resolve(&format!("./{}", "x".repeat(1000))), None);
+		assert_eq!(one.resolve(&format!("./{fits}")), Some(format!("./{fits}")));
+		assert_eq!(one.resolve(&format!("./{over}")), None);
+	}
+
+	#[test]
+	fn specifiers_longer_than_a_path_should_be_refused_before_any_lookup() {
+		let files = |specifier: &str| {
+			[
+				(
+					"tsconfig.json".to_owned(),
+					format!("{{ \"extends\": \"{specifier}\" }}"),
+				),
+				(
+					"node_modules/base/package.json".to_owned(),
+					r#"{ "exports": { "./*": "./node.json" } }"#.to_owned(),
+				),
+				(
+					"node_modules/base/node.json".to_owned(),
+					tsconfig(r#""module": "nodenext""#),
+				),
+			]
+		};
+		let long = format!("base/{}", "x".repeat(RelPath::MAX_LEN));
+
+		assert_eq!(
+			Counted::new(&files("base/x")).style(None).0,
+			Some(ImportStyle::RuntimeExtension)
+		);
+		assert_eq!(
+			Counted::new(&files(&long)).style(None),
+			(Some(ImportStyle::Extensionless), 1, 1)
+		);
+	}
+
+	#[test]
 	fn oversized_configs_should_be_ignored() {
 		let padding = " ".repeat(usize::try_from(MAX_SIZE).unwrap());
 		let config = format!("{{ \"compilerOptions\": {{ \"module\": \"nodenext\" }} }}{padding}");
@@ -875,6 +1088,13 @@ mod tests {
 			assert!(!reads.is_empty());
 			(style, reads.iter().all(|read| read.starts_with(self.disk.root())))
 		}
+
+		/// Keeps the real path of the file at `path`, about to be read.
+		fn log(&self, path: &RelPath) -> std::io::Result<()> {
+			let real = std::fs::canonicalize(path.under(self.disk.root()))?;
+			self.reads.lock().unwrap().push(real);
+			Ok(())
+		}
 	}
 
 	#[cfg(any(unix, windows))]
@@ -884,13 +1104,13 @@ mod tests {
 		}
 
 		fn read(&self, path: &RelPath) -> std::io::Result<Vec<u8>> {
-			let real = std::fs::canonicalize(path.under(self.disk.root()))?;
-			self.reads.lock().unwrap().push(real);
+			self.log(path)?;
 			self.disk.read(path)
 		}
 
-		fn size(&self, path: &RelPath) -> std::io::Result<u64> {
-			self.disk.size(path)
+		fn read_limited(&self, path: &RelPath, limit: u64) -> std::io::Result<Option<Vec<u8>>> {
+			self.log(path)?;
+			self.disk.read_limited(path, limit)
 		}
 
 		fn write(&self, _: &RelPath, _: &[u8]) -> std::io::Result<()> {
@@ -984,6 +1204,54 @@ mod tests {
 					target.display()
 				);
 			}
+		}
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn a_pnpm_link_on_disk_that_leaves_the_project_and_comes_back_should_be_refused_whatever_is_outside() {
+		for specifier in NODE22_SPECIFIERS {
+			let parent = tempfile::tempdir().unwrap();
+			let root = parent.path().join("app");
+			write_pnpm_files(&root, specifier);
+			let link = native(&root, "node_modules/@tsconfig/node22");
+			std::os::unix::fs::symlink(format!("../../../probe/../app/{PNPM_NODE22}"), &link).unwrap();
+			for probe_exists in [false, true] {
+				if probe_exists {
+					std::fs::create_dir(parent.path().join("probe")).unwrap();
+					assert!(std::fs::canonicalize(link.join("tsconfig.json")).is_ok());
+				}
+
+				assert_eq!(
+					ReadLog::open(&root).style(),
+					(Some(ImportStyle::Extensionless), true),
+					"{specifier} {probe_exists}"
+				);
+			}
+		}
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn a_fifo_in_place_of_a_config_should_count_as_absent_without_blocking() {
+		use crate::workspace::fs::{make_fifo, within_seconds};
+
+		for fifo in ["base.json", "tsconfig.json"] {
+			let dir = tempfile::tempdir().unwrap();
+			if fifo == "base.json" {
+				std::fs::write(dir.path().join("tsconfig.json"), r#"{ "extends": "./base.json" }"#).unwrap();
+			}
+			if !make_fifo(&dir.path().join(fifo)) {
+				eprintln!("skipped: mkfifo is not available");
+				return;
+			}
+			let workspace = Workspace::open(dir.path()).unwrap();
+
+			assert_eq!(
+				within_seconds(move || import_style(&workspace, None, &typescript())),
+				Some(ImportStyle::Extensionless),
+				"{fifo}"
+			);
 		}
 	}
 

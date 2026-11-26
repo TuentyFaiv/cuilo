@@ -294,9 +294,13 @@ impl Running {
 
 	/// The line to print about updates, if any, noting in `state` that it was printed: once, that
 	/// this binary was updated; otherwise, at most once a day, that a newer release is available.
+	/// The version that was replaced leaves the update for the new binary to report, since it may
+	/// still be running when its own background check installs that binary.
 	fn report(&self, state: &mut State, now: u64) -> Option<String> {
 		let exe = self.exe.to_string_lossy();
-		if let Some(updated) = state.updated.take_if(|updated| updated.exe == exe)
+		if let Some(updated) = state
+			.updated
+			.take_if(|updated| updated.exe == exe && updated.from != self.version)
 			&& updated.to == self.version
 		{
 			return Some(format!("{} updated {} → {}.", brand::NAME, updated.from, updated.to));
@@ -859,6 +863,31 @@ mod tests {
 		let mut reinstalled = updated(&exe, "2.0.5");
 		assert_eq!(now.report(&mut reinstalled, NOW), None);
 		assert_eq!(reinstalled.updated, None);
+
+		let replaced = running(dir, exe.clone(), UpdatePolicy::Auto, "2.0.0");
+		let mut state = updated(&exe, "2.1.0");
+		assert_eq!(replaced.report(&mut state, NOW), None);
+		assert!(state.updated.is_some(), "the replaced version took the update");
+	}
+
+	#[test]
+	fn settle_should_leave_the_update_a_background_check_made_to_the_new_binary() -> anyhow::Result<()> {
+		let dir = tempfile::tempdir()?;
+		let old = script_install(dir.path(), UpdatePolicy::Auto)?;
+		let new = running(&old.dir, old.exe.clone(), UpdatePolicy::Auto, "99.0.0");
+		let watch = |running: Running| Watch { running, warning: None };
+
+		check(&newer_release(BINARY), KEY, &old, at(NOW));
+		let old = watch(old);
+
+		assert_eq!(old.settle(NOW + 1), Vec::<String>::new());
+		assert!(
+			State::load(&old.running.dir).updated.is_some(),
+			"the old process took the update"
+		);
+		assert_eq!(watch(new).settle(NOW + 60), ["cuilo updated 2.0.0 → 99.0.0."]);
+		assert_eq!(State::load(&old.running.dir).updated, None);
+		Ok(())
 	}
 
 	#[test]
@@ -973,6 +1002,33 @@ mod tests {
 			let state = State::load(&running.dir);
 			assert_eq!((state.latest, state.updated), (Some(version("99.0.0")), None));
 		}
+		Ok(())
+	}
+
+	#[test]
+	fn check_should_refuse_a_pre_release_on_the_stable_channel_and_keep_following_it() -> anyhow::Result<()> {
+		let dir = tempfile::tempdir()?;
+		let script = script_install(dir.path(), UpdatePolicy::Auto)?;
+		let mut pre = release_server(BINARY);
+		pre.bodies.push(("/latest".to_owned(), b"99.0.0-beta.1\n".to_vec()));
+
+		check(&pre, KEY, &script, at(NOW));
+
+		assert_eq!(fs::read(&script.exe)?, b"old");
+		assert_eq!(asked(&pre).len(), 1, "it went past the channel");
+		let state = State::load(&script.dir);
+		assert!(
+			state
+				.error
+				.as_deref()
+				.is_some_and(|error| error.contains("names the pre-release 99.0.0-beta.1")),
+			"{state:?}"
+		);
+		assert_eq!((state.latest, state.updated), (None, None));
+
+		check(&newer_release(BINARY), KEY, &script, at(NOW + DAY));
+		assert_eq!(fs::read(&script.exe)?, BINARY, "the stable channel stopped working");
+		assert_eq!(State::load(&script.dir).error, None);
 		Ok(())
 	}
 

@@ -121,6 +121,8 @@ curl --proto '=https' --tlsv1.2 -fsSL https://dl.cuilo.dev/install.sh | sh -s --
 
 En su última línea, los scripts de instalación dicen qué revisiones corrieron, por ejemplo `signature and SHA-256 checked` o `SHA-256 checked; install minisign to check the signature too`.
 
+`cargo binstall` solo instala binarios precompilados que firmó la llave de publicación. El crate de cuilo desactiva su alternativa de QuickInstall, cuyos binarios nunca firmó la llave de publicación. Si no hay un binario firmado, compila cuilo desde crates.io, como hace `cargo install`.
+
 <Aside type="caution" title="Un checksum no basta como prueba">
 El archivo `SHA256SUMS` viene del mismo servidor que los binarios, así que un checksum solo detecta una descarga corrupta. La firma y la atestación de GitHub son las que muestran que una versión salió del workflow de publicación de cuilo. El primer `curl … | sh` confía en el servidor de descargas por HTTPS.
 </Aside>
@@ -156,7 +158,7 @@ Los binarios de Windows y macOS todavía no están firmados con Authenticode ni 
 cuilo upgrade
 ```
 
-Una copia instalada con el script de instalación se reemplaza por la versión firmada más reciente. cuilo solo reemplaza el binario cuando el `SHA256SUMS` de la versión trae una firma válida de la llave de publicación integrada en cuilo, y el binario coincide con su checksum firmado. Nunca pasa a una versión anterior. Un cuilo preliminar sigue el canal de versiones preliminares.
+Una copia instalada con el script de instalación se reemplaza por la versión firmada más reciente. cuilo solo reemplaza el binario cuando el `SHA256SUMS` de la versión trae una firma válida de la llave de publicación integrada en cuilo, y el binario coincide con su checksum firmado. Nunca pasa a una versión anterior. Un cuilo estable solo pasa a versiones estables, y rechaza una versión preliminar que se ofrezca como la estable más reciente. Un cuilo preliminar sigue el canal de versiones preliminares.
 
 Para una copia que un gestor de paquetes instaló de forma global, `cuilo upgrade` corre ese gestor de paquetes, y primero imprime el comando. Los distingue por la carpeta donde está el binario:
 
@@ -167,7 +169,9 @@ Para una copia que un gestor de paquetes instaló de forma global, `cuilo upgrad
 | Bun           | `bun add --global @cuilo/cli@<versión>`                                                                                                     |
 | Yarn          | `yarn global add @cuilo/cli@<versión>`                                                                                                      |
 | Homebrew      | `brew upgrade tuentyfaiv/tap/cuilo`                                                                                                         |
-| Cargo         | `cargo binstall cuilo --version <versión> --no-confirm` cuando `cargo-binstall` está instalado; si no, `cargo install cuilo --locked --version <versión>` |
+| Cargo         | `cargo binstall cuilo --version <versión> --disable-strategies quick-install --no-confirm` cuando `cargo-binstall` está instalado; si no, `cargo install cuilo --locked --version <versión>` |
+
+El gestor de paquetes corre en tu carpeta de caché de cuilo, o en tu carpeta personal si no hay carpeta de caché, nunca en la carpeta desde la que corres `cuilo upgrade`. La configuración propia de un proyecto, como `.yarnrc`, `.cargo/config.toml` o `rust-toolchain.toml`, no puede cambiar lo que hace.
 
 Si el gestor de paquetes falla, `cuilo upgrade` también falla y dice qué comando fue. Una copia que no instaló ninguno de ellos, como una que copiaste a mano, no puede actualizarse sola: vuelve a instalarla con el script de instalación.
 

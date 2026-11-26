@@ -33,7 +33,7 @@ Los packs oficiales vienen dentro del binario de cuilo, así que un cuilo más n
 | `backend/middleware` | Middleware que propaga o crea un encabezado de la solicitud                  | `src/shared/middleware` |
 | `backend/database`   | Un motor async de SQLAlchemy, sesiones y una base declarativa para FastAPI   | `app`                   |
 
-Algunas variantes usan su propia carpeta. Por ejemplo, Flutter escribe en `lib/`, Axum en `src/` y las variantes de Go en `internal/`. Las páginas de [ui](/es-mx/packs/ui/) y [backend](/es-mx/packs/backend/) listan cada stack y cada carpeta.
+Algunas variantes usan su propia carpeta. Por ejemplo, Flutter escribe en `lib/`, Axum en `src/` y las variantes de Go en `internal/`. Las páginas de [ui](/es-mx/directory/ui/) y [backend](/es-mx/directory/backend/) listan cada stack y cada carpeta.
 
 ## Nombra una pieza
 

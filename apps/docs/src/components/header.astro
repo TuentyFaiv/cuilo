@@ -4,32 +4,23 @@ import Search from "@astrojs/starlight/components/Search.astro";
 import SocialIcons from "@astrojs/starlight/components/SocialIcons.astro";
 import ThemeSelect from "@astrojs/starlight/components/ThemeSelect.astro";
 
-import { localized, ui } from "../i18n/ui";
+import { ui } from "../i18n/ui";
+import { sectionTabs } from "../sections";
+import MobileMenu from "./mobile-menu.astro";
 import SiteTitle from "./site-title.astro";
 
-const { locale } = Astro.locals.starlightRoute;
+const { locale, hasSidebar } = Astro.locals.starlightRoute;
 const t = ui(locale);
-const here = Astro.url.pathname;
-const links = [
-	{ label: t.navDocs, path: "/introduction/", section: ["/introduction/", "/install/", "/first-piece/", "/guides/"] },
-	{ label: t.navDirectory, path: "/packs/directory/", section: ["/packs/"] },
-	{ label: t.navCli, path: "/reference/cli/", section: ["/reference/"] },
-	{ label: t.navAgents, path: "/agents/mcp/", section: ["/agents/"] },
-	{ label: t.navChangelog, path: "/changelog/", section: ["/changelog/"] },
-].map((link) => ({
-	...link,
-	href: localized(locale, link.path),
-	current: link.section.some((prefix) => here.startsWith(localized(locale, prefix))),
-}));
+const tabs = sectionTabs(Astro.url.pathname, locale);
 ---
 
-<div class="header">
+<div class:list={["header", { "with-menu": !hasSidebar }]}>
 	<div class="brand">
 		<SiteTitle />
-		<nav class="links" aria-label="Sections">
-			{links.map((link) => (
-				<a href={link.href} aria-current={link.current ? "page" : undefined}>
-					{link.label}
+		<nav class="links" aria-label={t.navSections}>
+			{tabs.map((tab) => (
+				<a href={tab.href} aria-current={tab.current ? "true" : undefined}>
+					{tab.label}
 				</a>
 			))}
 		</nav>
@@ -43,6 +34,7 @@ const links = [
 		</div>
 	</div>
 </div>
+{!hasSidebar && <MobileMenu />}
 
 <style>
 	.header {
@@ -75,13 +67,21 @@ const links = [
 	}
 
 	.links a:hover,
-	.links a[aria-current="page"] {
+	.links a[aria-current="true"] {
 		color: var(--cu-ink);
+	}
+
+	.with-menu {
+		margin-inline-end: calc(var(--sl-nav-gap) + var(--sl-menu-button-size));
 	}
 
 	@media (min-width: 72rem) {
 		.links {
 			display: flex;
+		}
+
+		.with-menu {
+			margin-inline-end: 0;
 		}
 
 		.search {

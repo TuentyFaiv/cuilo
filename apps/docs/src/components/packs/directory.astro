@@ -8,7 +8,7 @@ const { locale } = Astro.locals.starlightRoute;
 const t = ui(locale);
 const rows = packs.map((pack) => ({
 	...pack,
-	href: localized(locale, `/packs/${pack.name}/`),
+	href: localized(locale, `/directory/${pack.name}/`),
 	stacks: new Set(pack.pieces.flatMap((piece) => piece.variants.map((variant) => stackName(variant)))).size,
 	text: `${pack.name} ${pack.description} ${pack.pieces.map((piece) => piece.name).join(" ")}`.toLowerCase(),
 }));

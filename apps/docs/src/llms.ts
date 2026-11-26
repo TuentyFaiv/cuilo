@@ -1,32 +1,25 @@
 import { getCollection } from "astro:content";
 
 import packs from "./data/packs.json" with { type: "json" };
+import { SECTIONS } from "./sections";
 
 /** The site the links in llms.txt point to. */
 export const SITE = "https://cuilo.dev";
 
-/** Sections in the order the sidebar shows them; pages that match none come last. */
-const ORDER = [
-	"introduction",
-	"install",
-	"first-piece",
-	"guides/",
-	"reference/",
-	"packs/",
-	"agents/",
-	"security",
-	"migrating-from-v1",
-	"changelog",
-];
+/** Page path prefixes in the order the header and sidebars show them; pages that match none come last. */
+const ORDER = SECTIONS.flatMap((section) => section.prefixes);
 
 /** Lines that only import a component or open, close or place one, which mean nothing as plain text. */
 const COMPONENT_LINE = /^\s*(import\s.+\sfrom\s|<\/?[A-Z][\w.]*(\s[^>]*)?\/?>\s*$)/;
 
 /** Every English docs page except the landing, in sidebar order. */
 export async function englishPages() {
-	const entries = await getCollection("docs", (entry) => entry.id !== "index" && !entry.id.startsWith("es-mx/"));
+	const entries = await getCollection(
+		"docs",
+		(entry) => entry.id !== "index" && entry.id !== "es-mx" && !entry.id.startsWith("es-mx/")
+	);
 	const rank = (id: string) => {
-		const index = ORDER.findIndex((prefix) => id === prefix || (prefix.endsWith("/") && id.startsWith(prefix)));
+		const index = ORDER.findIndex((prefix) => `/${id}/`.startsWith(prefix));
 		return index === -1 ? ORDER.length : index;
 	};
 	return entries.sort((a, b) => rank(a.id) - rank(b.id) || a.id.localeCompare(b.id));

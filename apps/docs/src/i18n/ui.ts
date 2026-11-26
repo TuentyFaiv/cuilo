@@ -2,9 +2,11 @@
 const english = {
 	navDocs: "Docs",
 	navDirectory: "Directory",
-	navCli: "CLI",
+	navReference: "Reference",
 	navAgents: "Agents",
 	navChangelog: "Changelog",
+	navSections: "Sections",
+	breadcrumb: "Breadcrumb",
 	versionLabel: "alpha",
 	footerNote: "MIT License · built with Astro and Starlight",
 	footerSecurity: "Security",
@@ -82,14 +84,17 @@ const english = {
 	copied: "Copied",
 };
 
-type UiStrings = typeof english;
+/** Every string the site's own components show. */
+export type UiStrings = typeof english;
 
 const spanish: UiStrings = {
 	navDocs: "Docs",
 	navDirectory: "Directorio",
-	navCli: "CLI",
+	navReference: "Referencia",
 	navAgents: "Agentes",
 	navChangelog: "Cambios",
+	navSections: "Secciones",
+	breadcrumb: "Ruta de navegación",
 	versionLabel: "alfa",
 	footerNote: "Licencia MIT · hecho con Astro y Starlight",
 	footerSecurity: "Seguridad",

@@ -31,8 +31,9 @@ use crate::model::RelPath;
 
 const STATE_GITIGNORE: &str = "# cuilo local state: cache and history. Safe to delete.\n*\n";
 
-/// A project confined to its root: reads and writes never go through symlinks or files in the way. Import
-/// detection alone may read a tsconfig or `package.json` through links, when its real path is inside the root.
+/// A project confined to its root: reads and writes never go through symlinks or files in the way, and touch
+/// only regular files. Import detection alone may read a tsconfig or `package.json` through links, when every
+/// link on the way stays inside the root.
 #[derive(Clone, Debug)]
 pub(crate) struct Workspace {
 	fs: Arc<dyn Fs>,
@@ -59,6 +60,9 @@ pub enum WorkspaceError {
 	/// A file where a folder is expected.
 	#[error("`{0}` is a file, but a folder is needed there")]
 	NotADir(RelPath),
+	/// A FIFO, socket or device where a file is expected.
+	#[error("`{0}` is a FIFO, socket or device; cuilo only reads and writes regular files")]
+	Special(RelPath),
 }
 
 impl Workspace {
@@ -92,15 +96,17 @@ impl Workspace {
 			Some(EntryKind::File) => self.fs.read(path).map(Some).map_err(io_error(path)),
 			Some(EntryKind::Dir) => Err(WorkspaceError::NotAFile(path.clone())),
 			Some(EntryKind::Symlink) => Err(WorkspaceError::Symlink(path.clone())),
+			Some(EntryKind::Special) => Err(WorkspaceError::Special(path.clone())),
 		}
 	}
 
-	/// Reads a file of at most `limit` bytes, or `None` when it does not exist or is larger.
+	/// Reads a file of at most `limit` bytes, or `None` when it does not exist, is larger or is not a regular
+	/// file.
 	pub(crate) fn read_limited(&self, path: &RelPath, limit: u64) -> Result<Option<Vec<u8>>, WorkspaceError> {
-		if !self.exists(path)? || self.fs.size(path).map_err(io_error(path))? > limit {
+		if !self.exists(path)? {
 			return Ok(None);
 		}
-		self.read(path)
+		self.fs.read_limited(path, limit).map_err(io_error(path))
 	}
 
 	/// Whether a file exists at `path`.
@@ -137,6 +143,7 @@ impl Workspace {
 			Some(EntryKind::File) => self.fs.remove_file(path).map(|()| true).map_err(io_error(path)),
 			Some(EntryKind::Dir) => Err(WorkspaceError::NotAFile(path.clone())),
 			Some(EntryKind::Symlink) => Err(WorkspaceError::Symlink(path.clone())),
+			Some(EntryKind::Special) => Err(WorkspaceError::Special(path.clone())),
 		}
 	}
 
@@ -155,6 +162,7 @@ impl Workspace {
 			None => return Err(io_error(from)(ErrorKind::NotFound.into())),
 			Some(EntryKind::Dir) => return Err(WorkspaceError::NotAFile(from.clone())),
 			Some(EntryKind::Symlink) => return Err(WorkspaceError::Symlink(from.clone())),
+			Some(EntryKind::Special) => return Err(WorkspaceError::Special(from.clone())),
 		}
 		self.prepare_file(to)?;
 		self.fs.rename(from, to).map_err(io_error(from))
@@ -202,7 +210,7 @@ impl Workspace {
 			match self.entry(dir)? {
 				None => return Ok(Vec::new()),
 				Some(EntryKind::Dir) => {}
-				Some(EntryKind::File) => return Err(WorkspaceError::NotADir(dir.clone())),
+				Some(EntryKind::File | EntryKind::Special) => return Err(WorkspaceError::NotADir(dir.clone())),
 				Some(EntryKind::Symlink) => return Err(WorkspaceError::Symlink(dir.clone())),
 			}
 		}
@@ -226,7 +234,7 @@ impl Workspace {
 			match self.fs.entry(&ancestor).map_err(io_error(&ancestor))? {
 				None => return Ok(None),
 				Some(EntryKind::Dir) => {}
-				Some(EntryKind::File) => return Err(WorkspaceError::NotADir(ancestor)),
+				Some(EntryKind::File | EntryKind::Special) => return Err(WorkspaceError::NotADir(ancestor)),
 				Some(EntryKind::Symlink) => return Err(WorkspaceError::Symlink(ancestor)),
 			}
 		}
@@ -237,6 +245,7 @@ impl Workspace {
 		match self.entry(path)? {
 			Some(EntryKind::Dir) => return Err(WorkspaceError::NotAFile(path.clone())),
 			Some(EntryKind::Symlink) => return Err(WorkspaceError::Symlink(path.clone())),
+			Some(EntryKind::Special) => return Err(WorkspaceError::Special(path.clone())),
 			Some(EntryKind::File) | None => {}
 		}
 		let mut created = Vec::new();
@@ -382,6 +391,33 @@ mod tests {
 			std::fs::read_to_string(dir.path().join("real/pkg/package.json")).unwrap(),
 			"{}"
 		);
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn disk_workspace_should_refuse_fifos_without_blocking() {
+		let dir = tempfile::tempdir().unwrap();
+		if !fs::make_fifo(&dir.path().join("pipe")) {
+			eprintln!("skipped: mkfifo is not available");
+			return;
+		}
+		let workspace = Workspace::open(dir.path()).unwrap();
+		let pipe = rel("pipe");
+		let (exists, read, limited, write, walk) = fs::within_seconds(move || {
+			(
+				workspace.exists(&pipe),
+				workspace.read(&pipe),
+				workspace.read_limited(&pipe, 1024),
+				workspace.write(&pipe, b"x"),
+				workspace.walk(10),
+			)
+		});
+
+		assert!(!exists.unwrap());
+		assert!(matches!(read, Err(WorkspaceError::Special(_))));
+		assert_eq!(limited.unwrap(), None);
+		assert!(matches!(write, Err(WorkspaceError::Special(_))));
+		assert_eq!(walk.unwrap(), Vec::<RelPath>::new());
 	}
 
 	#[test]

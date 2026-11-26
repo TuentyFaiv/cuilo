@@ -38,6 +38,9 @@ pub enum PathError {
 }
 
 impl RelPath {
+	/// The longest path accepted, in bytes.
+	pub(crate) const MAX_LEN: usize = MAX_LEN;
+
 	/// Validates `path`.
 	pub fn new(path: &str) -> Result<Self, PathError> {
 		if path.len() > MAX_LEN {
