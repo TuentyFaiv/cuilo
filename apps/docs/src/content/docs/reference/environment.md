@@ -8,14 +8,16 @@ cuilo reads few environment variables. Anything that sends credentials or runs p
 
 ## cuilo
 
-| Variable                          | What it does                                                                                                                                                                     |
-| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CUILO_CONFIG_DIR`                | The folder for your user config, `config.toml`, and `trusted-projects.toml`, the projects you answered the trust question for.                                                   |
-| `CUILO_CACHE_DIR`                 | The folder for downloaded packs (`packs/`) and the copies `--verify` checks (`verify/`).                                                                                         |
-| `NO_COLOR`                        | Turns colors off. Set to any value, even an empty one. Colors are also off when output is not a terminal, and with `--json`.                                                     |
-| The variable in `auth.<host>.env` | The token cuilo sends when it downloads a pack from that host, e.g. `GITHUB_TOKEN`. Unset or empty sends no token; a token with spaces or control characters is an error.        |
-| `GIT_SSH_COMMAND`, `GIT_SSH`      | When either is set, or git has `core.sshCommand`, cuilo leaves SSH to it for `git:` sources. Otherwise it runs `ssh -o BatchMode=yes -o ConnectTimeout=30`.                      |
-| `PATH`                            | Where cuilo finds `git`, `ast-grep`, package managers, the checks `--verify` runs, and formatters from your system, such as rustfmt, gofmt, and Ruff or Black without a `.venv`. |
+| Variable                          | What it does                                                                                                                                                                                                                                             |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CUILO_CONFIG_DIR`                | The folder for your user config, `config.toml`, and `trusted-projects.toml`, the projects you answered the trust question for.                                                                                                                           |
+| `CUILO_CACHE_DIR`                 | The folder for downloaded packs (`packs/`), the copies `--verify` checks (`verify/`), and what the last update check found (`update.json`).                                                                                                              |
+| `CUILO_UPDATES`                   | `auto`, `notify` or `off`, in place of `updates` in your user config: what cuilo does about new releases. See [automatic updates](/install/#automatic-updates). Empty counts as unset; any other value counts as `off`.                                  |
+| `CI`                              | When set to a value that is not empty, cuilo never looks for new releases and prints no update notices.                                                                                                                                                  |
+| `NO_COLOR`                        | Turns colors off. Set to any value, even an empty one. Colors are also off when output is not a terminal, and with `--json`.                                                                                                                             |
+| The variable in `auth.<host>.env` | The token cuilo sends when it downloads a pack from that host, e.g. `GITHUB_TOKEN`. Unset or empty sends no token; a token with spaces or control characters is an error.                                                                                |
+| `GIT_SSH_COMMAND`, `GIT_SSH`      | When either is set, or git has `core.sshCommand`, cuilo leaves SSH to it for `git:` sources. Otherwise it runs `ssh -o BatchMode=yes -o ConnectTimeout=30`.                                                                                              |
+| `PATH`                            | Where cuilo finds `git`, `ast-grep`, package managers, the checks `--verify` runs, and formatters from your system, such as rustfmt, gofmt, and Ruff or Black without a `.venv`. On Windows, cuilo also reads `PATHEXT` to find shims such as `npm.cmd`. |
 
 An empty `CUILO_CONFIG_DIR` or `CUILO_CACHE_DIR` counts as unset. Without them, cuilo uses the system's folders:
 
@@ -32,7 +34,7 @@ An empty `CUILO_CONFIG_DIR` or `CUILO_CACHE_DIR` counts as unset. Without them, 
 
 ### Proxies and certificates
 
-cuilo's HTTPS client and certificate loader read these, for pack downloads and `cuilo upgrade`:
+cuilo's HTTPS client and certificate loader read these, for pack downloads, `cuilo upgrade` and update checks:
 
 | Variable                                                            | What it does                                                                                     |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |

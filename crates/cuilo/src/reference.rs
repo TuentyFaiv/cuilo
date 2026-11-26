@@ -3,9 +3,6 @@
 use clap::{Arg, ArgAction, Command};
 use serde_json::{Value, json};
 
-/// Arguments clap adds to every command, which the reference does not list.
-const BUILT_IN: [&str; 2] = ["help", "version"];
-
 /// Every visible command in `command`, with its usage and arguments.
 pub(crate) fn describe(mut command: Command) -> Value {
 	command.build();
@@ -17,7 +14,7 @@ fn command_value(command: &mut Command) -> Value {
 	let usage = usage.strip_prefix("Usage: ").unwrap_or(&usage).trim().to_owned();
 	let args: Vec<Value> = command
 		.get_arguments()
-		.filter(|arg| !arg.is_hide_set() && !BUILT_IN.contains(&arg.get_id().as_str()))
+		.filter(|arg| !arg.is_hide_set() && !built_in(arg))
 		.map(arg_value)
 		.collect();
 	let commands: Vec<Value> = command
@@ -33,6 +30,15 @@ fn command_value(command: &mut Command) -> Value {
 		"args": args,
 		"commands": commands,
 	})
+}
+
+/// Whether clap added `arg` to every command, like `--help` and `--version`, which the reference
+/// does not list.
+fn built_in(arg: &Arg) -> bool {
+	matches!(
+		arg.get_action(),
+		ArgAction::Help | ArgAction::HelpShort | ArgAction::HelpLong | ArgAction::Version
+	)
 }
 
 fn arg_value(arg: &Arg) -> Value {
@@ -116,5 +122,25 @@ mod tests {
 				.flatten()
 				.all(|arg| arg["global"] == true)
 		);
+	}
+
+	#[test]
+	fn describe_should_list_visible_flags_and_skip_hidden_ones() {
+		let cli = describe(Cli::command());
+		let upgrade = cli["commands"]
+			.as_array()
+			.and_then(|commands| commands.iter().find(|command| command["name"] == "upgrade"))
+			.cloned()
+			.unwrap_or_default();
+		let ids: Vec<&str> = upgrade["args"]
+			.as_array()
+			.into_iter()
+			.flatten()
+			.filter_map(|arg| arg["id"].as_str())
+			.collect();
+
+		assert!(ids.contains(&"check") && ids.contains(&"version"), "{ids:?}");
+		assert!(!ids.contains(&"background"), "{ids:?}");
+		assert!(!ids.contains(&"help"), "{ids:?}");
 	}
 }

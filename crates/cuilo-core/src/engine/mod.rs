@@ -66,6 +66,9 @@ pub struct PieceRequest<'a> {
 	pub granted: Option<&'a Permissions>,
 	/// Allow replacing existing files that differ.
 	pub force: bool,
+	/// Apply the patches of the pieces' wiring steps instead of listing those steps as next steps;
+	/// [`Engine::plan_adopt`] ignores it.
+	pub wire: bool,
 }
 
 /// Why an engine operation failed.

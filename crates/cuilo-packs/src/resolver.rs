@@ -34,9 +34,7 @@ pub struct Resolver {
 }
 
 impl Resolver {
-	/// A resolver for the project at `root`, downloading over HTTPS into the user's cache.
-	///
-	/// Without the `remote` feature it reaches no network, so only official, folder and cached packs load.
+	/// A resolver for the project at `root`, downloading over HTTPS (with `remote`) into the user's cache.
 	#[must_use]
 	pub fn new(root: impl Into<PathBuf>) -> Self {
 		Self {
@@ -80,9 +78,7 @@ impl Resolver {
 		)
 	}
 
-	/// The pack versions `lock` pins, from the cache or their source; official packs are left out,
-	/// since they ship with cuilo. Packs that cannot be loaded, or are not the pack and version their
-	/// record names, are returned with the reason.
+	/// The non-official pack versions `lock` pins, and each source that failed to load or match its record.
 	#[must_use]
 	pub fn pinned(&self, lock: &Lockfile) -> (Vec<Pack>, Vec<(String, SourceError)>) {
 		let mut packs = Vec::new();
@@ -162,11 +158,8 @@ impl Resolver {
 		self
 	}
 
-	/// Loads the pack at `source`.
-	///
-	/// `pinned` is the hash the lockfile recorded for it: a cached copy is used without downloading,
-	/// and a pack whose files differ is refused. Official packs are exempt: they ship with cuilo, so
-	/// a newer cuilo brings their next version.
+	/// Loads the pack at `source`; a `pinned` lockfile hash serves it from the cache and refuses changed
+	/// files, except for official packs, which update with cuilo.
 	pub fn resolve(&self, source: &str, pinned: Option<Digest>) -> Result<Pack, SourceError> {
 		let spec: PackSpec = source.parse()?;
 		let pack = match &spec {

@@ -5,7 +5,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 
 import { toProblem } from "./errors";
 
-/** Sends every error as problem details; register it with `app.onError(errorHandler)`. */
+/** Sends every error as problem details. */
 export const errorHandler: ErrorHandler = (error, c) => {
 	if (error instanceof HTTPException) {
 		return error.getResponse();
@@ -23,7 +23,7 @@ import type { ErrorRequestHandler } from "express";
 
 import { toProblem } from "./errors";
 
-/** Sends every error as problem details; register it last with `app.use(errorHandler)`. */
+/** Sends every error as problem details. */
 export const errorHandler: ErrorRequestHandler = (error, _request, response, next) => {
 	if (response.headersSent) {
 		next(error);

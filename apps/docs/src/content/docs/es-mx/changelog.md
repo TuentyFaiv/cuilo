@@ -15,6 +15,7 @@ La primera versión de cuilo 2. Es una reescritura de tfverse, la CLI de v1, con
 - Las piezas declaran entradas tipadas una sola vez. La misma definición controla las preguntas en la terminal, los flags `-i key=value` y lo que `describe_piece` les dice a los agentes.
 - Las piezas se adaptan al stack detectado con variantes y condiciones de stack como `default_when`. `cuilo detect` muestra lo que encontró.
 - Una pieza puede requerir otras piezas de su pack, listar los paquetes que importa su código y parchear archivos existentes con parches `anchor`, `import` y `css_vars`.
+- Las piezas listan siguientes pasos después de `cuilo add`, como montar rutas nuevas, en lugar de indicaciones de configuración en el código generado. Con `--wire`, o con `wire = true` en la configuración de usuario, cuilo hace los pasos que puede como parches dentro del plan. Consulta [siguientes pasos y conexión](/es-mx/guides/packs-and-pieces/#siguientes-pasos-y-conexión).
 - Orígenes de packs: packs oficiales integrados en el binario, carpetas, tags o commits con `gh:`, tarballs por HTTPS, `git:` por SSH, elementos de `registry:` y namespaces de la configuración del proyecto. Consulta [Orígenes de packs](/es-mx/packs/sources/).
 - Dos packs oficiales vienen con cuilo: `ui` 0.2.0 (`atom`, `molecule`, `organism`) y `backend` 0.1.0 (`resource`, `error`, `middleware`, `database`).
 - `cuilo adopt` toma código existente como una pieza. `cuilo pack capture` convierte archivos del proyecto en una pieza de un pack local. Consulta [Adopta y captura](/es-mx/guides/adopt-and-capture/).
@@ -70,7 +71,8 @@ Estos canales abren con la primera versión.
 - npm (`@cuilo/cli`), sin dependencias y sin nada que se ejecute al instalar; el gestor de paquetes elige el paquete de tu plataforma.
 - Scripts de instalación para macOS, Linux y Windows que verifican el SHA-256, y la firma cuando `minisign` está instalado. `CUILO_REQUIRE_SIGNATURE=1` hace obligatoria la firma.
 - Homebrew (`tuentyfaiv/tap/cuilo`) y cargo (`cargo binstall cuilo`, `cargo install cuilo --locked`).
-- `cuilo upgrade` reemplaza una copia instalada con el script por una versión firmada más nueva. `cuilo upgrade --check` solo informa qué hay disponible.
+- `cuilo upgrade` reemplaza una copia instalada con el script por una versión firmada más nueva, y corre npm, pnpm, Bun, Yarn, Homebrew o cargo para las copias que ellos instalaron. `cuilo upgrade --check` solo informa qué hay disponible.
+- En una terminal, cuilo busca una versión nueva una vez al día en segundo plano. Las copias instaladas con el script se actualizan solas, y las demás imprimen un aviso. `updates` en la configuración de usuario, o `CUILO_UPDATES`, elige `auto`, `notify` u `off`.
 - `cuilo completions <bash|zsh|fish|powershell|elvish>` imprime un script de autocompletado para tu shell.
 
 Consulta [Instalación](/es-mx/install/).

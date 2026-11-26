@@ -150,19 +150,50 @@ Windows and macOS binaries are not code-signed with Authenticode or Apple notari
 
 ## Upgrade
 
-`cuilo upgrade` replaces a copy that the install script made with the newest signed release:
+`cuilo upgrade` moves cuilo to the newest release, however you installed it:
 
 ```sh
 cuilo upgrade
 ```
 
-It replaces the binary only when the release's `SHA256SUMS` carries a valid signature by the release key built into cuilo, and the binary matches its signed checksum. It never moves to an older version. A pre-release cuilo follows the pre-release channel. To install a specific version, which may be older, pass `--version`:
+A copy that the install script made is replaced with the newest signed release. cuilo replaces the binary only when the release's `SHA256SUMS` carries a valid signature by the release key built into cuilo, and the binary matches its signed checksum. It never moves to an older version. A pre-release cuilo follows the pre-release channel.
+
+For any other copy, `cuilo upgrade` runs the package manager that installed it, and prints the command first. It tells them apart by the folder the binary is in:
+
+| Installed with | `cuilo upgrade` runs                                                                                                             |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| npm            | `npm install --global @cuilo/cli@<version>`                                                                                      |
+| pnpm           | `pnpm add --global @cuilo/cli@<version>`                                                                                         |
+| Bun            | `bun add --global @cuilo/cli@<version>`                                                                                          |
+| Yarn           | `yarn global add @cuilo/cli@<version>`                                                                                           |
+| Homebrew       | `brew upgrade tuentyfaiv/tap/cuilo`                                                                                              |
+| Cargo          | `cargo binstall cuilo --version <version> --no-confirm` when `cargo-binstall` is installed, else `cargo install cuilo --locked --version <version>` |
+
+When the package manager fails, so does `cuilo upgrade`, naming the command. A copy that none of them installed, such as one you copied by hand, cannot upgrade itself: reinstall it with the install script.
+
+To install a specific version, which may be older, pass `--version`. Homebrew cannot install a chosen version, so this does not work for a Homebrew copy.
 
 ```sh
 cuilo upgrade --version 2.0.0
 ```
 
-`cuilo upgrade --check` only reports whether a newer release exists, and works however you installed cuilo. Copies installed another way are left to their package manager, and `cuilo upgrade` tells you the command to use, such as `brew upgrade cuilo`. See [`cuilo upgrade`](/reference/cli/upgrade/).
+`cuilo upgrade --check` only reports whether a newer release exists, and which command `cuilo upgrade` would run. With `--json`, the package manager's output goes to stderr, so stdout stays valid JSON. See [`cuilo upgrade`](/reference/cli/upgrade/).
+
+### Automatic updates
+
+When you use cuilo in a terminal, it looks for a new release at most once a day. The check runs in the background, so no command waits for it or fails because of it. What happens next depends on `updates` in your [user config](/reference/user-config/#updates), `config.toml` in your cuilo config folder:
+
+| `updates`        | What cuilo does                                                                                                                                                                                                                                                       |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auto` (default) | A copy that the install script made updates itself in the background, with the same signature and checksum checks as `cuilo upgrade`. The next time you run cuilo, it says so once, for example `cuilo updated 2.0.0 → 2.1.0.` Any other copy prints a notice instead. |
+| `notify`         | Prints a notice, at most once a day: ``cuilo 2.1.0 is available (you have 2.0.0); run `cuilo upgrade`.``                                                                                                                                                              |
+| `off`            | Never looks.                                                                                                                                                                                                                                                          |
+
+```toml
+updates = "notify"
+```
+
+`CUILO_UPDATES` overrides the config, for example `CUILO_UPDATES=off cuilo status`. cuilo prints these lines on stderr, after the command's own output. It never checks or prints them with `--json`, when stderr is not a terminal, when `CI` is set, or for `cuilo mcp`, `cuilo completions` and `cuilo upgrade`. A failed check or update is noted in `update.json` in your cache folder and tried again the next day. Until then, a copy that could not update itself prints the notice, so you can run `cuilo upgrade` and see why. See [Environment variables](/reference/environment/).
 
 ## Shell completions
 

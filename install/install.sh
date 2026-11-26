@@ -15,7 +15,6 @@ set -eu
 
 download_url="https://dl.cuilo.dev"
 repo="TuentyFaiv/cuilo"
-# The minisign key that signs every release file.
 release_key="RWTFcgVmt+E7Xi77vi6Q/Yu68TJDTsBTKYHqOmyjSOY4VCgpEFCwl+dK"
 
 fail() {

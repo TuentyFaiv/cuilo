@@ -123,3 +123,27 @@ fn engine_errors_should_be_tool_errors_and_unknown_tools_protocol_errors() -> Te
 	assert_eq!(replies[1]["error"]["code"], -32602);
 	Ok(())
 }
+
+#[test]
+fn plan_add_should_offer_wire_and_the_instructions_should_ask_to_relay_next_steps() -> TestResult {
+	let dir = tempfile::tempdir()?;
+	let replies = session(
+		dir.path(),
+		&[
+			json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": { "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": { "name": "test", "version": "1" } } }),
+			json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list" }),
+		],
+	)?;
+
+	let schema = |name: &str| {
+		replies[1]["result"]["tools"]
+			.as_array()
+			.and_then(|tools| tools.iter().find(|tool| tool["name"] == name))
+			.map(|tool| tool["inputSchema"]["properties"].clone())
+	};
+	assert_eq!(schema("plan_add").ok_or("no plan_add")?["wire"]["type"], "boolean");
+	assert!(schema("plan_adopt").ok_or("no plan_adopt")?.get("wire").is_none());
+	let instructions = replies[0]["result"]["instructions"].as_str().unwrap_or_default();
+	assert!(instructions.contains("next_steps"), "{instructions}");
+	Ok(())
+}

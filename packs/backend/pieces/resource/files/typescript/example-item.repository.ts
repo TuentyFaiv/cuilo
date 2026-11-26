@@ -6,7 +6,7 @@ export interface Page {
 	offset: number;
 }
 
-/** Storage for example items; the service depends on this, not on a database. */
+/** Storage for example items. */
 export interface ExampleItemRepository {
 	list(page: Page): Promise<ExampleItem[]>;
 	findById(id: string): Promise<ExampleItem | undefined>;

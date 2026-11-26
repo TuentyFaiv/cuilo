@@ -47,6 +47,7 @@ pub struct Plan<S> {
 	summary: String,
 	record: Record,
 	notes: Vec<Note>,
+	next_steps: Vec<String>,
 	state: S,
 }
 
@@ -61,6 +62,19 @@ pub(crate) struct Record {
 	pub dependencies: Vec<Dependency>,
 	/// Content to cache, such as patch regions.
 	pub blobs: Vec<Vec<u8>>,
+	/// Steps whose patches the plan applies.
+	pub wired: Vec<WiredStep>,
+}
+
+/// A step the plan does with its patches instead of listing it.
+#[derive(Debug)]
+pub(crate) struct WiredStep {
+	/// Id of the instance it belongs to.
+	pub instance: String,
+	/// Files its patches edit.
+	pub files: Vec<RelPath>,
+	/// Its text, listed again if the user skips those files.
+	pub text: String,
 }
 
 #[derive(Debug)]
@@ -198,6 +212,9 @@ pub struct PlanReport<'a> {
 	/// Things to know that do not stop the plan.
 	#[serde(skip_serializing_if = "<[Note]>::is_empty")]
 	pub notes: &'a [Note],
+	/// What the user still has to do once the plan is applied, such as mounting routes cuilo did not wire.
+	#[serde(skip_serializing_if = "<[String]>::is_empty")]
+	pub next_steps: &'a [String],
 }
 
 impl Plan<Draft> {
@@ -207,6 +224,7 @@ impl Plan<Draft> {
 			summary: summary.into(),
 			record: Record::default(),
 			notes: Vec::new(),
+			next_steps: Vec::new(),
 			state: Draft::default(),
 		}
 	}
@@ -254,6 +272,20 @@ impl Plan<Draft> {
 		if !self.notes.contains(&note) {
 			self.notes.push(note);
 		}
+	}
+
+	/// Lists `text` as something the user does once the plan is applied, once.
+	pub(crate) fn next_step(&mut self, text: String) {
+		self.list_next_step(text);
+	}
+
+	/// Records that the patches of the step `text` of `instance` edit `files`.
+	pub(crate) fn wired(&mut self, instance: &str, files: Vec<RelPath>, text: String) {
+		self.record.wired.push(WiredStep {
+			instance: instance.to_owned(),
+			files,
+			text,
+		});
 	}
 
 	/// Records `instance` in the lockfile when applied.
@@ -320,6 +352,7 @@ impl Plan<Draft> {
 				summary: self.summary,
 				record: self.record,
 				notes: self.notes,
+				next_steps: self.next_steps,
 				state: Validated { changes },
 			})
 		} else {
@@ -359,6 +392,12 @@ impl Plan<Validated> {
 		&self.notes
 	}
 
+	/// What the user still has to do once the plan is applied, such as mounting routes cuilo did not wire.
+	#[must_use]
+	pub fn next_steps(&self) -> &[String] {
+		&self.next_steps
+	}
+
 	/// A serializable summary.
 	#[must_use]
 	pub fn report(&self) -> PlanReport<'_> {
@@ -373,11 +412,20 @@ impl Plan<Validated> {
 				.collect(),
 			dependencies: &self.record.dependencies,
 			notes: &self.notes,
+			next_steps: &self.next_steps,
 		}
 	}
 
 	pub(crate) fn into_parts(self) -> (String, Vec<Change>, Record) {
 		(self.summary, self.state.changes, self.record)
+	}
+}
+
+impl<S> Plan<S> {
+	fn list_next_step(&mut self, text: String) {
+		if !self.next_steps.contains(&text) {
+			self.next_steps.push(text);
+		}
 	}
 }
 

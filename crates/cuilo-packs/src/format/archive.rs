@@ -21,10 +21,8 @@ pub enum ArchiveError {
 	Limit(String),
 }
 
-/// Every regular file in `bytes`, keyed by `/`-separated path.
-///
-/// With `strip_root`, the single top folder that GitHub and most release archives use is removed.
-/// Links and special files are skipped, never followed.
+/// Every regular file in `bytes` by `/`-separated path, without the single top folder when `strip_root`;
+/// links and special files are skipped, never followed.
 pub fn unpack(bytes: &[u8], strip_root: bool) -> Result<BTreeMap<String, Vec<u8>>, ArchiveError> {
 	read(Archive::new(GzDecoder::new(bytes)), strip_root)
 }

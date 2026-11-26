@@ -426,8 +426,8 @@ fn known_types(schema: &Value, node: &Value) -> Vec<String> {
 	names
 }
 
-/// The objects whose properties `node` describes, through refs, unions, arrays and maps; a union of objects gives
-/// one per variant, and the suffix says how their fields are reached (`[]` for items, `.<key>` for map values).
+/// The objects whose properties `node` describes, one per union variant, and the suffix that reaches their
+/// fields (`[]` for items, `.<key>` for map values).
 fn objects_of<'a>(schema: &'a Value, node: &'a Value) -> (Vec<&'a Value>, &'static str) {
 	let (node, _) = resolve(schema, node);
 	if node["properties"].is_object() {

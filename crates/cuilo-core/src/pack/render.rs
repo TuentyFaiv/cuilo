@@ -1,11 +1,11 @@
-//! Renders a piece into files and patches, without touching the disk.
+//! Renders a piece into files, patches and steps, without touching the disk.
 
 use std::collections::BTreeSet;
 
 use serde::Serialize;
 
 use super::Piece;
-use crate::model::{Dependency, Name, PatchSpec, PathError, PieceManifest, RelPath, Stack, Values, Variant};
+use crate::model::{Dependency, Name, PatchSpec, PathError, RelPath, Stack, Values, Variant};
 use crate::patch::Patch;
 use crate::template::{self, BlockError, Expr, ExprError, ReplaceError, Replacer};
 
@@ -37,6 +37,19 @@ pub(crate) struct Rendered {
 	pub patches: Vec<Patch>,
 	/// Packages the files import.
 	pub dependencies: Vec<Dependency>,
+	/// Steps whose variants and conditions hold.
+	pub steps: Vec<RenderedStep>,
+	/// Whether `target` is the piece's or variant's own folder, which wiring patches assume.
+	pub at_default_target: bool,
+}
+
+/// A step with examples replaced in its text and patches.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct RenderedStep {
+	/// What the user does.
+	pub text: String,
+	/// Edits that do it; empty when only the user can.
+	pub patches: Vec<Patch>,
 }
 
 /// One rendered file.
@@ -131,15 +144,13 @@ pub(crate) fn render(request: &RenderRequest<'_>) -> Result<Rendered, RenderErro
 	conditions.extend(request.values.iter().map(|(name, value)| (name.clone(), value.clone())));
 
 	let replacer = Replacer::new(&request.piece.examples(request.values))?;
-	let target = match request.target {
-		Some(target) => Some(target.clone()),
-		None => default_target(
-			variant
-				.and_then(|variant| variant.target.as_ref())
-				.unwrap_or(&manifest.target),
-			&replacer,
-		)?,
-	};
+	let own_target = default_target(
+		variant
+			.and_then(|variant| variant.target.as_ref())
+			.unwrap_or(&manifest.target),
+		&replacer,
+	)?;
+	let target = request.target.cloned().or_else(|| own_target.clone());
 
 	let dir = Piece::files_dir(variant);
 	let mut seen = BTreeSet::new();
@@ -171,36 +182,47 @@ pub(crate) fn render(request: &RenderRequest<'_>) -> Result<Rendered, RenderErro
 		files.push(RenderedFile { path, contents });
 	}
 
-	let patches = patches(manifest, &replacer, &conditions)?;
+	let mut dependencies = Vec::new();
+	for dependency in &manifest.dependencies {
+		if selected(&dependency.variants, dependency.when.as_deref(), variant, &conditions)? {
+			dependencies.push(dependency.clone());
+		}
+	}
+	let mut steps = Vec::new();
+	for step in &manifest.steps {
+		if selected(&step.variants, step.when.as_deref(), variant, &conditions)? {
+			steps.push(RenderedStep {
+				text: replacer.apply(&step.text),
+				patches: patches(&step.patches, &replacer, &conditions)?,
+			});
+		}
+	}
 
 	Ok(Rendered {
-		dependencies: dependencies(manifest, variant, &conditions)?,
+		patches: patches(&manifest.patches, &replacer, &conditions)?,
 		variant: variant.map(|variant| variant.name.clone()),
+		at_default_target: target == own_target,
 		target,
 		files,
-		patches,
+		dependencies,
+		steps,
 	})
 }
 
-/// The dependencies that apply to `variant` and `conditions`.
-fn dependencies(
-	manifest: &PieceManifest,
+/// Whether something limited to `variants` and `when` applies to `variant` and `conditions`.
+fn selected(
+	variants: &[Name],
+	when: Option<&str>,
 	variant: Option<&Variant>,
 	conditions: &Values,
-) -> Result<Vec<Dependency>, RenderError> {
-	let mut selected = Vec::new();
-	for dependency in &manifest.dependencies {
-		let in_variant =
-			dependency.variants.is_empty() || variant.is_some_and(|variant| dependency.variants.contains(&variant.name));
-		let wanted = match &dependency.when {
-			Some(when) => Expr::parse(when)?.eval(conditions),
-			None => true,
-		};
-		if in_variant && wanted {
-			selected.push(dependency.clone());
-		}
+) -> Result<bool, RenderError> {
+	if !variants.is_empty() && !variant.is_some_and(|variant| variants.contains(&variant.name)) {
+		return Ok(false);
 	}
-	Ok(selected)
+	match when {
+		Some(when) => Ok(Expr::parse(when)?.eval(conditions)),
+		None => Ok(true),
+	}
 }
 
 /// The piece's or variant's output folder, or `None` when it is the project root.
@@ -214,9 +236,9 @@ fn default_target(target: &str, replacer: &Replacer) -> Result<Option<RelPath>, 
 }
 
 /// The patches whose conditions hold, with examples replaced in their files and text.
-fn patches(manifest: &PieceManifest, replacer: &Replacer, conditions: &Values) -> Result<Vec<Patch>, RenderError> {
+fn patches(specs: &[PatchSpec], replacer: &Replacer, conditions: &Values) -> Result<Vec<Patch>, RenderError> {
 	let mut patches = Vec::new();
-	for spec in &manifest.patches {
+	for spec in specs {
 		if let Some(when) = spec.when()
 			&& !Expr::parse(when)?.eval(conditions)
 		{

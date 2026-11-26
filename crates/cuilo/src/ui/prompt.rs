@@ -1,11 +1,9 @@
-//! Questions asked at the terminal, written to stderr so stdout stays clean for results, and text
-//! from packs, projects and other programs made safe to show there.
+//! Questions on stderr, keeping stdout for results, and untrusted text made safe to show there.
 
 use std::io::{self, BufRead, Write};
 
-/// `text` with every control character but line feeds and tabs, and every character that reorders
-/// text, shown as an escape like `\u{1b}`, so text from a pack or project cannot move the cursor,
-/// clear lines or rewrite what the terminal shows.
+/// `text` with control characters other than line feeds and tabs, and text-reordering characters,
+/// escaped like `\u{1b}`, so packs and projects cannot rewrite the terminal.
 pub fn printable(text: &str) -> String {
 	let mut shown = String::with_capacity(text.len());
 	for c in text.chars() {

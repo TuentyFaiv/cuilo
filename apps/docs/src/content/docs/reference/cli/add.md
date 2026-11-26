@@ -41,6 +41,8 @@ cuilo add [OPTIONS] <PIECE> [NAME]
 | `--verify` | Before applying, run the project's checks on a throwaway copy with the plan applied; apply only when none fails because of the plan. Code from the pack can run there, so the checks start only after you see the plan and agree, or with --yes. |
 | `--install` | After applying, add the packages the plan lists with the project's package manager. |
 | `--no-install` | Never offer to add the packages the plan lists. |
+| `--wire` | Apply the piece's wiring steps, such as mounting its routes in the app's entry file, as patches in the plan; the default comes from `wire` in the user config. |
+| `--no-wire` | List the wiring steps as next steps instead of applying them, even when the user config sets `wire`. |
 
 ## Global options
 

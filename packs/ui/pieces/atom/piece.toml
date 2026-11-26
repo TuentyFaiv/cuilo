@@ -121,6 +121,10 @@ when = "!stack.tailwind"
 path = "test/ui/atoms/example_atom_test.dart"
 when = "tests"
 
+[[steps]]
+text = "Declare the module with `pub mod example_atom;` in `src/ui/atoms/mod.rs`, which `src/ui/mod.rs` declares with `pub mod atoms;`."
+variants = ["leptos", "dioxus", "yew"]
+
 [[dependencies]]
 ecosystem = "npm"
 name = "vitest"

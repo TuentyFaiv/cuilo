@@ -1,8 +1,7 @@
 name: Release
 
-# Runs when a `v<version>` tag is pushed. Every job that publishes waits for approval of the
-# `release` environment, which holds the signing key and the Cloudflare R2 credentials. Every job
-# checks out the commit the run started for, so moving the tag before approval changes nothing.
+# Publishing jobs wait for approval of the `release` environment (signing key, R2 credentials) and
+# check out the run's commit, so moving the tag before approval changes nothing.
 on:
   push:
     tags: ["v*"]

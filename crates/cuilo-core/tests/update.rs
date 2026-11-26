@@ -65,6 +65,7 @@ fn generated(pack: &Pack) -> Result<(tempfile::TempDir, Engine), Box<dyn Error>>
 		target: None,
 		granted: None,
 		force: false,
+		wire: false,
 	})?)?;
 	Ok((dir, engine))
 }
@@ -401,6 +402,7 @@ fn a_skipped_new_file_should_not_be_written_or_recorded() -> TestResult {
 		target: None,
 		granted: None,
 		force: false,
+		wire: false,
 	})?;
 	let css = RelPath::new("src/pages/home.css")?;
 	assert_eq!(

@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 pub use config::{
 	ConfigError, ExternalPatcher, HostAuth, ProjectConfig, RegistryAliases, RegistryConfig, SigningConfig, ToolTrust,
-	ToolsConfig, UserConfig, user_cache_dir,
+	ToolsConfig, UpdatePolicy, UserConfig, user_cache_dir,
 };
 pub use detect::{ProjectModel, parse_jsonc};
 pub(crate) use detect::{declared_packages, detect, normalized_python_name};

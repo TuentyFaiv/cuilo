@@ -64,15 +64,15 @@ Los planes pendientes viven en la memoria del servidor. Los ids de plan empiezan
 
 <Steps>
 
-1. **Encuentra una pieza.** `detect_project` muestra el stack. `list_packs` muestra packs y piezas. `add_pack` carga un pack desde un origen. `describe_piece` muestra las entradas, variantes, archivos y parches de una pieza.
+1. **Encuentra una pieza.** `detect_project` muestra el stack. `list_packs` muestra packs y piezas. `add_pack` carga un pack desde un origen. `describe_piece` muestra las entradas, variantes, archivos, parches y pasos de una pieza.
 
-2. **Planéala.** Llama a `plan_add`, o a `plan_adopt`, `plan_update` o `plan_capture`. El resultado trae un id de plan y un reporte: un `summary`, los `changes` (cada uno con `path` y `action`, más `risk` y `diff` cuando aplican), las `instances`, las `dependencies` y las `notes` que haya. Todavía no se escribe nada.
+2. **Planéala.** Llama a `plan_add`, o a `plan_adopt`, `plan_update` o `plan_capture`. El resultado trae un id de plan y un reporte: un `summary`, los `changes` (cada uno con `path` y `action`, más `risk` y `diff` cuando aplican), las `instances`, las `dependencies`, y las `notes` y los `next_steps` que haya. Todavía no se escribe nada.
 
 3. **Muéstrale el plan al usuario.** Muestra cada cambio, cada razón de `risk` y cada nota. `plan_hunks` devuelve las líneas de cada cambio. Para conservar solo una parte del plan, llama a `select_hunks` con `all`, `none` o una lista de índices de fragmentos por ruta, por ejemplo `{"plan": 1, "keep": {"src/a.ts": [0, 2], "src/b.ts": "none"}}`. Las rutas que no incluyas conservan su cambio completo. `discard_plan` descarta el plan.
 
 4. **Verifica, solo si el usuario está de acuerdo.** `verify_plan` ejecuta las comprobaciones del propio proyecto en una copia desechable, con los archivos del plan en su lugar. Ahí el código del pack puede ejecutarse como el usuario, así que el agente pregunta primero. Necesita un proyecto en el que el usuario confíe. La [guía de verificación](/es-mx/guides/verify/) explica la copia y las comprobaciones.
 
-5. **Aplica.** Si el plan lista dependencias, llama a `install_commands` antes de aplicar: un plan deja de estar pendiente en cuanto se aplica. Luego llama a `apply_plan`. Escribe el plan como una sola transacción y se niega si un archivo cambió después de planear. Muéstrale al usuario los comandos de instalación y ejecútalos solo si está de acuerdo.
+5. **Aplica.** Si el plan lista dependencias, llama a `install_commands` antes de aplicar: un plan deja de estar pendiente en cuanto se aplica. Luego llama a `apply_plan`. Escribe el plan como una sola transacción y se niega si un archivo cambió después de planear. Muéstrale al usuario los comandos de instalación y ejecútalos solo si está de acuerdo. Luego dile al usuario los `next_steps` del plan, que `apply_plan` también devuelve: la configuración que le queda por hacer, como montar rutas nuevas.
 
 6. **Deshaz si hace falta.** `history` lista las transacciones. `undo` revierte la última y se niega si sus archivos cambiaron desde entonces. `status` y `why` explican qué hay ahora en el proyecto.
 
@@ -91,8 +91,8 @@ Estas no cambian nada en el proyecto. `add_pack` y `plan_update` pueden descarga
 | `detect_project` | ninguno | Detecta el stack del proyecto: lenguaje, framework, estilos, gestor de paquetes y más. |
 | `list_packs` | ninguno | Lista los packs cargados y sus piezas. |
 | `add_pack` | `source` | Carga un pack desde un origen: `./folder`, `gh:owner/repo@tag`, un `.tar.gz` por HTTPS, `git:` por SSH, elementos de `registry:` o `@namespace/pack`. |
-| `describe_piece` | `pack`, `piece` | Describe una pieza: sus entradas, variantes, archivos y parches. |
-| `plan_add` | `pack`, `piece`; opcionales `inputs`, `variant`, `target`, `force` | Planea generar una pieza (y las piezas que requiere). Devuelve un id de plan y sus cambios; no se escribe nada. |
+| `describe_piece` | `pack`, `piece` | Describe una pieza: sus entradas, variantes, archivos, parches y pasos. |
+| `plan_add` | `pack`, `piece`; opcionales `inputs`, `variant`, `target`, `force`, `wire` | Planea generar una pieza (y las piezas que requiere). Devuelve un id de plan y sus cambios, notas y siguientes pasos; no se escribe nada. `wire` aplica los pasos de conexión de la pieza, como montar sus rutas en el archivo de entrada de la app, como parches dentro del plan; por defecto toma `wire` de tu configuración de usuario. |
 | `plan_adopt` | `pack`, `piece`; opcionales `inputs`, `variant`, `target`, `force` | Planea tomar código existente como una pieza, para que las actualizaciones posteriores se fusionen con él. Los archivos existentes no cambian. |
 | `plan_update` | `pack`; opcionales `source`, `on_conflict` (`refuse`, `markers`, `ours`, `theirs`), `force`, `migrate` (por defecto `true`) | Planea actualizar todo lo generado desde un pack a su versión cargada más nueva, o a `source`, y fusiona las ediciones del usuario. |
 | `plan_capture` | `pack_dir`, `pack`, `piece`, `files`; opcionales `example`, `force` | Planea convertir archivos del proyecto en una pieza nueva de un pack local. |
@@ -124,6 +124,7 @@ Las instrucciones del servidor y las descripciones de las herramientas le dan al
 - **`apply_plan`**: el agente te muestra el plan primero.
 - **`verify_plan`**: las comprobaciones se ejecutan con los archivos del plan en su lugar, así que el código del pack, como un script de build o una prueba, se ejecuta como tú. El agente te muestra el plan y llama a `verify_plan` solo después de que aceptes.
 - **`install_commands`**: esta herramienta no ejecuta nada. El agente te muestra los comandos y los ejecuta solo si das tu consentimiento. Los paquetes que agrega un gestor de paquetes quedan fuera del historial de cuilo, así que `undo` no los quita.
+- **Conexión**: el agente no define `wire` a menos que se lo pidas, así que se aplica tu propio ajuste `wire`, y te transmite los siguientes pasos del plan después de aplicarlo.
 - **Confianza**: cuando un plan indica que algunos archivos no se formatearon porque el proyecto no es de confianza, el agente te avisa. Confiar en un proyecto deja que se ejecuten sus propias herramientas, así que solo tú deberías ejecutar `cuilo trust`. La [guía de formateadores y confianza](/es-mx/guides/formatters-and-trust/) explica qué permite la confianza.
 
 `undo` con `force` descarta las ediciones hechas después de la transacción. El servidor no pone ninguna regla para eso, así que pídele a tu agente que te consulte antes de pasar `force`.

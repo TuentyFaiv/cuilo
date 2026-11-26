@@ -12,10 +12,7 @@ _VALID_REQUEST_ID = re.compile(r"[\w-]{1,128}")
 
 
 class RequestIdMiddleware:
-    """Reuses a valid incoming request id or creates one, stores it as `request.state.request_id` and echoes it.
-
-    Add it with `app.add_middleware(RequestIdMiddleware)`.
-    """
+    """Reuses a valid incoming request id or creates one, stores it as `request.state.request_id` and echoes it."""
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app

@@ -84,13 +84,13 @@ impl JsonSchema for Name {
 	}
 }
 
-/// `pack.toml`.
+/// `pack.toml`: a pack's name, version and permissions.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PackManifest {
 	/// Manifest format version; must be `1`.
 	pub schema_version: u32,
-	/// Pack name.
+	/// Lowercase letters, digits and `-`, starting with a letter.
 	pub name: Name,
 	/// Semantic version of the pack.
 	pub version: Version,
@@ -103,7 +103,7 @@ pub struct PackManifest {
 	/// What the pack may do in a project.
 	#[serde(default)]
 	pub permissions: Permissions,
-	/// Changes to project code that updates crossing a version make.
+	/// Code changes applied when an update crosses a version.
 	#[serde(default, skip_serializing_if = "Vec::is_empty")]
 	pub migrations: Vec<Migration>,
 }
@@ -126,13 +126,13 @@ pub struct Migration {
 	pub ast_grep: Option<String>,
 }
 
-/// An identifier rename.
+/// Old and new identifier.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Rename {
-	/// The old name.
+	/// Identifier to replace.
 	pub from: String,
-	/// The new name.
+	/// Its replacement.
 	pub to: String,
 }
 
@@ -151,13 +151,13 @@ pub struct Permissions {
 	pub dependencies: bool,
 }
 
-/// `piece.toml`.
+/// `piece.toml`: one piece's inputs, templates and patches.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PieceManifest {
 	/// Manifest format version; must be `1`.
 	pub schema_version: u32,
-	/// Piece name; must match its folder.
+	/// Must match its folder; lowercase letters, digits and `-`.
 	pub name: Name,
 	/// What the piece is for.
 	#[serde(default)]
@@ -179,6 +179,10 @@ pub struct PieceManifest {
 	/// Edits to existing project files.
 	#[serde(default, skip_serializing_if = "Vec::is_empty")]
 	pub patches: Vec<PatchSpec>,
+	/// Setup the user does after `cuilo add`, such as mounting new routes; listed as next steps unless
+	/// cuilo applies the step's own patches.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub steps: Vec<Step>,
 	/// Pieces of the same pack this one builds on; added first when the project lacks them.
 	#[serde(default, skip_serializing_if = "Vec::is_empty")]
 	pub requires: Vec<Name>,
@@ -209,7 +213,7 @@ pub enum Input {
 		/// Shown in help and schemas.
 		#[serde(default, skip_serializing_if = "Option::is_none")]
 		description: Option<String>,
-		/// Interactive prompt.
+		/// Question asked when no value is given.
 		#[serde(default, skip_serializing_if = "Option::is_none")]
 		prompt: Option<String>,
 		/// Text in the templates that this input replaces.
@@ -224,7 +228,7 @@ pub enum Input {
 		/// Shown in help and schemas.
 		#[serde(default, skip_serializing_if = "Option::is_none")]
 		description: Option<String>,
-		/// Interactive prompt.
+		/// Question asked when no value is given.
 		#[serde(default, skip_serializing_if = "Option::is_none")]
 		prompt: Option<String>,
 		/// Value used when none is given.
@@ -239,7 +243,7 @@ pub enum Input {
 		/// Shown in help and schemas.
 		#[serde(default, skip_serializing_if = "Option::is_none")]
 		description: Option<String>,
-		/// Interactive prompt.
+		/// Question asked when no value is given.
 		#[serde(default, skip_serializing_if = "Option::is_none")]
 		prompt: Option<String>,
 		/// Allowed values.
@@ -253,7 +257,7 @@ pub enum Input {
 		/// Shown in help and schemas.
 		#[serde(default, skip_serializing_if = "Option::is_none")]
 		description: Option<String>,
-		/// Interactive prompt.
+		/// Question asked when no value is given.
 		#[serde(default, skip_serializing_if = "Option::is_none")]
 		prompt: Option<String>,
 		/// Number in the templates that this input replaces.
@@ -288,7 +292,7 @@ impl Input {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Variant {
-	/// Variant name.
+	/// Recorded in the lockfile; lowercase letters, digits and `-`.
 	pub name: Name,
 	/// Project facts that must all hold, e.g. `{ framework = "react" }`.
 	#[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -341,11 +345,30 @@ impl Fact {
 	}
 }
 
+/// Setup the user does after adding a piece; with `patches`, a wiring step cuilo applies when wiring is on.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Step {
+	/// The next step shown after `cuilo add`, e.g. ``Mount the routes with `app.route("/example-items", routes)`.``;
+	/// may contain examples.
+	pub text: String,
+	/// Variants it applies to; empty for every variant.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub variants: Vec<Name>,
+	/// Condition on inputs or stack facts, e.g. `stack.vitest`.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub when: Option<String>,
+	/// Edits that do the step, applied all or none, and only with `cuilo add --wire` or `wire = true` in the
+	/// user config; the same kinds and fields as `patches`.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub patches: Vec<PatchSpec>,
+}
+
 /// A package the generated code imports.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Dependency {
-	/// Package registry.
+	/// Registry, which also decides the project file the package is added to.
 	pub ecosystem: Ecosystem,
 	/// Package name, e.g. `zod` or `github.com/google/uuid`.
 	pub name: String,
@@ -370,19 +393,19 @@ pub struct Dependency {
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum Ecosystem {
-	/// npm, also used by Bun, pnpm, Yarn and Deno.
+	/// npm (`package.json`), also used by Bun, pnpm, Yarn and Deno.
 	Npm,
-	/// crates.io.
+	/// crates.io (`Cargo.toml`).
 	Cargo,
-	/// The Python Package Index.
+	/// The Python Package Index (`pyproject.toml`).
 	Pypi,
-	/// Go modules.
+	/// Go modules (`go.mod`).
 	Go,
-	/// pub.dev.
+	/// pub.dev (`pubspec.yaml`).
 	Pub,
-	/// The Ruby gem registry.
+	/// The Ruby gem registry (`Gemfile`).
 	Rubygems,
-	/// Packagist.
+	/// Packagist (`composer.json`).
 	Packagist,
 }
 

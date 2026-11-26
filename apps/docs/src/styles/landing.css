@@ -18,8 +18,6 @@
 	--cu-pad-x: clamp(1.25rem, 5vw, 4rem);
 }
 
-/* Hero */
-
 .cu-hero {
 	display: flex;
 	flex-direction: column;
@@ -106,8 +104,6 @@
 	font-size: 0.82rem;
 	color: var(--cu-muted);
 }
-
-/* Layered panes: what cuilo generated, what the pack changed, what you get. */
 
 .cu-layers {
 	position: relative;
@@ -270,8 +266,6 @@
 	}
 }
 
-/* Sections */
-
 .cu-rule {
 	margin-inline: var(--cu-pad-x, clamp(1.25rem, 5vw, 4rem));
 }
@@ -326,8 +320,6 @@
 		grid-template-columns: minmax(0, 1fr);
 	}
 }
-
-/* Piece finder */
 
 .cu-find {
 	justify-items: center;
@@ -498,8 +490,6 @@
 	}
 }
 
-/* Stacks */
-
 .cu-stack-chips {
 	display: flex;
 	flex-wrap: wrap;
@@ -550,8 +540,6 @@
 .cu-plus {
 	color: var(--cu-ok);
 }
-
-/* Updates */
 
 .cu-updates {
 	background: var(--cu-surface);
@@ -629,8 +617,6 @@
 .cu-t-ok {
 	color: rgb(79 214 156);
 }
-
-/* Features */
 
 .cu-features {
 	display: grid;

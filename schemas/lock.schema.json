@@ -47,11 +47,11 @@
         },
         "pack": {
           "$ref": "#/$defs/Name",
-          "description": "Pack name."
+          "description": "Pack it came from."
         },
         "pack_version": {
           "$ref": "#/$defs/SemVer",
-          "description": "Pack version used."
+          "description": "Version of that pack it was generated with."
         },
         "patch": {
           "description": "Regions the piece inserted into existing files.",
@@ -62,7 +62,7 @@
         },
         "piece": {
           "$ref": "#/$defs/Name",
-          "description": "Piece name."
+          "description": "Piece within that pack."
         },
         "stack": {
           "$ref": "#/$defs/Stack",
@@ -77,7 +77,7 @@
               "type": "null"
             }
           ],
-          "description": "Output folder used, or `None` for the project root."
+          "description": "Output folder used; absent for the project root."
         },
         "variant": {
           "anyOf": [
@@ -89,6 +89,10 @@
             }
           ],
           "description": "Variant used, if any."
+        },
+        "wired": {
+          "description": "Whether cuilo applied the patches of the piece's wiring steps, which updates then keep up to date;\n`false` when absent, and updates never wire an instance that is not.",
+          "type": "boolean"
         }
       },
       "required": [
@@ -113,10 +117,10 @@
         },
         "name": {
           "$ref": "#/$defs/Name",
-          "description": "Pack name."
+          "description": "Name from its `pack.toml`."
         },
         "signer": {
-          "description": "The minisign public key that signed it, as in the user config's `signing.keys`; later versions\nmust be signed by the same key.",
+          "description": "Minisign key that signed it, as in the user config's `signing.keys`; later versions need the same key.",
           "type": [
             "string",
             "null"
@@ -131,7 +135,7 @@
         },
         "version": {
           "$ref": "#/$defs/SemVer",
-          "description": "Pack version."
+          "description": "Version from its `pack.toml`."
         }
       },
       "required": [
@@ -184,16 +188,16 @@
     "Value": {
       "anyOf": [
         {
-          "description": "`true` or `false`.",
+          "description": "For `bool` inputs.",
           "type": "boolean"
         },
         {
-          "description": "A whole number.",
+          "description": "For `number` inputs.",
           "format": "int64",
           "type": "integer"
         },
         {
-          "description": "Text.",
+          "description": "For `string` and `enum` inputs.",
           "type": "string"
         }
       ],
@@ -202,10 +206,10 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "`cuilo.lock`.",
+  "description": "`cuilo.lock`: what cuilo generated, so updates can merge with local edits; commit it.",
   "properties": {
     "instance": {
-      "description": "Generated pieces.",
+      "description": "Generated pieces, one per pack, piece and inputs.",
       "items": {
         "$ref": "#/$defs/Instance"
       },

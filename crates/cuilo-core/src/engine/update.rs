@@ -1,10 +1,10 @@
 //! Updating generated pieces to another version of their pack, merging each file with the user's edits.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use semver::Version;
 
-use super::planner::{Added, check_pinned, collect_required, finish};
+use super::planner::{Added, Edited, Texts, Wiring, check_pinned, collect_required, finish};
 use super::{Engine, EngineError, PackProvider};
 use crate::migrate::MigrateError;
 use crate::model::{Digest, Migration, Name, Permissions, RelPath, Stack, Values};
@@ -40,13 +40,15 @@ struct PatchUpdate {
 	index: usize,
 	old: Vec<PatchRecord>,
 	new: Vec<Patch>,
+	/// The patches of each wiring step of the new version, for an instance whose wiring was applied.
+	steps: Vec<Vec<Patch>>,
+	/// The new version renders the instance outside its default folder, where wiring patches do not fit.
+	moved: bool,
 }
 
 impl Engine {
-	/// Plans updating every piece from `request.pack`'s pack to that version; nothing is written.
-	///
-	/// Files the user did not edit take the new version; edited files are merged line by line, and
-	/// `packs` provides the old version when the original of a file is not cached.
+	/// Plans updating every piece from `request.pack`'s pack to that version, merging the user's edits;
+	/// `packs` provides old versions whose originals are not cached.
 	pub fn plan_update<P: PackProvider + ?Sized>(
 		&self,
 		request: &UpdateRequest<'_>,
@@ -104,10 +106,22 @@ impl Engine {
 				}
 			}
 			let files = self.update_files(&mut plan, request, labels, old, previous.as_ref(), &next)?;
+			let steps = if old.wired {
+				next
+					.steps
+					.into_iter()
+					.map(|step| step.patches)
+					.filter(|patches| !patches.is_empty())
+					.collect()
+			} else {
+				Vec::new()
+			};
 			patch_updates.push(PatchUpdate {
 				index: updated.len(),
 				old: old.patches.clone(),
 				new: next.patches,
+				steps,
+				moved: !next.at_default_target,
 			});
 			updated.push(Instance {
 				pack_version: manifest.version.clone(),
@@ -214,7 +228,8 @@ impl Engine {
 		Ok(records)
 	}
 
-	/// Replaces each instance's old patch regions with its new ones, file by file.
+	/// Replaces each instance's old patch regions with its new ones, file by file, then reapplies the wiring
+	/// steps of wired instances all or none; a file where one does not apply is left as it is.
 	fn update_patches(
 		&self,
 		plan: &mut Plan<Draft>,
@@ -231,40 +246,85 @@ impl Engine {
 		}
 		let store = self.store();
 		let mut records = Vec::new();
-		for (file, (old, new)) in by_file {
+		let mut texts = Texts::new();
+		let mut untouched: BTreeSet<&RelPath> = BTreeSet::new();
+		for (file, (old, new)) in &by_file {
 			let Some(before) = self.workspace.read(file)? else {
-				plan.note(file.clone(), "this file is gone, so its patches were not updated");
+				plan.note((*file).clone(), "this file is gone, so its patches were not updated");
+				untouched.insert(file);
 				continue;
 			};
-			let mut text = String::from_utf8_lossy(&before).into_owned();
+			let mut edited = Edited::new(before);
 			let mut intact = true;
-			for (_, record) in &old {
+			for (_, record) in old {
 				match store.get(&record.inserted)? {
-					Some(region) if text.contains(&*String::from_utf8_lossy(&region)) => {
-						text = text.replacen(&*String::from_utf8_lossy(&region), "", 1);
+					Some(region) if edited.text.contains(&*String::from_utf8_lossy(&region)) => {
+						edited.text = edited.text.replacen(&*String::from_utf8_lossy(&region), "", 1);
 					}
 					_ => intact = false,
 				}
 			}
 			if !intact {
 				plan.note(
-					file.clone(),
+					(*file).clone(),
 					"you edited a region cuilo inserted here, so this file's patches were not updated",
 				);
-				records.extend(old.into_iter().map(|(index, record)| (index, record.clone())));
+				records.extend(old.iter().map(|(index, record)| (*index, (*record).clone())));
+				untouched.insert(file);
 				continue;
 			}
 			for (index, patch) in new {
-				records.push((index, self.patch(plan, &mut text, patch)?));
+				records.push((*index, self.patch(plan, &mut edited.text, patch)?));
 			}
-			plan.modify(file.clone(), before, text.into_bytes());
+			texts.insert((*file).clone(), edited);
+		}
+
+		let mut unwired: BTreeMap<RelPath, String> = BTreeMap::new();
+		for update in updates {
+			for step in &update.steps {
+				let kept = step.iter().find(|patch| untouched.contains(patch.file()));
+				let wiring = match (kept, step.first()) {
+					(Some(kept), _) => Wiring::Skipped {
+						file: kept.file().clone(),
+						reason: format!("its wiring also edits `{}`, which cuilo left as it is", kept.file()),
+					},
+					(None, Some(patch)) if update.moved => Wiring::Skipped {
+						file: patch.file().clone(),
+						reason: "the piece is no longer in its default folder".to_owned(),
+					},
+					_ => self.wire(&mut texts, step)?,
+				};
+				match wiring {
+					Wiring::Applied(regions) => {
+						for (record, region) in regions {
+							plan.keep(region.into_bytes());
+							records.push((update.index, record));
+						}
+					}
+					Wiring::Skipped { reason, .. } => {
+						for patch in step.iter().filter(|patch| !untouched.contains(patch.file())) {
+							unwired.entry(patch.file().clone()).or_insert_with(|| reason.clone());
+						}
+					}
+				}
+			}
+		}
+		for (file, reason) in unwired {
+			records.retain(|(_, record)| record.file != file);
+			if let Some((old, _)) = by_file.get(&file) {
+				records.extend(old.iter().map(|(index, record)| (*index, (*record).clone())));
+			}
+			texts.remove(&file);
+			plan.note(file, format!("{reason}, so this file's patches were not updated"));
+		}
+		for (file, edited) in texts {
+			plan.modify(file, edited.before, edited.text.into_bytes());
 		}
 		Ok(records)
 	}
 
-	/// Runs every migration between `from` and the new version on the project files it covers.
-	///
-	/// Files the update itself changes are left alone and noted, so the two never fight over a file.
+	/// Runs every migration between `from` and the new version on the files it covers, except files the
+	/// update itself changes.
 	fn migrate(&self, plan: &mut Plan<Draft>, pack: &Pack, from: &Version) -> Result<(), EngineError> {
 		let manifest = pack.manifest();
 		let mut due: Vec<&Migration> = manifest
@@ -361,9 +421,7 @@ impl Engine {
 			let values = self.values(piece.manifest().name.as_str(), piece, None, stack)?;
 			self.add_piece(plan, &mut added, pack, piece, &values, None, None, stack)?;
 		}
-		for (index, record) in self.add_patches(plan, &added.patches)? {
-			added.instances[index].patches.push(record);
-		}
+		self.add_patches(plan, &mut added)?;
 		for instance in added.instances {
 			plan.record(instance);
 		}

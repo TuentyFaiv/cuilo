@@ -55,7 +55,6 @@ export default defineConfig({
 				},
 			},
 			components: {
-				// Starlight requires these PascalCase keys.
 				// biome-ignore lint/style/useNamingConvention: Starlight component override key
 				Footer: "./src/components/footer.astro",
 				// biome-ignore lint/style/useNamingConvention: Starlight component override key

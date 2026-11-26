@@ -18,7 +18,7 @@ When cuilo writes a file, `cuilo.lock` records the SHA-256 of what it wrote as t
 | Edited, and dropped by the pack | Stays as you left it and is no longer tracked                            |
 | Deleted by you                  | Stays deleted                                                            |
 
-The update also creates files new in this version and adds pieces it newly requires. Inputs carry over, and new inputs take their defaults. Text a patch inserted into your own files is replaced, unless you edited it. A piece the new version dropped keeps its files. The plan notes the dropped pieces and the patches it left alone.
+The update also creates files new in this version and adds pieces it newly requires. Inputs carry over, and new inputs take their defaults. Text a patch inserted into your own files is replaced, unless you edited it. That includes the wiring of a piece you added with `--wire`. A piece you added without wiring never gets it from an update. When a wiring patch no longer fits, for example because you changed its anchor line, the update leaves that file as it is and notes why. A piece the new version dropped keeps its files. The plan notes the dropped pieces and the patches it left alone.
 
 If `.cuilo/` has no copy of an original, for example in a fresh clone (the folder is not committed), cuilo rebuilds it by rendering the old version from the source in the lockfile. It uses the rebuilt file only if its hash matches `base`. When neither works, an edited file cannot be merged:
 

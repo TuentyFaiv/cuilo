@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 pub use inputs::InputError;
 pub(crate) use inputs::resolve as resolve_inputs;
 pub use render::RenderError;
-pub(crate) use render::{RenderRequest, Rendered, RenderedFile, render};
+pub(crate) use render::{RenderRequest, Rendered, RenderedFile, RenderedStep, render};
 
 use crate::model::{
 	Dependency, Digest, Input, Name, PackManifest, PieceManifest, RelPath, SCHEMA_VERSION, Value, Variant, words,
@@ -364,13 +364,10 @@ impl Piece {
 			.collect()
 	}
 
-	fn validate(&self, file: &str) -> Result<(), PackError> {
-		let manifest = &self.manifest;
-		for (name, input) in &manifest.inputs {
-			validate_input(file, name, input)?;
-		}
-
-		let self_values: BTreeMap<String, Value> = manifest
+	/// Checks that the inputs' examples can be replaced together.
+	fn check_examples(&self, file: &str) -> Result<(), PackError> {
+		let self_values: BTreeMap<String, Value> = self
+			.manifest
 			.inputs
 			.iter()
 			.filter_map(|(name, input)| match input {
@@ -384,6 +381,16 @@ impl Piece {
 			})
 			.collect();
 		Replacer::new(&self.examples(&self_values)).map_err(|error| invalid(file, &error.to_string()))?;
+		Ok(())
+	}
+
+	fn validate(&self, file: &str) -> Result<(), PackError> {
+		let manifest = &self.manifest;
+		for (name, input) in &manifest.inputs {
+			validate_input(file, name, input)?;
+		}
+
+		self.check_examples(file)?;
 
 		let targets = std::iter::once(&manifest.target).chain(manifest.variants.iter().filter_map(|v| v.target.as_ref()));
 		for target in targets.filter(|target| !target.is_empty()) {
@@ -400,6 +407,10 @@ impl Piece {
 				Some(name) => Err(invalid(where_, &format!("condition uses unknown input `{name}`"))),
 				None => Ok(()),
 			}
+		};
+		let check_when = |when: &str| {
+			let condition = Expr::parse(when).map_err(|error| invalid(file, &error.to_string()))?;
+			check_names(file, &condition)
 		};
 
 		let mut variant_names = BTreeSet::new();
@@ -424,8 +435,7 @@ impl Piece {
 		}
 
 		for rule in &manifest.files {
-			let condition = Expr::parse(&rule.when).map_err(|error| invalid(file, &error.to_string()))?;
-			check_names(file, &condition)?;
+			check_when(&rule.when)?;
 			let exists = dirs
 				.iter()
 				.any(|dir| self.templates_in(dir).any(|(path, _)| path == rule.path));
@@ -434,26 +444,27 @@ impl Piece {
 			}
 		}
 
-		for patch in &manifest.patches {
+		let step_patches = manifest.steps.iter().flat_map(|step| &step.patches);
+		for patch in manifest.patches.iter().chain(step_patches) {
 			RelPath::new(patch.file()).map_err(|error| invalid(file, &format!("patch file: {error}")))?;
-			if let Some(when) = patch.when() {
-				let condition = Expr::parse(when).map_err(|error| invalid(file, &error.to_string()))?;
-				check_names(file, &condition)?;
-			}
+			patch.when().map_or(Ok(()), check_when)?;
 		}
-
+		let check_limits = |what: &str, variants: &[Name], when: Option<&str>| {
+			if let Some(unknown) = variants.iter().find(|name| !variant_names.contains(name)) {
+				return Err(invalid(file, &format!("{what} names unknown variant `{unknown}`")));
+			}
+			when.map_or(Ok(()), check_when)
+		};
+		for step in &manifest.steps {
+			if step.text.trim().is_empty() {
+				return Err(invalid(file, "a step has no text"));
+			}
+			check_limits("a step", &step.variants, step.when.as_deref())?;
+		}
 		for dependency in &manifest.dependencies {
 			validate_dependency(file, dependency)?;
-			if let Some(unknown) = dependency.variants.iter().find(|name| !variant_names.contains(name)) {
-				return Err(invalid(
-					file,
-					&format!("dependency `{}` names unknown variant `{unknown}`", dependency.name),
-				));
-			}
-			if let Some(when) = &dependency.when {
-				let condition = Expr::parse(when).map_err(|error| invalid(file, &error.to_string()))?;
-				check_names(file, &condition)?;
-			}
+			let what = format!("dependency `{}`", dependency.name);
+			check_limits(&what, &dependency.variants, dependency.when.as_deref())?;
 		}
 
 		for (path, bytes) in &self.templates {
@@ -472,7 +483,6 @@ impl Piece {
 	}
 }
 
-/// Names and versions end up as package-manager arguments, so only plain characters are allowed.
 /// Checks every migration and returns the ast-grep rules they use, by path.
 fn migration_rules(
 	manifest: &PackManifest,
@@ -514,6 +524,7 @@ fn migration_rules(
 	Ok(rules)
 }
 
+/// Names and versions end up as package-manager arguments, so only plain characters are allowed.
 fn validate_dependency(file: &str, dependency: &Dependency) -> Result<(), PackError> {
 	let plain = |text: &str, max: usize, extra: &str| {
 		(1..=max).contains(&text.len())
@@ -840,6 +851,32 @@ mod tests {
 		let files = files(&[("pieces/thing/piece.toml", &piece)]);
 
 		assert!(error(files).contains("matches no template"));
+	}
+
+	#[test]
+	fn from_files_should_check_steps() {
+		let invalid = [
+			("[[steps]]\ntext = \" \"\n", "a step has no text"),
+			(
+				"[[steps]]\ntext = \"x\"\nvariants = [\"vue\"]\n",
+				"a step names unknown variant `vue`",
+			),
+			("[[steps]]\ntext = \"x\"\nwhen = \"typo\"\n", "unknown input `typo`"),
+			(
+				"[[steps]]\ntext = \"x\"\n[[steps.patches]]\nkind = \"import\"\nfile = \"../index.ts\"\nimport = \"import a from 'a';\"\n",
+				"patch file",
+			),
+			(
+				"[[steps]]\ntext = \"x\"\n[[steps.patches]]\nkind = \"import\"\nfile = \"src/index.ts\"\nimport = \"import a from 'a';\"\nwhen = \"typo\"\n",
+				"unknown input `typo`",
+			),
+		];
+
+		for (steps, expected) in invalid {
+			let piece = format!("{PIECE}{steps}");
+			let message = error(files(&[("pieces/thing/piece.toml", &piece)]));
+			assert!(message.contains(expected), "{steps}: {message}");
+		}
 	}
 
 	#[test]

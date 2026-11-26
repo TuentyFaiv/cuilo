@@ -1,4 +1,4 @@
-"""HTTP routes for example items; include them with `app.include_router(router)`."""
+"""HTTP routes for example items."""
 
 from typing import Annotated
 from uuid import UUID

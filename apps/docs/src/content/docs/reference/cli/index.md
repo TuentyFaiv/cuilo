@@ -33,7 +33,7 @@ cuilo [OPTIONS] [COMMAND]
 | [`trust`](/reference/cli/trust/) | Let cuilo run this project's own formatters and linters, such as Biome, on generated files. |
 | [`pack`](/reference/cli/pack/) | Work with packs. |
 | [`completions`](/reference/cli/completions/) | Print a shell completion script, e.g. `cuilo completions zsh > ~/.zfunc/_cuilo`. |
-| [`upgrade`](/reference/cli/upgrade/) | Replace this cuilo with the newest signed release; only for copies the install script made. |
+| [`upgrade`](/reference/cli/upgrade/) | Upgrade cuilo to the newest release, with the package manager that installed it, if any. |
 | [`mcp`](/reference/cli/mcp/) | Serve cuilo to AI agents over MCP (stdio) |
 
 ## Global options

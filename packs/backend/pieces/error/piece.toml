@@ -53,6 +53,57 @@ when = "tests"
 path = "apperror_test.go"
 when = "tests"
 
+[[steps]]
+text = "Register the error handler in `src/index.ts` with `app.onError(errorHandler)`."
+variants = ["hono"]
+
+[[steps.patches]]
+kind = "import"
+file = "src/index.ts"
+import = 'import { errorHandler } from "./shared/error-handler";'
+
+[[steps.patches]]
+kind = "anchor"
+file = "src/index.ts"
+anchor = "const app = new Hono()"
+insert = "app.onError(errorHandler);"
+
+[[steps]]
+text = "Register the error handler after all your routes with `app.use(errorHandler)`."
+variants = ["express"]
+
+[[steps]]
+text = "Declare the module with `mod error;` in `src/main.rs`."
+variants = ["axum"]
+
+[[steps.patches]]
+kind = "anchor"
+file = "src/main.rs"
+anchor = "#[tokio::main]"
+position = "before"
+insert = "mod error;\n\n"
+
+[[steps]]
+text = "Register the error handlers in `app/main.py` with `register_error_handlers(app)`, imported from `app.errors`."
+variants = ["fastapi"]
+
+[[steps.patches]]
+kind = "anchor"
+file = "app/main.py"
+anchor = "app = FastAPI()"
+position = "before"
+insert = "from app.errors import register_error_handlers\n\n"
+
+[[steps.patches]]
+kind = "anchor"
+file = "app/main.py"
+anchor = "app = FastAPI()"
+insert = "register_error_handlers(app)"
+
+[[steps]]
+text = "Send errors as problem details with `e.HTTPErrorHandler = apperror.Handler`."
+variants = ["echo"]
+
 [[dependencies]]
 ecosystem = "npm"
 name = "zod"

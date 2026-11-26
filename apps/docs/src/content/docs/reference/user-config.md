@@ -41,7 +41,7 @@ Environment variable holding the token, e.g. `GITHUB_TOKEN`.
 
 **Type:** `string` · optional
 
-Header that carries it.
+Header that carries the token; default `Authorization`.
 
 Default: `"Authorization"`.
 
@@ -49,7 +49,7 @@ Default: `"Authorization"`.
 
 **Type:** `string` · optional
 
-Text before the token in the header; empty sends the token alone.
+Text before the token, default `Bearer`; empty sends the token alone.
 
 Default: `"Bearer"`.
 
@@ -57,7 +57,7 @@ Default: `"Bearer"`.
 
 **Type:** `map of object` · optional
 
-Your preferred external tool per patch kind.
+External tools that replace the built-in patchers, by patch kind.
 
 #### `patchers.<key>.command`
 
@@ -69,7 +69,7 @@ Program and arguments.
 
 **Type:** `object` · optional
 
-Which pack signatures you trust.
+Trusted signing keys, and whether packs must be signed.
 
 #### `signing.keys`
 
@@ -101,6 +101,23 @@ When cuilo may run a project's own formatters and linters on the files it genera
 
 **Type:** `string` · optional
 
-`ask` once per project (the default), `always`, or `never`.
+Default `ask`.
 
 Default: `"ask"`.
+
+### `updates`
+
+**Type:** `string` · optional
+
+What cuilo does about new releases, which it looks for at most once a day in a terminal: `auto`, `notify` or `off`; `CUILO_UPDATES` overrides it. Default `auto`.
+
+Default: `"auto"`.
+
+### `wire`
+
+**Type:** `boolean` · optional
+
+Whether `cuilo add` applies pieces' wiring steps, such as mounting new routes in the app's entry
+file, instead of listing them as next steps; `--wire` and `--no-wire` override it.
+
+Default: `false`.

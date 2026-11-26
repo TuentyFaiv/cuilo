@@ -72,16 +72,22 @@ atom · lit (tailwind)
   src/ui/atoms/status-badge/status-badge.ts
 atom · leptos
   src/ui/atoms/status_badge.rs
+  → Declare the module with `pub mod status_badge;` in `src/ui/atoms/mod.rs`, which `src/ui/mod.rs` declares with `pub mod atoms;`.
 atom · leptos (tailwind)
   src/ui/atoms/status_badge.rs
+  → Declare the module with `pub mod status_badge;` in `src/ui/atoms/mod.rs`, which `src/ui/mod.rs` declares with `pub mod atoms;`.
 atom · dioxus
   src/ui/atoms/status_badge.rs
+  → Declare the module with `pub mod status_badge;` in `src/ui/atoms/mod.rs`, which `src/ui/mod.rs` declares with `pub mod atoms;`.
 atom · dioxus (tailwind)
   src/ui/atoms/status_badge.rs
+  → Declare the module with `pub mod status_badge;` in `src/ui/atoms/mod.rs`, which `src/ui/mod.rs` declares with `pub mod atoms;`.
 atom · yew
   src/ui/atoms/status_badge.rs
+  → Declare the module with `pub mod status_badge;` in `src/ui/atoms/mod.rs`, which `src/ui/mod.rs` declares with `pub mod atoms;`.
 atom · yew (tailwind)
   src/ui/atoms/status_badge.rs
+  → Declare the module with `pub mod status_badge;` in `src/ui/atoms/mod.rs`, which `src/ui/mod.rs` declares with `pub mod atoms;`.
 atom · flutter
   lib/ui/atoms/status_badge.dart
   test/ui/atoms/status_badge_test.dart
@@ -176,16 +182,22 @@ molecule · lit (tailwind)
   src/ui/molecules/status-badge/status-badge.ts
 molecule · leptos
   src/ui/molecules/status_badge.rs
+  → Declare the module with `pub mod status_badge;` in `src/ui/molecules/mod.rs`, which `src/ui/mod.rs` declares with `pub mod molecules;`.
 molecule · leptos (tailwind)
   src/ui/molecules/status_badge.rs
+  → Declare the module with `pub mod status_badge;` in `src/ui/molecules/mod.rs`, which `src/ui/mod.rs` declares with `pub mod molecules;`.
 molecule · dioxus
   src/ui/molecules/status_badge.rs
+  → Declare the module with `pub mod status_badge;` in `src/ui/molecules/mod.rs`, which `src/ui/mod.rs` declares with `pub mod molecules;`.
 molecule · dioxus (tailwind)
   src/ui/molecules/status_badge.rs
+  → Declare the module with `pub mod status_badge;` in `src/ui/molecules/mod.rs`, which `src/ui/mod.rs` declares with `pub mod molecules;`.
 molecule · yew
   src/ui/molecules/status_badge.rs
+  → Declare the module with `pub mod status_badge;` in `src/ui/molecules/mod.rs`, which `src/ui/mod.rs` declares with `pub mod molecules;`.
 molecule · yew (tailwind)
   src/ui/molecules/status_badge.rs
+  → Declare the module with `pub mod status_badge;` in `src/ui/molecules/mod.rs`, which `src/ui/mod.rs` declares with `pub mod molecules;`.
 molecule · flutter
   lib/ui/molecules/status_badge.dart
   test/ui/molecules/status_badge_test.dart
@@ -280,16 +292,22 @@ organism · lit (tailwind)
   src/ui/organisms/status-badge/status-badge.ts
 organism · leptos
   src/ui/organisms/status_badge.rs
+  → Declare the module with `pub mod status_badge;` in `src/ui/organisms/mod.rs`, which `src/ui/mod.rs` declares with `pub mod organisms;`.
 organism · leptos (tailwind)
   src/ui/organisms/status_badge.rs
+  → Declare the module with `pub mod status_badge;` in `src/ui/organisms/mod.rs`, which `src/ui/mod.rs` declares with `pub mod organisms;`.
 organism · dioxus
   src/ui/organisms/status_badge.rs
+  → Declare the module with `pub mod status_badge;` in `src/ui/organisms/mod.rs`, which `src/ui/mod.rs` declares with `pub mod organisms;`.
 organism · dioxus (tailwind)
   src/ui/organisms/status_badge.rs
+  → Declare the module with `pub mod status_badge;` in `src/ui/organisms/mod.rs`, which `src/ui/mod.rs` declares with `pub mod organisms;`.
 organism · yew
   src/ui/organisms/status_badge.rs
+  → Declare the module with `pub mod status_badge;` in `src/ui/organisms/mod.rs`, which `src/ui/mod.rs` declares with `pub mod organisms;`.
 organism · yew (tailwind)
   src/ui/organisms/status_badge.rs
+  → Declare the module with `pub mod status_badge;` in `src/ui/organisms/mod.rs`, which `src/ui/mod.rs` declares with `pub mod organisms;`.
 organism · flutter
   lib/ui/organisms/status_badge.dart
   test/ui/organisms/status_badge_test.dart

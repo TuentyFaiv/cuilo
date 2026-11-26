@@ -1,7 +1,5 @@
-//! Formatting generated files with the formatters and fixing linters the project already uses.
-//!
-//! cuilo never installs these tools: it runs the project's own copy, from its root, with each file
-//! on stdin, so nothing is written until the plan is applied.
+//! Formatting generated files on stdin with the project's own formatters and fixing linters, never
+//! installing them.
 
 use std::fmt;
 use std::path::{Path, PathBuf};

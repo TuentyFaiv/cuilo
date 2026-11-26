@@ -35,7 +35,7 @@ More commands:
 | `cuilo pack capture <files…> --piece <name> --name UserCard`    | Turn project code into a piece of `packs/local`; the name needs two or more words |
 | `cuilo log`, `cuilo detect`, `cuilo pack show <pack>`           | History, detected stack, a pack's pieces and inputs                               |
 | `cuilo trust [--revoke]`                                        | Let this project's own formatter, linters and checks run (formatting, `--verify`) |
-| `cuilo upgrade [--check] [--version <v>]`                       | Replace a script-installed cuilo with a newer signed release                      |
+| `cuilo upgrade [--check] [--version <v>]`                       | Upgrade cuilo, through the package manager that installed it, if any              |
 
 Every command takes `--json` and `--no-input` for scripts and agents; `--dry-run`, `--diff`, `--review`
 (keep or skip each hunk, like `git add -p`), `--verify` and `--install` work wherever a plan is applied. Exit
@@ -61,9 +61,11 @@ nothing at install time: the package manager picks the one platform package (`@c
 `…-linux-x64-musl`, …) that matches the system. The install scripts put `cuilo` in `~/.cuilo/bin`
 (`CUILO_INSTALL` changes it; `CUILO_VERSION` or an argument picks a version, else the newest stable one), and
 `CUILO_REQUIRE_SIGNATURE=1` makes them refuse to install without checking the signature. Only those copies update
-themselves: `cuilo upgrade` never moves to an older version, and replaces the binary only when its `SHA256SUMS`
-carries a valid signature by the release key built into cuilo. Copies installed another way are left to their
-package manager, and `cuilo upgrade --check` only reports what is available. To see where a binary was built, run
+themselves, once a day in the background or with `cuilo upgrade`, and only when the release's `SHA256SUMS` carries a
+valid signature by the release key built into cuilo; without `--version`, they never move to an older version. For
+copies installed another way, `cuilo upgrade` runs their package manager, and the daily check prints a notice
+instead. `updates = "notify"` or `"off"` in the user config, or `CUILO_UPDATES`, changes this, and
+`cuilo upgrade --check` only reports what is available. To see where a binary was built, run
 `gh attestation verify $(command -v cuilo) --repo TuentyFaiv/cuilo`.
 
 Every release file is signed with this minisign key (also in

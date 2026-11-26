@@ -48,7 +48,7 @@
       "properties": {
         "aliases": {
           "$ref": "#/$defs/RegistryAliases",
-          "description": "Import aliases; unset ones default to `@/components`, `@/components/ui`, `@/lib`, `@/lib/utils`, `@/hooks`."
+          "description": "Import aliases; unset ones use their defaults."
         },
         "css": {
           "anyOf": [
@@ -84,16 +84,16 @@
     "Value": {
       "anyOf": [
         {
-          "description": "`true` or `false`.",
+          "description": "For `bool` inputs.",
           "type": "boolean"
         },
         {
-          "description": "A whole number.",
+          "description": "For `number` inputs.",
           "format": "int64",
           "type": "integer"
         },
         {
-          "description": "Text.",
+          "description": "For `string` and `enum` inputs.",
           "type": "string"
         }
       ],
@@ -102,7 +102,7 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "`cuilo.json` / `cuilo.toml`, committed with the project.",
+  "description": "Project settings in `cuilo.json` or `cuilo.toml`, committed with the project.",
   "properties": {
     "$schema": {
       "description": "JSON Schema URL for editor completion.",
@@ -150,7 +150,7 @@
       "type": "object"
     },
     "verify": {
-      "description": "Commands `--verify` runs instead of the detected checks, e.g. `[[\"bun\", \"run\", \"check\"]]`;\nthey run only once the user trusts the project.",
+      "description": "Commands `--verify` runs instead of the detected checks, e.g. `[[\"bun\", \"run\", \"check\"]]`; trusted projects only.",
       "items": {
         "items": {
           "type": "string"

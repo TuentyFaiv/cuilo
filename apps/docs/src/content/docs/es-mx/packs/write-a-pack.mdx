@@ -1,6 +1,6 @@
 ---
 title: Escribe un pack
-description: Arma un pack a partir de código real con entradas tipadas, variantes por stack, parches y permisos, y pruébalo desde una carpeta local.
+description: Arma un pack a partir de código real con entradas tipadas, variantes por stack, parches, siguientes pasos y permisos, y pruébalo desde una carpeta local.
 ---
 
 import { FileTree, Steps } from "@astrojs/starlight/components";
@@ -15,7 +15,7 @@ Un pack es una carpeta con un `pack.toml` y una carpeta por cada pieza. Las plan
   - pack.minisig firma opcional
   - pieces/
     - card/
-      - piece.toml entradas, variantes, reglas de archivos, parches
+      - piece.toml entradas, variantes, reglas de archivos, parches, pasos
       - files/
         - react/
           - example-card/
@@ -95,7 +95,7 @@ when = "styled"
 
 ## Las plantillas son código real
 
-Cada entrada de texto puede indicar un `example`: un texto que aparece en las plantillas. cuilo lo reemplaza con el valor que da el usuario en el contenido de los archivos, en los nombres de archivos y carpetas, en `target` y en `file`, `insert` e `import` de los parches. Un ejemplo de dos o más palabras se reemplaza en todos sus estilos de nombre, y también tal como está escrito:
+Cada entrada de texto puede indicar un `example`: un texto que aparece en las plantillas. cuilo lo reemplaza con el valor que da el usuario en el contenido de los archivos, en los nombres de archivos y carpetas, en `target`, en `file`, `insert` e `import` de los parches y en el `text` de los pasos. Un ejemplo de dos o más palabras se reemplaza en todos sus estilos de nombre, y también tal como está escrito:
 
 | Estilo     | Con `UserProfile`, `ExampleCard` queda como |
 | ---------- | ------------------------------------------- |
@@ -231,6 +231,43 @@ vars = { card-radius = "0.5rem", card-border = "220 13% 91%" }
 - `css_vars` agrega propiedades personalizadas, sin el `--` inicial, al bloque de `selector`. Si el bloque no existe, lo crea, y conserva los valores que el archivo ya define.
 
 Un parche cuyo texto ya está en el archivo no cambia nada.
+
+## Siguientes pasos y conexión
+
+La configuración que vive en los archivos del propio usuario, como montar rutas o registrar un middleware, va en `[[steps]]`, no en comentarios dentro de las plantillas. Después de `cuilo add`, cuilo lista cada paso en **Next steps**. Un paso con `[[steps.patches]]` es un paso de conexión: cuilo lo puede hacer por el usuario.
+
+```toml
+[[steps]]
+text = "Mount the routes in `src/index.ts` with `app.route(\"/example-items\", exampleItemRoutes)`."
+variants = ["hono"]
+
+[[steps.patches]]
+kind = "import"
+file = "src/index.ts"
+import = 'import { exampleItemRoutes } from "./example-items/example-item.routes";'
+
+[[steps.patches]]
+kind = "anchor"
+file = "src/index.ts"
+anchor = "export default app"
+position = "before"
+insert = "app.route(\"/example-items\", exampleItemRoutes);\n\n"
+
+[[steps]]
+text = "Add `model ExampleItem` to `schema.prisma`."
+when = "stack.prisma"
+```
+
+- `text` es una oración con el código que hay que agregar. Los ejemplos que contiene se reemplazan, igual que en los parches.
+- `variants` y `when` eligen los pasos igual que eligen las dependencias: un `variants` vacío significa todas las variantes, y `when` es una condición sobre las entradas y los valores `stack.`.
+- Un paso sin parches siempre se lista.
+- Los parches de un paso de conexión aceptan los mismos tipos y claves que `[[patches]]`. cuilo los aplica solo cuando el usuario activa la conexión, con `cuilo add --wire` o con `wire = true` en su [configuración de usuario](/es-mx/reference/user-config/). Entonces son parches normales: aparecen en el plan, necesitan `permissions.write` y quedan registrados en `cuilo.lock`, y el paso no se lista. Con la conexión desactivada, el paso se lista y no se aplica ningún parche.
+- Los parches de un paso se aplican todos o ninguno. Si uno no se puede aplicar, porque falta su archivo o su ancla, o porque el ancla aparece más de una vez, cuilo no aplica ninguno. El plan sigue adelante, lista el paso y anota el motivo en el archivo, por ejemplo ``src/index.ts: no line contains `export default app`; wire it by hand``.
+- Los parches de conexión suponen la carpeta por defecto de la pieza, así que no se aplican cuando el usuario escribe la pieza en otro lugar con `--target` o `paths`. En su lugar, se lista el paso.
+- `cuilo adopt` no lista pasos ni aplica conexiones.
+- En `cuilo update`, una pieza cuya conexión se aplicó, marcada con `wired = true` en `cuilo.lock`, actualiza sus parches de conexión como cualquier otro parche. cuilo nunca conecta una pieza que se agregó sin conexión. Cuando un parche de conexión ya no se puede aplicar, la actualización deja ese archivo como está y anota el motivo.
+
+Dale parches a un paso solo cuando el framework tenga un archivo de entrada convencional y una línea de ancla que aparezca una sola vez en él, como el `src/index.ts` de `create-hono`. Elige el ancla para que el código insertado quede en el lugar correcto: unas rutas insertadas justo después de `const app = new Hono()` quedarían antes del middleware propio del usuario, como el de autenticación, que entonces no correría para ellas. El pack oficial `backend` inserta las rutas antes de `export default app` y el middleware justo después de crear la app. Si no, deja el paso solo como texto.
 
 ## Piezas que se apoyan en otras
 

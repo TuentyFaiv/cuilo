@@ -150,19 +150,50 @@ Los binarios de Windows y macOS todavía no están firmados con Authenticode ni 
 
 ## Actualiza cuilo
 
-`cuilo upgrade` reemplaza una copia instalada con el script de instalación por la versión firmada más reciente:
+`cuilo upgrade` lleva cuilo a la versión más reciente, sin importar cómo lo instalaste:
 
 ```sh
 cuilo upgrade
 ```
 
-Solo reemplaza el binario cuando el `SHA256SUMS` de la versión trae una firma válida de la llave de publicación integrada en cuilo, y el binario coincide con su checksum firmado. Nunca pasa a una versión anterior. Un cuilo preliminar sigue el canal de versiones preliminares. Para instalar una versión específica, que puede ser anterior, pasa `--version`:
+Una copia instalada con el script de instalación se reemplaza por la versión firmada más reciente. cuilo solo reemplaza el binario cuando el `SHA256SUMS` de la versión trae una firma válida de la llave de publicación integrada en cuilo, y el binario coincide con su checksum firmado. Nunca pasa a una versión anterior. Un cuilo preliminar sigue el canal de versiones preliminares.
+
+Para cualquier otra copia, `cuilo upgrade` corre el gestor de paquetes que la instaló, y primero imprime el comando. Los distingue por la carpeta donde está el binario:
+
+| Instalado con | `cuilo upgrade` corre                                                                                                                       |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| npm           | `npm install --global @cuilo/cli@<versión>`                                                                                                 |
+| pnpm          | `pnpm add --global @cuilo/cli@<versión>`                                                                                                    |
+| Bun           | `bun add --global @cuilo/cli@<versión>`                                                                                                     |
+| Yarn          | `yarn global add @cuilo/cli@<versión>`                                                                                                      |
+| Homebrew      | `brew upgrade tuentyfaiv/tap/cuilo`                                                                                                         |
+| Cargo         | `cargo binstall cuilo --version <versión> --no-confirm` cuando `cargo-binstall` está instalado; si no, `cargo install cuilo --locked --version <versión>` |
+
+Si el gestor de paquetes falla, `cuilo upgrade` también falla y dice qué comando fue. Una copia que no instaló ninguno de ellos, como una que copiaste a mano, no puede actualizarse sola: vuelve a instalarla con el script de instalación.
+
+Para instalar una versión específica, que puede ser anterior, pasa `--version`. Homebrew no puede instalar una versión elegida, así que esto no funciona con una copia de Homebrew.
 
 ```sh
 cuilo upgrade --version 2.0.0
 ```
 
-`cuilo upgrade --check` solo te avisa si hay una versión más reciente, y funciona sin importar cómo instalaste cuilo. Las copias instaladas de otra forma quedan a cargo de su gestor de paquetes, y `cuilo upgrade` te dice qué comando usar, como `brew upgrade cuilo`. Consulta [`cuilo upgrade`](/es-mx/reference/cli/upgrade/).
+`cuilo upgrade --check` solo te avisa si hay una versión más reciente, y qué comando correría `cuilo upgrade`. Con `--json`, la salida del gestor de paquetes va a stderr, así que stdout sigue siendo JSON válido. Consulta [`cuilo upgrade`](/es-mx/reference/cli/upgrade/).
+
+### Actualizaciones automáticas
+
+Cuando usas cuilo en una terminal, busca una versión nueva como máximo una vez al día. La búsqueda corre en segundo plano, así que ningún comando la espera ni falla por ella. Lo que pasa después depende de `updates` en tu [configuración de usuario](/es-mx/reference/user-config/#updates), `config.toml` en tu carpeta de configuración de cuilo:
+
+| `updates`            | Qué hace cuilo                                                                                                                                                                                                                                                                      |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auto` (por defecto) | Una copia instalada con el script de instalación se actualiza sola en segundo plano, con las mismas revisiones de firma y checksum que `cuilo upgrade`. La siguiente vez que corres cuilo, te lo dice una sola vez, por ejemplo `cuilo updated 2.0.0 → 2.1.0.` Cualquier otra copia imprime un aviso. |
+| `notify`             | Imprime un aviso, como máximo una vez al día: ``cuilo 2.1.0 is available (you have 2.0.0); run `cuilo upgrade`.``                                                                                                                                                                  |
+| `off`                | Nunca busca.                                                                                                                                                                                                                                                                        |
+
+```toml
+updates = "notify"
+```
+
+`CUILO_UPDATES` tiene prioridad sobre la configuración, por ejemplo `CUILO_UPDATES=off cuilo status`. cuilo imprime estas líneas en stderr, después de la salida del propio comando. Nunca busca ni las imprime con `--json`, cuando stderr no es una terminal, cuando `CI` está definida, ni en `cuilo mcp`, `cuilo completions` y `cuilo upgrade`. Una búsqueda o actualización que falla queda anotada en `update.json` en tu carpeta de caché, y se intenta de nuevo al día siguiente. Mientras tanto, una copia que no pudo actualizarse sola imprime el aviso, para que corras `cuilo upgrade` y veas por qué. Consulta [Variables de entorno](/es-mx/reference/environment/).
 
 ## Autocompletado de tu shell
 

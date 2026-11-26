@@ -14,8 +14,6 @@ pub const REQUEST_ID_HEADER: &str = "x-request-id";
 pub struct RequestId(pub String);
 
 /// Reuses a valid incoming request id or creates one, and echoes it in the response.
-///
-/// Add it with `Router::layer(axum::middleware::from_fn(request_id))`.
 pub async fn request_id(mut request: Request, next: Next) -> Response {
 	let id = request
 		.headers()

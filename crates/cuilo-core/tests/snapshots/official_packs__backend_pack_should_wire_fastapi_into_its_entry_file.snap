@@ -1,0 +1,22 @@
+---
+source: crates/cuilo-core/tests/official_packs.rs
+expression: "wired(r#\"{\"framework\": [\"fastapi\"]}\"#, \"app/main.py\", FASTAPI_MAIN)?"
+---
+---
+from fastapi import FastAPI
+
+from app.errors import register_error_handlers
+
+from app.status_badges.router import router as status_badges_router
+
+from app.middleware.status_badge import StatusBadgeMiddleware
+
+app = FastAPI()
+app.add_middleware(StatusBadgeMiddleware)
+app.include_router(status_badges_router)
+register_error_handlers(app)
+
+
+@app.get("/")
+async def root():
+    return {"message": "Hello World"}

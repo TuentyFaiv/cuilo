@@ -9,7 +9,7 @@ use uuid::Uuid;
 use super::ExampleItem;
 use crate::error::AppError;
 
-/// Storage for example items; the service depends on this, not on a database.
+/// Storage for example items.
 pub trait ExampleItemRepository: Send + Sync + 'static {
 	/// A page of items, oldest first.
 	fn list(&self, limit: u32, offset: u32) -> impl Future<Output = Result<Vec<ExampleItem>, AppError>> + Send;

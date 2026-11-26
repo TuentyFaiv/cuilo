@@ -14,7 +14,7 @@ pub use hash::{Digest, ParseDigestError};
 pub(crate) use manifest::SCHEMA_VERSION;
 pub use manifest::{
 	Dependency, Ecosystem, Fact, FileRule, Input, Migration, Name, NameError, PackManifest, PatchSpec, Permissions,
-	PieceKind, PieceManifest, Position, Rename, Variant,
+	PieceKind, PieceManifest, Position, Rename, Step, Variant,
 };
 pub use path::{PathError, RelPath};
 pub use stack::Stack;

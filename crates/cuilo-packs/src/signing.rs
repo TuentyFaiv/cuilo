@@ -57,10 +57,8 @@ impl Trust {
 		})
 	}
 
-	/// Checks `pack`'s signature; returns the pack with its signer when a trusted key signed it.
-	///
-	/// A bad signature or a revoked key is always refused; an unsigned pack, or one signed by a key
-	/// you have not trusted, is refused only when signatures are required.
+	/// Checks `pack`'s signature, recording a trusted signer; bad or revoked signatures are always
+	/// refused, unsigned or untrusted ones only when signatures are required.
 	pub fn verify(&self, pack: Pack) -> Result<Pack, SourceError> {
 		let name = pack.manifest().name.to_string();
 		let Some(text) = pack.signature() else {

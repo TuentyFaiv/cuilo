@@ -172,14 +172,11 @@ impl Engine {
 		Ok(checks)
 	}
 
-	/// Applies `plan` to a throwaway copy of the project and runs [`checks`](Self::checks) there; the
-	/// project is not touched. A failed check runs again on an untouched copy, to tell whether the
-	/// plan caused it.
+	/// Applies `plan` to a private throwaway copy of the project and runs [`checks`](Self::checks) there,
+	/// rerunning failed checks without the plan to tell whether it caused them.
 	///
-	/// The checks are the project's code and run with the plan's files in place, so files from the
-	/// pack, such as a `build.rs` or a test, run as the user: only in a trusted project, and only once
-	/// the user has seen the plan and agreed. The copies live in a folder only the user can open,
-	/// [`verify_dir`](super::EngineBuilder::verify_dir) or the `verify` folder of the user's cache.
+	/// The checks run the pack's files, such as a `build.rs`, as the user: call it only in a trusted
+	/// project, once the user has agreed to the plan.
 	pub fn verify(&self, plan: &Plan<Validated>) -> Result<Verification, EngineError> {
 		let fail = |message: &str| EngineError::Verify(message.to_owned());
 		let root = self
@@ -266,9 +263,8 @@ impl Engine {
 	}
 }
 
-/// Creates `dir` for this user alone, or checks that it is: a real folder, closed to other users, with
-/// no folder above it that every user can write to, since the checks' tools, like Cargo, read config
-/// files from the folders above them.
+/// Creates `dir` for this user alone, or checks that it is: a real folder closed to other users, under no
+/// folder every user can write to, since tools like Cargo read config from the folders above them.
 fn private_dir(dir: &Path) -> io::Result<()> {
 	let mut builder = fs::DirBuilder::new();
 	builder.recursive(true);

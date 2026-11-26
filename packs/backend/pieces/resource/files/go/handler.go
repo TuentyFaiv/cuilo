@@ -33,7 +33,7 @@ func NewHandler(service *Service) *Handler {
 }
 // @cuilo if stack.echo
 
-// Register adds the routes to g, e.g. app.Group("/example-items"); set apperror.Handler as the HTTPErrorHandler.
+// Register adds the HTTP routes for example items to g.
 func (h *Handler) Register(g *echo.Group) {
 	g.GET("", h.list)
 	g.POST("", h.create)
@@ -106,7 +106,7 @@ func (h *Handler) delete(c echo.Context) error {
 }
 // @cuilo else
 
-// Routes returns the routes; mount them with r.Mount("/example-items", h.Routes()).
+// Routes returns the HTTP routes for example items.
 func (h *Handler) Routes() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", h.list)

@@ -74,10 +74,8 @@ impl EngineBuilder {
 		self
 	}
 
-	/// Runs the formatters and linters the project uses on generated files, and its checks with
-	/// [`verify`](Engine::verify); only for a project the user trusts. Without it, none of them runs:
-	/// some come from the project, like `node_modules/.bin/biome`, and project files pick even a
-	/// system tool, like `rust-toolchain.toml` picks the `rustfmt` that rustup runs.
+	/// Lets the project's own formatters, linters and [`verify`](Engine::verify) checks run; only for a
+	/// project the user trusts, since project files choose even system tools.
 	pub fn project_tools(mut self, trusted: bool) -> Self {
 		self.project_tools = trusted;
 		self

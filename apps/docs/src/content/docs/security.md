@@ -162,7 +162,9 @@ Releases are not published yet. Once they are, every channel installs the same b
 
 - The npm package has no dependencies and runs nothing at install time.
 - The install scripts download over HTTPS only and follow no redirects. `install.sh` also requires TLS 1.2 or newer. `CUILO_REQUIRE_SIGNATURE=1` makes them refuse to install unless `minisign` checks the signature.
-- `cuilo upgrade` replaces only copies the install script made. It replaces the binary only when the release's `SHA256SUMS` carries a valid signature by the release key built into cuilo. Without `--version`, it never moves to an older release.
+- `cuilo upgrade` and automatic updates replace only copies the install script made. They replace the binary only when the release's `SHA256SUMS` carries a valid signature by the release key built into cuilo, and the binary matches its signed checksum. Automatic updates never move to an older release, and `cuilo upgrade` does only with `--version`.
+- For other copies, `cuilo upgrade` runs the package manager that installed them, as a program with fixed arguments and never through a shell, and that package manager checks the download. Automatic updates never run a package manager.
+- The daily update check only reads which version is newest. `updates = "off"` in your user config, or `CUILO_UPDATES=off`, turns it off.
 - Each signature names its version and file, so a signature cannot be reused for another file or version.
 - To see where a binary was built: `gh attestation verify $(command -v cuilo) --repo TuentyFaiv/cuilo`.
 

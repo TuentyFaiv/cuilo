@@ -73,6 +73,7 @@ fn request<'a>(pack: &'a Pack, inputs: &'a Values) -> PieceRequest<'a> {
 		target: None,
 		granted: None,
 		force: false,
+		wire: false,
 	}
 }
 

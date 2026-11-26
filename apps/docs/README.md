@@ -20,17 +20,18 @@ hand.
 
 The settings live in the Cloudflare dashboard (**Workers & Pages** → `cuilo` → **Settings** → **Builds**):
 
-| Setting           | Value                                                                                    |
-| ----------------- | ---------------------------------------------------------------------------------------- |
-| Repository        | `TuentyFaiv/cuilo`                                                                       |
-| Production branch | `main`                                                                                   |
-| Root directory    | `/` (the repository root, where `bun.lock` and `bunfig.toml` are)                        |
-| Build command     | `bun install --frozen-lockfile && bun run docs:build`                                    |
-| Deploy command    | `bun run docs:deploy`                                                                    |
-| Preview command   | `bun run docs:deploy-preview`                                                            |
-| Build variables   | `BUN_VERSION` = `1.4.4` (the build image ships an older Bun)                             |
-| Build watch paths | Include `apps/docs/*`, `package.json`, `bun.lock`, `bunfig.toml`, `npm/cli/package.json` |
+| Setting           | Production                                                                               | Previews                      |
+| ----------------- | ---------------------------------------------------------------------------------------- | ----------------------------- |
+| Branch            | `main`                                                                                   | every other branch            |
+| Root directory    | `/` (the repository root, where `bun.lock` and `bunfig.toml` are)                        | `/`                           |
+| Build command     | `bun run docs:build`                                                                     | `bun run docs:build`          |
+| Deploy command    | `bun run docs:deploy`                                                                    | `bun run docs:deploy-preview` |
+| Build watch paths | Include `apps/docs/*`, `package.json`, `bun.lock`, `bunfig.toml`, `npm/cli/package.json` | the same                      |
 
-`wrangler.jsonc` attaches the `cuilo.dev` custom domain on every deploy and turns on `workers.dev` preview URLs.
-Preview URLs stay private through Cloudflare Access (**Settings** → **Domains & Routes** → **Preview URLs** →
-**Enable Cloudflare Access**, with a policy that allows only the maintainer's email).
+Workers Builds runs `bun install --frozen-lockfile` before the build command, with the Bun version from
+`packageManager` in the root `package.json`.
+
+`wrangler.jsonc` attaches the `cuilo.dev` custom domain on every production deploy. Other branches deploy as
+[Worker Previews](https://developers.cloudflare.com/workers/previews/) on `workers.dev`, which stay private through
+Cloudflare Access: on the Worker, enable Access for preview URLs only, with a policy that allows only the maintainer's
+email.

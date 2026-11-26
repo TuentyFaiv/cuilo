@@ -32,8 +32,11 @@ impl Session {
 	/// Runs `command` in the project at `context`.
 	pub fn run(self, context: &mut Context, command: &Command) -> anyhow::Result<()> {
 		match command {
-			Command::Add(args) => self.piece(context, args, false),
-			Command::Adopt(args) => self.piece(context, args, true),
+			Command::Add(args) => {
+				let wire = args.wire(context.user.wire);
+				self.piece(context, &args.piece, false, wire)
+			}
+			Command::Adopt(args) => self.piece(context, args, true, false),
 			Command::Update(args) => self.update(context, args),
 			Command::Status => self.status(context),
 			Command::Why { location } => self.why(context, location),
@@ -46,9 +49,8 @@ impl Session {
 		}
 	}
 
-	/// Shows `plan`, lets the user review it, and applies it when they agree. With `--verify`, the
-	/// checks run only after the plan is shown and the user agrees, or passed `--yes`: the pack's files
-	/// are in place in the copy, so its code can run.
+	/// Shows `plan`, lets the user review it, and applies it when they agree; `--verify` checks run
+	/// only after that agreement, since they can run the pack's code.
 	pub(super) fn finish(self, context: &Context, mut plan: Plan<Validated>, args: &ApplyArgs) -> anyhow::Result<()> {
 		let output = Output::new(self.json, args.diff);
 		if args.review {
@@ -101,6 +103,7 @@ impl Session {
 			return Err(Exit(REJECTED).into());
 		}
 		if args.dry_run {
+			print!("{}", output.next_steps(&plan));
 			return Ok(());
 		}
 		let nothing = plan.changes().iter().all(|change| change.action == Action::Unchanged) && plan.instances().is_empty();
@@ -123,6 +126,7 @@ impl Session {
 			return Err(Exit(USAGE).into());
 		}
 		let report = serde_json::to_value(plan.report())?;
+		let next_steps = output.next_steps(&plan);
 		let installs = context.engine.installs(plan.dependencies())?;
 		let transaction = context.engine.apply(plan)?;
 		if !self.json {
@@ -130,6 +134,7 @@ impl Session {
 		}
 		let ran = self.install(context, &installs, args);
 		if !self.json {
+			print!("{next_steps}");
 			return ran.map(|_| ());
 		}
 		let mut install = json!({

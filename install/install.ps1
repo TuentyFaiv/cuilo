@@ -21,7 +21,6 @@ if ($PSVersionTable.PSVersion.Major -lt 6) {
 
 $DownloadUrl = 'https://dl.cuilo.dev'
 $Repo = 'TuentyFaiv/cuilo'
-# The minisign key that signs every release file.
 $ReleaseKey = 'RWTFcgVmt+E7Xi77vi6Q/Yu68TJDTsBTKYHqOmyjSOY4VCgpEFCwl+dK'
 
 # HTTPS only (the URLs above), no redirects.

@@ -1,7 +1,5 @@
-//! Stdio JSON-RPC 2.0 API for the engine: one message per line, plans applied by id.
-//! One engine serves the whole session, so the project config is read once, unless the user trusts or
-//! stops trusting the project meanwhile; `plan.verify` runs code from the plan, so a client asks the
-//! user first, as for `plan.apply`.
+//! Stdio JSON-RPC 2.0 API for the engine: one message per line, plans applied by id; clients ask the
+//! user before `plan.verify`, which runs the plan's code, as before `plan.apply`.
 
 use std::collections::BTreeMap;
 use std::io::{self, BufRead, Write};
@@ -216,6 +214,9 @@ struct CreatePlan {
 	target: Option<RelPath>,
 	#[serde(default)]
 	force: bool,
+	/// Apply wiring steps; `None` uses the user config's `wire`.
+	#[serde(default)]
+	wire: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -364,11 +365,7 @@ impl<W: Write + Send + 'static> Session<W> {
 			}
 			"plan.apply" => {
 				let PlanRef { plan } = parse(params)?;
-				let plan = self
-					.plans
-					.remove(&plan)
-					.ok_or_else(|| RpcError::new(INVALID_PARAMS, format!("no pending plan {plan}")))?;
-				to_json(&self.engine.get()?.apply(plan)?)
+				self.apply_plan(plan)
 			}
 			"plan.hunks" => {
 				let PlanRef { plan } = parse(params)?;
@@ -424,6 +421,20 @@ impl<W: Write + Send + 'static> Session<W> {
 		}
 	}
 
+	/// Applies a pending plan; the transaction comes with the plan's next steps, for the client to relay.
+	fn apply_plan(&mut self, id: u64) -> Result<Json, RpcError> {
+		let plan = self
+			.plans
+			.remove(&id)
+			.ok_or_else(|| RpcError::new(INVALID_PARAMS, format!("no pending plan {id}")))?;
+		let next_steps = plan.next_steps().to_vec();
+		let mut applied = to_json(&self.engine.get()?.apply(plan)?)?;
+		if !next_steps.is_empty() {
+			applied["next_steps"] = json!(next_steps);
+		}
+		Ok(applied)
+	}
+
 	/// Loads the pack at `source`, pinned to the hash the lockfile recorded for that source.
 	fn add_pack(&mut self, source: &str) -> Result<Json, RpcError> {
 		let pack = self.resolve(source, true)?;
@@ -455,6 +466,12 @@ impl<W: Write + Send + 'static> Session<W> {
 	}
 
 	fn adopt_plan(&mut self, params: &CreatePlan) -> Result<Json, RpcError> {
+		if params.wire.is_some() {
+			return Err(RpcError::new(
+				INVALID_PARAMS,
+				"`wire` is only for plan.create; adopting applies no wiring",
+			));
+		}
 		let pack = find_pack(&self.packs, &params.pack)?;
 		let plan = self.engine.get()?.plan_adopt(&PieceRequest {
 			pack,
@@ -464,12 +481,14 @@ impl<W: Write + Send + 'static> Session<W> {
 			target: params.target.as_ref(),
 			granted: None,
 			force: params.force,
+			wire: false,
 		})?;
 		self.keep_plan(plan)
 	}
 
 	fn create_plan(&mut self, params: &CreatePlan) -> Result<Json, RpcError> {
 		let pack = find_pack(&self.packs, &params.pack)?;
+		let wire = params.wire.unwrap_or(self.engine.user.wire);
 		let plan = self.engine.get()?.plan(&PieceRequest {
 			pack,
 			piece: &params.piece,
@@ -478,6 +497,7 @@ impl<W: Write + Send + 'static> Session<W> {
 			target: params.target.as_ref(),
 			granted: None,
 			force: params.force,
+			wire,
 		})?;
 		self.keep_plan(plan)
 	}

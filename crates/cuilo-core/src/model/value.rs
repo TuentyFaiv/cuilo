@@ -10,11 +10,11 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(untagged)]
 pub enum Value {
-	/// `true` or `false`.
+	/// For `bool` inputs.
 	Bool(bool),
-	/// A whole number.
+	/// For `number` inputs.
 	Number(i64),
-	/// Text.
+	/// For `string` and `enum` inputs.
 	String(String),
 }
 

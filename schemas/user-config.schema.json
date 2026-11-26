@@ -27,12 +27,12 @@
         },
         "header": {
           "default": "Authorization",
-          "description": "Header that carries it.",
+          "description": "Header that carries the token; default `Authorization`.",
           "type": "string"
         },
         "scheme": {
           "default": "Bearer",
-          "description": "Text before the token in the header; empty sends the token alone.",
+          "description": "Text before the token, default `Bearer`; empty sends the token alone.",
           "type": "string"
         }
       },
@@ -68,7 +68,7 @@
       "type": "object"
     },
     "ToolTrust": {
-      "description": "Whether to run a project's own tools, which come from the project and run with your rights.",
+      "description": "Whether cuilo may run a project's tools, which run with the user's rights.",
       "oneOf": [
         {
           "const": "ask",
@@ -82,22 +82,42 @@
         },
         {
           "const": "never",
-          "description": "Never.",
+          "description": "In no project.",
           "type": "string"
         }
       ]
     },
     "ToolsConfig": {
       "additionalProperties": false,
-      "description": "Running the project's own tools, such as Biome or Prettier, on generated files.",
+      "description": "Project tools such as Biome or Prettier.",
       "properties": {
         "trust": {
           "$ref": "#/$defs/ToolTrust",
           "default": "ask",
-          "description": "`ask` once per project (the default), `always`, or `never`."
+          "description": "Default `ask`."
         }
       },
       "type": "object"
+    },
+    "UpdatePolicy": {
+      "description": "What cuilo does about new releases; checks run in the background, never outside a terminal or in CI.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Install them in the background, signature checked, when the install script installed cuilo; otherwise print a notice.",
+          "type": "string"
+        },
+        {
+          "const": "notify",
+          "description": "Print a notice, at most once a day, saying to run `cuilo upgrade`.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "Never look for them; `cuilo upgrade` still works.",
+          "type": "string"
+        }
+      ]
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -126,16 +146,26 @@
       "additionalProperties": {
         "$ref": "#/$defs/ExternalPatcher"
       },
-      "description": "Your preferred external tool per patch kind.",
+      "description": "External tools that replace the built-in patchers, by patch kind.",
       "type": "object"
     },
     "signing": {
       "$ref": "#/$defs/SigningConfig",
-      "description": "Which pack signatures you trust."
+      "description": "Trusted signing keys, and whether packs must be signed."
     },
     "tools": {
       "$ref": "#/$defs/ToolsConfig",
       "description": "When cuilo may run a project's own formatters and linters on the files it generates."
+    },
+    "updates": {
+      "$ref": "#/$defs/UpdatePolicy",
+      "default": "auto",
+      "description": "What cuilo does about new releases, which it looks for at most once a day in a terminal: `auto`, `notify` or `off`; `CUILO_UPDATES` overrides it. Default `auto`."
+    },
+    "wire": {
+      "default": false,
+      "description": "Whether `cuilo add` applies pieces' wiring steps, such as mounting new routes in the app's entry\nfile, instead of listing them as next steps; `--wire` and `--no-wire` override it.",
+      "type": "boolean"
     }
   },
   "title": "UserConfig",

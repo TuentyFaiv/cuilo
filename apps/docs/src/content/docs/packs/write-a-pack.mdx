@@ -1,6 +1,6 @@
 ---
 title: Write a pack
-description: Build a pack from real code with typed inputs, variants per stack, patches and permissions, and test it from a local folder.
+description: Build a pack from real code with typed inputs, variants per stack, patches, next steps and permissions, and test it from a local folder.
 ---
 
 import { FileTree, Steps } from "@astrojs/starlight/components";
@@ -15,7 +15,7 @@ A pack is a folder with a `pack.toml` and one folder per piece. Templates are wo
   - pack.minisig optional signature
   - pieces/
     - card/
-      - piece.toml inputs, variants, file rules, patches
+      - piece.toml inputs, variants, file rules, patches, steps
       - files/
         - react/
           - example-card/
@@ -95,7 +95,7 @@ when = "styled"
 
 ## Templates are real code
 
-Each text input can name an `example`: text that appears in the templates. cuilo replaces it with the value the user gives, in file contents, file and folder names, `target`, and the `file`, `insert` and `import` of patches. An example of two or more words is replaced in every case form, and as written:
+Each text input can name an `example`: text that appears in the templates. cuilo replaces it with the value the user gives, in file contents, file and folder names, `target`, the `file`, `insert` and `import` of patches, and the `text` of steps. An example of two or more words is replaced in every case form, and as written:
 
 | Form       | `ExampleCard` becomes, for `UserProfile` |
 | ---------- | ---------------------------------------- |
@@ -231,6 +231,43 @@ vars = { card-radius = "0.5rem", card-border = "220 13% 91%" }
 - `css_vars` adds custom properties, without the leading `--`, to the block for `selector`. It creates the block when it is missing and keeps values the file already sets.
 
 A patch whose text is already in the file changes nothing.
+
+## Next steps and wiring
+
+Setup that lives in the user's own files, such as mounting routes or registering middleware, goes in `[[steps]]`, not in comments in the templates. After `cuilo add`, cuilo lists each step under **Next steps**. A step with `[[steps.patches]]` is a wiring step: cuilo can do it for the user.
+
+```toml
+[[steps]]
+text = "Mount the routes in `src/index.ts` with `app.route(\"/example-items\", exampleItemRoutes)`."
+variants = ["hono"]
+
+[[steps.patches]]
+kind = "import"
+file = "src/index.ts"
+import = 'import { exampleItemRoutes } from "./example-items/example-item.routes";'
+
+[[steps.patches]]
+kind = "anchor"
+file = "src/index.ts"
+anchor = "export default app"
+position = "before"
+insert = "app.route(\"/example-items\", exampleItemRoutes);\n\n"
+
+[[steps]]
+text = "Add `model ExampleItem` to `schema.prisma`."
+when = "stack.prisma"
+```
+
+- `text` is one sentence with the code to add. Examples in it are replaced, as in patches.
+- `variants` and `when` choose steps the way they choose dependencies: an empty `variants` means every variant, and `when` is a condition on inputs and `stack.` values.
+- A step without patches is always listed.
+- A wiring step's patches take the same kinds and keys as `[[patches]]`. cuilo applies them only when the user turns wiring on, with `cuilo add --wire` or `wire = true` in the [user config](/reference/user-config/). Then they are ordinary patches: they show in the plan, need `permissions.write` and are recorded in `cuilo.lock`, and the step is not listed. With wiring off, the step is listed and nothing is patched.
+- A step's patches apply all or none. When one cannot apply, because its file or anchor is missing or the anchor appears more than once, cuilo applies none of them. The plan still goes ahead, lists the step and notes why on the file, e.g. ``src/index.ts: no line contains `export default app`; wire it by hand``.
+- Wiring patches assume the piece's default folder, so they are not applied when the user writes the piece elsewhere with `--target` or `paths`. The step is listed instead.
+- `cuilo adopt` lists no steps and applies no wiring.
+- On `cuilo update`, a piece whose wiring was applied, marked `wired = true` in `cuilo.lock`, gets its wiring patches updated like any other patch. cuilo never wires a piece that was added without it. When a wiring patch no longer applies, the update leaves that file as it is and notes why.
+
+Give a step patches only when the framework has a conventional entry file and an anchor line that appears once in it, such as `src/index.ts` from `create-hono`. Choose the anchor so the inserted code is in the right place: routes inserted right after `const app = new Hono()` would come before the user's own middleware, such as authentication, which then would not run for them. The official `backend` pack inserts routes before `export default app` and middleware right after the app is created. Otherwise, keep the step as text.
 
 ## Pieces that build on others
 

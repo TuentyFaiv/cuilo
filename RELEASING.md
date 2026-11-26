@@ -36,14 +36,14 @@ https://<download host>/
 
 ## What protects users
 
-| Threat                                             | What stops it                                                                                                                                                                                                                     |
-| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Someone on the network reads or changes a download | HTTPS only, TLS 1.2 or newer, no redirects: `curl --proto '=https' --tlsv1.2`, PowerShell with TLS 1.2 and `-MaximumRedirection 0`, cuilo's own HTTPS client. The domain adds HSTS, DNSSEC and CAA records (setup below).         |
-| A changed or swapped binary on the host            | Every binary is signed with a key the host never sees. `cuilo upgrade` and `cargo binstall` require the signature, and the install scripts check it when `minisign` is installed (`CUILO_REQUIRE_SIGNATURE=1` makes it required). |
-| An old, vulnerable release offered as the newest   | `cuilo upgrade` never goes down, and each signature names its version, so an old signed file can't stand in for a new one.                                                                                                        |
-| A published version changed later                  | The R2 bucket lock on `v` and the workflow's never-replace upload; immutable GitHub Releases; npm and crates.io never accept the same version twice.                                                                              |
-| A leaked CI credential                             | Every publishing job waits for your approval of the `release` environment, and each token can reach one bucket, tap or package and nothing else.                                                                                  |
-| A half-downloaded `curl … \| sh`                   | install.sh runs everything inside `main`, so a cut-off script runs nothing.                                                                                                                                                       |
+| Threat                                             | What stops it                                                                                                                                                                                                                                        |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Someone on the network reads or changes a download | HTTPS only, TLS 1.2 or newer, no redirects: `curl --proto '=https' --tlsv1.2`, PowerShell with TLS 1.2 and `-MaximumRedirection 0`, cuilo's own HTTPS client. The domain adds HSTS, DNSSEC and CAA records (setup below).                            |
+| A changed or swapped binary on the host            | Every binary is signed with a key the host never sees. `cuilo upgrade`, automatic updates and `cargo binstall` require the signature, and the install scripts check it when `minisign` is installed (`CUILO_REQUIRE_SIGNATURE=1` makes it required). |
+| An old, vulnerable release offered as the newest   | `cuilo upgrade` and automatic updates never go down, and each signature names its version, so an old signed file can't stand in for a new one.                                                                                                       |
+| A published version changed later                  | The R2 bucket lock on `v` and the workflow's never-replace upload; immutable GitHub Releases; npm and crates.io never accept the same version twice.                                                                                                 |
+| A leaked CI credential                             | Every publishing job waits for your approval of the `release` environment, and each token can reach one bucket, tap or package and nothing else.                                                                                                     |
+| A half-downloaded `curl … \| sh`                   | install.sh runs everything inside `main`, so a cut-off script runs nothing.                                                                                                                                                                          |
 
 What remains: the first `curl … | sh` trusts the download host over HTTPS, as rustup, Bun and Deno do. A user who
 wants more can download `install.sh` and `install.sh.minisig`, check them with
@@ -104,7 +104,8 @@ Apple notarization yet; that takes paid certificates.
 4. Merge the tap pull request.
 
 A bad release is never replaced: publish a fixed version. Until then, a channel file can be pointed back at the
-previous version by hand. `cuilo upgrade` then stays where it is, and the install scripts install that one.
+previous version by hand. `cuilo upgrade` and automatic updates then stay where they are, and the install scripts
+install that one.
 
 ## Verifying a release
 

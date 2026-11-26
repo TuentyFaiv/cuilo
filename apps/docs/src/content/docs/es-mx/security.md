@@ -162,7 +162,9 @@ Todavía no hay versiones publicadas. Cuando las haya, todos los canales instala
 
 - El paquete de npm no tiene dependencias y no ejecuta nada al instalarse.
 - Los scripts de instalación solo descargan por HTTPS y no siguen redirecciones. `install.sh` además exige TLS 1.2 o más reciente. Con `CUILO_REQUIRE_SIGNATURE=1`, se niegan a instalar a menos que `minisign` verifique la firma.
-- `cuilo upgrade` solo reemplaza copias que instaló el script de instalación. Reemplaza el binario solo cuando el `SHA256SUMS` de la versión trae una firma válida de la llave de publicación integrada en cuilo. Sin `--version`, nunca baja a una versión anterior.
+- `cuilo upgrade` y las actualizaciones automáticas solo reemplazan copias que instaló el script de instalación. Reemplazan el binario solo cuando el `SHA256SUMS` de la versión trae una firma válida de la llave de publicación integrada en cuilo, y el binario coincide con su checksum firmado. Las actualizaciones automáticas nunca bajan a una versión anterior, y `cuilo upgrade` solo lo hace con `--version`.
+- Para otras copias, `cuilo upgrade` corre el gestor de paquetes que las instaló, como un programa con argumentos fijos y nunca a través de un shell, y ese gestor de paquetes revisa la descarga. Las actualizaciones automáticas nunca corren un gestor de paquetes.
+- La búsqueda diaria de actualizaciones solo lee cuál es la versión más reciente. `updates = "off"` en tu configuración de usuario, o `CUILO_UPDATES=off`, la desactiva.
 - Cada firma nombra su versión y su archivo, así que no se puede reutilizar para otro archivo u otra versión.
 - Para ver dónde se compiló un binario: `gh attestation verify $(command -v cuilo) --repo TuentyFaiv/cuilo`.
 

@@ -1,4 +1,3 @@
 [install]
-# Astro bundles Starlight's Markdown parser (satteri) into the docs' prerender chunks, which then load the
-# parser's native binary from the docs folder; bun's isolated layout keeps that binary out of reach.
+# Starlight's Markdown parser loads its native binary from apps/docs at build time, which bun's isolated layout hides.
 linker = "hoisted"

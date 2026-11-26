@@ -1,0 +1,23 @@
+---
+source: crates/cuilo-core/tests/official_packs.rs
+expression: "wired(r#\"{\"framework\": [\"hono\"], \"language\": [\"typescript\"]}\"#,\n\"src/index.ts\", HONO_INDEX)?"
+---
+---
+import { Hono } from 'hono'
+import { errorHandler } from "./shared/error-handler";
+import { statusBadgeRoutes } from "./modules/status-badges/status-badge.routes";
+import { StatusBadgeService } from "./modules/status-badges/status-badge.service";
+import { InMemoryStatusBadgeRepository } from "./modules/status-badges/status-badge.repository";
+import { statusBadge } from "./shared/middleware/status-badge";
+
+const app = new Hono()
+app.use(statusBadge);
+app.onError(errorHandler);
+
+app.get('/', (c) => {
+  return c.text('Hello Hono!')
+})
+
+app.route("/status-badges", statusBadgeRoutes(new StatusBadgeService(new InMemoryStatusBadgeRepository())));
+
+export default app

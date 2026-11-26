@@ -14,7 +14,7 @@ use crate::patch::PatchKind;
 
 const USER_CONFIG_FILE: &str = "config.toml";
 
-/// `cuilo.json` / `cuilo.toml`, committed with the project.
+/// Project settings in `cuilo.json` or `cuilo.toml`, committed with the project.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ProjectConfig {
@@ -36,8 +36,7 @@ pub struct ProjectConfig {
 	/// Where `registry:` items go and how their imports read.
 	#[serde(default, skip_serializing_if = "RegistryConfig::is_empty")]
 	pub registry: RegistryConfig,
-	/// Commands `--verify` runs instead of the detected checks, e.g. `[["bun", "run", "check"]]`;
-	/// they run only once the user trusts the project.
+	/// Commands `--verify` runs instead of the detected checks, e.g. `[["bun", "run", "check"]]`; trusted projects only.
 	#[serde(default, skip_serializing_if = "Vec::is_empty")]
 	pub verify: Vec<Vec<String>>,
 }
@@ -46,7 +45,7 @@ pub struct ProjectConfig {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RegistryConfig {
-	/// Import aliases; unset ones default to `@/components`, `@/components/ui`, `@/lib`, `@/lib/utils`, `@/hooks`.
+	/// Import aliases; unset ones use their defaults.
 	#[serde(default, skip_serializing_if = "RegistryAliases::is_empty")]
 	pub aliases: RegistryAliases,
 	/// Stylesheet that items' CSS variables go into, e.g. `src/app/globals.css`.
@@ -101,7 +100,7 @@ impl RegistryAliases {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct UserConfig {
-	/// Your preferred external tool per patch kind.
+	/// External tools that replace the built-in patchers, by patch kind.
 	#[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
 	pub patchers: BTreeMap<PatchKind, ExternalPatcher>,
 	/// Credentials for pack downloads by host, e.g. `github.com`; the token comes from an environment variable.
@@ -110,19 +109,39 @@ pub struct UserConfig {
 	/// The ast-grep program for pack migrations, e.g. `["bunx", "@ast-grep/cli"]`; default `ast-grep`.
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub ast_grep: Option<ExternalPatcher>,
-	/// Which pack signatures you trust.
+	/// Trusted signing keys, and whether packs must be signed.
 	#[serde(default, skip_serializing_if = "SigningConfig::is_empty")]
 	pub signing: SigningConfig,
 	/// When cuilo may run a project's own formatters and linters on the files it generates.
 	#[serde(default, skip_serializing_if = "ToolsConfig::is_empty")]
 	pub tools: ToolsConfig,
+	/// What cuilo does about new releases, which it looks for at most once a day in a terminal: `auto`, `notify` or `off`; `CUILO_UPDATES` overrides it. Default `auto`.
+	#[serde(default)]
+	pub updates: UpdatePolicy,
+	/// Whether `cuilo add` applies pieces' wiring steps, such as mounting new routes in the app's entry
+	/// file, instead of listing them as next steps; `--wire` and `--no-wire` override it.
+	#[serde(default)]
+	pub wire: bool,
 }
 
-/// Running the project's own tools, such as Biome or Prettier, on generated files.
+/// What cuilo does about new releases; checks run in the background, never outside a terminal or in CI.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum UpdatePolicy {
+	/// Install them in the background, signature checked, when the install script installed cuilo; otherwise print a notice.
+	#[default]
+	Auto,
+	/// Print a notice, at most once a day, saying to run `cuilo upgrade`.
+	Notify,
+	/// Never look for them; `cuilo upgrade` still works.
+	Off,
+}
+
+/// Project tools such as Biome or Prettier.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ToolsConfig {
-	/// `ask` once per project (the default), `always`, or `never`.
+	/// Default `ask`.
 	#[serde(default)]
 	pub trust: ToolTrust,
 }
@@ -135,7 +154,7 @@ impl ToolsConfig {
 	}
 }
 
-/// Whether to run a project's own tools, which come from the project and run with your rights.
+/// Whether cuilo may run a project's tools, which run with the user's rights.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolTrust {
@@ -144,7 +163,7 @@ pub enum ToolTrust {
 	Ask,
 	/// In every project.
 	Always,
-	/// Never.
+	/// In no project.
 	Never,
 }
 
@@ -177,10 +196,10 @@ impl SigningConfig {
 pub struct HostAuth {
 	/// Environment variable holding the token, e.g. `GITHUB_TOKEN`.
 	pub env: String,
-	/// Header that carries it.
+	/// Header that carries the token; default `Authorization`.
 	#[serde(default = "HostAuth::default_header")]
 	pub header: String,
-	/// Text before the token in the header; empty sends the token alone.
+	/// Text before the token, default `Bearer`; empty sends the token alone.
 	#[serde(default = "HostAuth::default_scheme")]
 	pub scheme: String,
 }
@@ -430,6 +449,16 @@ mod tests {
 	}
 
 	#[test]
+	fn user_config_should_leave_wiring_off_unless_set() {
+		let dir = tempfile::tempdir().unwrap();
+		let path = dir.path().join("config.toml");
+		std::fs::write(&path, "wire = true\n").unwrap();
+
+		assert!(!UserConfig::default().wire);
+		assert!(UserConfig::load_from(&path).unwrap().wire);
+	}
+
+	#[test]
 	fn user_config_should_default_when_missing() {
 		let dir = tempfile::tempdir().unwrap();
 
@@ -445,6 +474,18 @@ mod tests {
 		let path = dir.path().join("config.toml");
 		std::fs::write(&path, "[patchers.magic]\ncommand = [\"x\"]\n").unwrap();
 
+		assert!(matches!(UserConfig::load_from(&path), Err(ConfigError::Parse { .. })));
+	}
+
+	#[test]
+	fn user_config_should_read_the_update_policy_and_default_to_auto() {
+		let dir = tempfile::tempdir().unwrap();
+		let path = dir.path().join("config.toml");
+		std::fs::write(&path, "updates = \"notify\"\n").unwrap();
+
+		assert_eq!(UserConfig::load_from(&path).unwrap().updates, UpdatePolicy::Notify);
+		assert_eq!(UserConfig::default().updates, UpdatePolicy::Auto);
+		std::fs::write(&path, "updates = \"sometimes\"\n").unwrap();
 		assert!(matches!(UserConfig::load_from(&path), Err(ConfigError::Parse { .. })));
 	}
 }

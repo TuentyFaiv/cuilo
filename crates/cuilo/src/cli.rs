@@ -26,7 +26,7 @@ pub(crate) struct Cli {
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
 	/// Generate a piece, e.g. `cuilo add ui/atom Button`.
-	Add(PieceArgs),
+	Add(AddArgs),
 	/// Take over existing code as a piece, so later updates merge into it; existing files are kept.
 	Adopt(PieceArgs),
 	/// Update everything generated from a pack, merging your edits.
@@ -65,14 +65,17 @@ pub(crate) enum Command {
 	/// Print the man page (roff), for packagers; with `--json`, the commands and flags the docs reference is built from.
 	#[command(hide = true)]
 	Man,
-	/// Replace this cuilo with the newest signed release; only for copies the install script made.
+	/// Upgrade cuilo to the newest release, with the package manager that installed it, if any.
 	Upgrade {
 		/// Only report whether a newer release exists.
 		#[arg(long)]
 		check: bool,
-		/// Install this version instead of the newest, e.g. `2.0.0`; it may be older.
+		/// Install this version instead of the newest, e.g. `2.0.0`; it may be older. Not for Homebrew.
 		#[arg(long, value_name = "VERSION")]
 		version: Option<semver::Version>,
+		/// Check for a release and record it for later runs; cuilo starts this itself, once a day.
+		#[arg(long, hide = true, conflicts_with_all = ["check", "version"])]
+		background: bool,
 	},
 	/// Serve cuilo to AI agents over MCP (stdio).
 	Mcp,
@@ -90,11 +93,21 @@ impl Command {
 	/// Whether the command runs the project's checks with `--verify`.
 	pub(crate) fn verifies(&self) -> bool {
 		match self {
-			Self::Add(args) | Self::Adopt(args) => args.apply.verify,
+			Self::Add(args) => args.piece.apply.verify,
+			Self::Adopt(args) => args.apply.verify,
 			Self::Update(args) => args.apply.verify,
 			Self::Pack(PackCommand::Capture(args)) => args.apply.verify,
 			_ => false,
 		}
+	}
+
+	/// Whether the command may check for updates and print notices; not when other programs read
+	/// its output, nor for `upgrade` itself.
+	pub(crate) fn checks_for_updates(&self) -> bool {
+		!matches!(
+			self,
+			Self::Mcp | Self::Rpc | Self::Completions { .. } | Self::Man | Self::Upgrade { .. }
+		)
 	}
 }
 
@@ -114,6 +127,26 @@ pub(crate) enum PackCommand {
 	},
 	/// Turn project files into a new piece of a local pack.
 	Capture(CaptureArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct AddArgs {
+	#[command(flatten)]
+	pub(crate) piece: PieceArgs,
+	/// Apply the piece's wiring steps, such as mounting its routes in the app's entry file, as patches in
+	/// the plan; the default comes from `wire` in the user config.
+	#[arg(long, conflicts_with = "no_wire")]
+	pub(crate) wire: bool,
+	/// List the wiring steps as next steps instead of applying them, even when the user config sets `wire`.
+	#[arg(long)]
+	pub(crate) no_wire: bool,
+}
+
+impl AddArgs {
+	/// Whether to apply wiring steps, given the user config's `wire`.
+	pub(crate) fn wire(&self, configured: bool) -> bool {
+		(configured || self.wire) && !self.no_wire
+	}
 }
 
 #[derive(Debug, Args)]

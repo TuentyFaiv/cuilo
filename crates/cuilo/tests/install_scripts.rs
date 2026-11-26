@@ -1,6 +1,5 @@
-//! The install scripts download a release binary, check it against `SHA256SUMS` (and its signature
-//! when minisign is there), and install it with the receipt `cuilo upgrade` looks for. Downloads
-//! are served from a folder, not the network.
+//! The install scripts against a release served from a folder: checksums, signatures and the
+//! receipt `cuilo upgrade` looks for.
 
 use std::error::Error;
 use std::fs;
@@ -101,9 +100,8 @@ mod shell {
 		Ok(())
 	}
 
-	/// A folder with a `curl` that copies `<release>/<last path segment>` to `--output` and logs its
-	/// arguments, and, when `minisign` is set, a `minisign` that accepts [`TEST_KEY`] and prints the
-	/// signature file as its trusted comment.
+	/// A folder with a fake `curl` serving files from `release` and logging its arguments and, with
+	/// `minisign`, a fake `minisign` that accepts [`TEST_KEY`] and prints the signature as trusted comment.
 	fn fakes(dir: &Path, release: &Path, minisign: bool) -> Result<PathBuf, Box<dyn Error>> {
 		let bin = dir.join("fake-bin");
 		fs::create_dir_all(&bin)?;

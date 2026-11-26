@@ -99,9 +99,12 @@ add backend/resource (with error)
 Packages to add (offered after applying; --install adds them without asking):
   npm      zod ^4.1
   npm      vitest ^4.0 (dev)
+Next steps:
+  1. Register the error handler in `src/index.ts` with `app.onError(errorHandler)`.
+  2. Mount the routes in `src/index.ts` with `app.route("/blog-posts", blogPostRoutes(new BlogPostService(new InMemoryBlogPostRepository())))`.
 ```
 
-The `(with error)` part means `resource` builds on the `error` piece. cuilo adds `error` first when the project does not have it yet, and passes on the inputs they share, such as `tests`.
+The `(with error)` part means `resource` builds on the `error` piece. cuilo adds `error` first when the project does not have it yet, and passes on the inputs they share, such as `tests`. The next steps are what is left for you to do; see [next steps and wiring](#next-steps-and-wiring).
 
 If you leave out an input that has no default, cuilo asks for it in a terminal:
 
@@ -188,6 +191,63 @@ The plan was rejected:
   src/components/status-badge/index.ts: the pack does not declare permission to write here
 ```
 :::
+
+## Next steps and wiring
+
+Some setup lives in your own files, such as registering an error handler or mounting new routes in the app's entry file. cuilo lists it under `Next steps:`, at the end of the output, once the plan is applied. With `--dry-run`, it comes after the plan.
+
+With `--wire`, cuilo does the steps it can as patches in the plan instead, so you review them with the other changes. In the Hono project above, whose `src/index.ts` is the one `create-hono` writes:
+
+```sh
+cuilo add backend/resource blog-post -i plural=blog-posts --wire --dry-run --diff
+```
+
+```text
+add backend/resource (with error)
+  create  src/shared/error-handler.ts
+  …
+  create  src/modules/blog-posts/blog-post.service.ts
+  modify  src/index.ts
+      @@ -1,9 +1,16 @@
+       import { Hono } from 'hono'
+      +import { errorHandler } from "./shared/error-handler";
+      +import { blogPostRoutes } from "./modules/blog-posts/blog-post.routes";
+      +import { BlogPostService } from "./modules/blog-posts/blog-post.service";
+      +import { InMemoryBlogPostRepository } from "./modules/blog-posts/blog-post.repository";
+       
+       const app = new Hono()
+      +app.onError(errorHandler);
+       
+       app.get('/', (c) => {
+         return c.text('Hello Hono!')
+       })
+       
+      +app.route("/blog-posts", blogPostRoutes(new BlogPostService(new InMemoryBlogPostRepository())));
+      +
+       export default app
+Packages to add (offered after applying; --install adds them without asking):
+  npm      zod ^4.1
+  npm      vitest ^4.0 (dev)
+```
+
+To wire every time, set `wire = true` in your [user config](/reference/user-config/). `--no-wire` turns it off for one run.
+
+```toml title="config.toml"
+wire = true
+```
+
+cuilo applies a step's patches all or none. When one cannot apply, for example when `src/index.ts` has no `export default app` line, cuilo leaves that step to you: it lists the step and notes why.
+
+```text
+Notes:
+  src/index.ts: no line contains `export default app`; wire it by hand
+```
+
+In the official `backend` pack, cuilo can wire Hono's `src/index.ts`, FastAPI's `app/main.py` and the module declarations in Axum's `src/main.rs`. The other steps, such as those for Express and Go, which have no conventional entry file, are always listed.
+
+- Wiring applies only to pieces in their default folder, since the imports it adds point there. With `--target` or `paths`, the steps are listed.
+- `cuilo adopt` lists no steps and wires nothing.
+- `cuilo update` keeps the wiring cuilo applied up to date, and never wires a piece you added without it. See [updates](/guides/updates/).
 
 ## Use other packs
 
