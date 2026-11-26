@@ -6,11 +6,11 @@ import tailwind from "@astrojs/tailwind";
 
 // https://astro.build/config
 export default defineConfig({
-  site: "https://cli.tuentyfaiv.com",
+  site: "https://cuilo.dev",
   integrations: [starlight({
-    title: 'TFverse',
+    title: 'Cuilo',
     social: {
-      github: 'https://github.com/TuentyFaiv/generate'
+      github: 'https://github.com/TuentyFaiv/cuilo'
     },
     sidebar: [{
       label: 'Guides',
@@ -45,7 +45,7 @@ export default defineConfig({
     },
     imagesConfig: {
       sizes: [320, 480, 768, 1024, 1200, 1600, 1920],
-      domains: ["cli.tuentyfaiv.com"]
+      domains: ["cuilo.dev"]
     },
     imageService: true
   })

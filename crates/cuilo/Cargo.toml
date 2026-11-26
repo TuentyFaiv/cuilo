@@ -1,0 +1,52 @@
+[package]
+name = "cuilo"
+description = "Generate projects and code from versioned, updatable packs, for humans and AI agents."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "../../README.md"
+keywords = ["cli", "scaffolding", "generator", "templates", "mcp"]
+categories = ["command-line-utilities", "development-tools"]
+
+# Keep in sync with `cuilo_core::brand::BINARY_NAME` (Cargo cannot read Rust constants).
+[[bin]]
+name = "cuilo"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+clap_complete.workspace = true
+clap_mangen.workspace = true
+minisign-verify.workspace = true
+semver.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+cuilo-core.workspace = true
+cuilo-mcp.workspace = true
+cuilo-packs.workspace = true
+cuilo-rpc.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+assert_cmd.workspace = true
+predicates.workspace = true
+tempfile.workspace = true
+
+[package.metadata.binstall]
+pkg-url = "https://dl.cuilo.dev/v{ version }/{ name }-{ target }{ binary-ext }"
+pkg-fmt = "bin"
+
+# cargo-binstall refuses a binary whose minisign signature does not match this key.
+[package.metadata.binstall.signing]
+algorithm = "minisign"
+pubkey = "RWTFcgVmt+E7Xi77vi6Q/Yu68TJDTsBTKYHqOmyjSOY4VCgpEFCwl+dK"
+file = "{ url }.minisig"
+
+[lints]
+workspace = true

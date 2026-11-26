@@ -1,0 +1,358 @@
+name: Release
+
+# Runs when a `v<version>` tag is pushed. Every job that publishes waits for approval of the
+# `release` environment, which holds the signing key and the Cloudflare R2 credentials. Every job
+# checks out the commit the run started for, so moving the tag before approval changes nothing.
+on:
+  push:
+    tags: ["v*"]
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Check the version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+      - name: Match the tag to the Cargo version
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="$(cargo xtask version)"
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error::tag $TAG does not match the Cargo version $version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          case "$version" in
+            *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+      - run: cargo xtask release-check
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: check
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-24.04
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-24.04
+            musl: true
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-24.04-arm
+            musl: true
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+          - target: aarch64-pc-windows-msvc
+            os: windows-11-arm
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    env:
+      TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        shell: bash
+        run: |
+          rustup toolchain install
+          rustup target add "$TARGET"
+      - name: Install musl tools
+        if: matrix.musl
+        run: sudo apt-get update && sudo apt-get install --yes musl-tools
+      - name: Build
+        shell: bash
+        run: cargo build --package cuilo --profile dist --locked --target "$TARGET"
+      - name: Name the binary
+        shell: bash
+        run: |
+          mkdir dist
+          suffix=""
+          case "$TARGET" in *windows*) suffix=".exe" ;; esac
+          cp "target/$TARGET/dist/cuilo$suffix" "dist/cuilo-$TARGET$suffix"
+          if [ "$TARGET" != "x86_64-apple-darwin" ]; then
+            "dist/cuilo-$TARGET$suffix" --version
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bin-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: bin-*
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum cuilo-* > SHA256SUMS && cat SHA256SUMS
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/cuilo-*
+      - name: Sign SHA256SUMS, the binaries and the install scripts
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          sudo apt-get update && sudo apt-get install --yes minisign
+          key="$RUNNER_TEMP/release.key"
+          trap 'rm -f "$key"' EXIT
+          (umask 077 && printf '%s\n' "$MINISIGN_SECRET_KEY" > "$key")
+          public="$(cat crates/cuilo/release-key.pub)"
+          cd dist
+          minisign -S -s "$key" -m SHA256SUMS -t "cuilo $VERSION"
+          [ "$(minisign -V -Q -P "$public" -m SHA256SUMS)" = "cuilo $VERSION" ]
+          # The trusted comment binds each signature to its version and file name.
+          cp ../install/install.sh ../install/install.ps1 .
+          for file in cuilo-* install.sh install.ps1; do
+            minisign -S -s "$key" -m "$file" -t "cuilo $VERSION $file"
+            [ "$(minisign -V -Q -P "$public" -m "$file")" = "cuilo $VERSION $file" ]
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-files
+          path: dist/*
+          if-no-files-found: error
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ needs.check.outputs.prerelease }}
+        run: |
+          flags=""
+          if [ "$PRERELEASE" = "true" ]; then flags="--prerelease"; fi
+          # shellcheck disable=SC2086
+          gh release create "$TAG" dist/* --verify-tag --title "cuilo $TAG" --generate-notes $flags
+
+  cloudflare:
+    name: Cloudflare R2
+    needs: [check, release]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-files
+          path: dist
+      - name: Upload the version, then move the channels
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          endpoint="https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
+          s3() { aws s3api --endpoint-url "$endpoint" "$@"; }
+          put() {
+            s3 put-object --bucket "$R2_BUCKET" --key "$1" --body "$2" --content-type "$3" --cache-control "$4" > /dev/null
+          }
+          # A published file is never replaced: a rerun skips identical files and stops on any other.
+          put_once() {
+            if s3 get-object --bucket "$R2_BUCKET" --key "$1" "$RUNNER_TEMP/existing" > /dev/null 2>&1; then
+              cmp -s "$RUNNER_TEMP/existing" "$2" || { echo "::error::$1 is already published with other content"; exit 1; }
+            else
+              put "$@"
+            fi
+          }
+          current() {
+            if s3 get-object --bucket "$R2_BUCKET" --key "$1" "$RUNNER_TEMP/$1" > /dev/null 2>&1; then
+              head -n 1 "$RUNNER_TEMP/$1"
+            fi
+          }
+          text="text/plain; charset=utf-8"
+          immutable="public, max-age=31536000, immutable"
+          for file in dist/cuilo-*; do
+            case "$file" in
+              *.minisig) type="$text" ;;
+              *) type="application/octet-stream" ;;
+            esac
+            put_once "v$VERSION/${file#dist/}" "$file" "$type" "$immutable"
+          done
+          scripts="install.sh install.sh.minisig install.ps1 install.ps1.minisig"
+          for file in $scripts SHA256SUMS.minisig SHA256SUMS; do
+            put_once "v$VERSION/$file" "dist/$file" "$text" "$immutable"
+          done
+
+          moved="$(cargo xtask channels "$(current latest)" "$(current latest-pre)")"
+          if printf '%s\n' "$moved" | grep -qx latest-pre; then
+            for file in $scripts; do
+              put "$file" "dist/$file" "$text" "public, max-age=300"
+            done
+          fi
+          printf '%s\n' "$VERSION" > "$RUNNER_TEMP/channel"
+          for channel in $moved; do
+            put "$channel" "$RUNNER_TEMP/channel" "$text" "public, max-age=60"
+          done
+          echo "Moved: ${moved:-no channel}"
+      - name: Install it the way users do, requiring the signature
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          sudo apt-get update && sudo apt-get install --yes minisign
+          url="$(cargo xtask download-url)"
+          curl --proto '=https' --tlsv1.2 -fsS "$url/v$VERSION/SHA256SUMS" -o "$RUNNER_TEMP/served"
+          cmp "$RUNNER_TEMP/served" dist/SHA256SUMS
+          curl --proto '=https' --tlsv1.2 -fsS "$url/install.sh" -o "$RUNNER_TEMP/install.sh"
+          curl --proto '=https' --tlsv1.2 -fsS "$url/install.sh.minisig" -o "$RUNNER_TEMP/install.sh.minisig"
+          minisign -V -P "$(cat crates/cuilo/release-key.pub)" -m "$RUNNER_TEMP/install.sh"
+          CUILO_REQUIRE_SIGNATURE=1 CUILO_INSTALL="$RUNNER_TEMP/try" sh "$RUNNER_TEMP/install.sh" "$VERSION"
+
+  npm:
+    name: npm
+    needs: [check, release]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: bin-*
+          path: dist
+          merge-multiple: true
+      - name: Publish with provenance (trusted publishing)
+        env:
+          PRERELEASE: ${{ needs.check.outputs.prerelease }}
+        run: |
+          tag="latest"
+          if [ "$PRERELEASE" = "true" ]; then tag="next"; fi
+          cargo xtask npm dist npm-out > packages.txt
+          # Platform packages first, so the wrapper never points at a missing one.
+          grep -v '/cli$' packages.txt | while read -r dir; do
+            npm publish "$dir" --provenance --access public --tag "$tag"
+          done
+          npm publish npm-out/cli --provenance --access public --tag "$tag"
+
+  crates:
+    name: crates.io
+    needs: [check, release]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+      - uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
+        id: auth
+      - name: Publish (trusted publishing)
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: cargo publish --workspace --exclude xtask --locked
+
+  homebrew:
+    name: Homebrew tap
+    needs: [check, cloudflare]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: bin-*
+          path: dist
+          merge-multiple: true
+      - name: Open a pull request on the tap
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          (cd dist && sha256sum cuilo-* > SHA256SUMS)
+          cargo xtask formula dist/SHA256SUMS > cuilo.rb
+          gh auth setup-git
+          gh repo clone tuentyfaiv/homebrew-tap tap -- --depth 1
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          branch="cuilo-$VERSION"
+          git switch --create "$branch"
+          mkdir -p Formula
+          mv ../cuilo.rb Formula/cuilo.rb
+          git add Formula/cuilo.rb
+          git commit --message "cuilo $VERSION"
+          git push origin "$branch"
+          gh pr create --repo tuentyfaiv/homebrew-tap --head "$branch" --title "cuilo $VERSION" \
+            --body "Formula for cuilo $VERSION, generated by the release workflow."

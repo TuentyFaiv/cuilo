@@ -1,0 +1,22 @@
+[package]
+name = "cuilo-rpc"
+description = "Stdio JSON-RPC API for the cuilo engine, shared by the CLI, MCP server and GUI."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+cuilo-core.workspace = true
+cuilo-packs.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true
