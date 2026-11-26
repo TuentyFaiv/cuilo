@@ -64,8 +64,8 @@ fn release(dir: &Path, binary: &str, served: &Served) -> Result<PathBuf, Box<dyn
 
 #[cfg(unix)]
 mod shell {
-	use std::os::unix::fs::PermissionsExt as _;
-	use std::process::Output;
+	use std::io::Write as _;
+	use std::process::{Output, Stdio};
 
 	use super::*;
 
@@ -94,10 +94,20 @@ mod shell {
 			.is_ok_and(|output| output.stdout.trim_ascii() == b"1")
 	}
 
+	/// Writes an executable through a child process, so this multi-threaded test process never holds it
+	/// open for writing: on Linux, a process another test forks meanwhile would keep it busy (`ETXTBSY`).
 	fn executable(path: &Path, text: &str) -> Result<(), Box<dyn Error>> {
-		fs::write(path, text)?;
-		fs::set_permissions(path, fs::Permissions::from_mode(0o755))?;
-		Ok(())
+		let mut child = Command::new("/bin/sh")
+			.args(["-c", "cat > \"$1\" && chmod 755 \"$1\"", "sh"])
+			.arg(path)
+			.stdin(Stdio::piped())
+			.spawn()?;
+		child.stdin.take().ok_or("no stdin")?.write_all(text.as_bytes())?;
+		if child.wait()?.success() {
+			Ok(())
+		} else {
+			Err(format!("could not write {}", path.display()).into())
+		}
 	}
 
 	/// A folder with a fake `curl` serving files from `release` and logging its arguments and, with

@@ -382,21 +382,33 @@ mod tests {
 		assert!(matches!(tools.format("nope", &path, "a"), Err(FormatError::Unknown)));
 	}
 
+	/// Writes an executable through a child process, so this multi-threaded test process never holds it
+	/// open for writing: on Linux, a process another test forks meanwhile would keep it busy (`ETXTBSY`).
+	#[cfg(unix)]
+	fn write_executable(path: &Path, contents: &str) {
+		use std::io::Write as _;
+
+		let mut child = std::process::Command::new("/bin/sh")
+			.args(["-c", "cat > \"$1\" && chmod 755 \"$1\"", "sh"])
+			.arg(path)
+			.stdin(std::process::Stdio::piped())
+			.spawn()
+			.unwrap();
+		child.stdin.take().unwrap().write_all(contents.as_bytes()).unwrap();
+		assert!(child.wait().unwrap().success(), "could not write {}", path.display());
+	}
+
 	#[cfg(unix)]
 	#[test]
 	fn project_tools_should_run_the_local_program_from_the_root() {
-		use std::os::unix::fs::PermissionsExt as _;
-
 		let root = tempfile::tempdir().unwrap();
 		let bin = root.path().join("node_modules/.bin");
 		std::fs::create_dir_all(&bin).unwrap();
 		let script = bin.join("prettier");
-		std::fs::write(
+		write_executable(
 			&script,
 			"#!/bin/sh\ncat >/dev/null\nprintf 'formatted in %s' \"$(basename \"$PWD\")\"\n",
-		)
-		.unwrap();
-		std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+		);
 		let tools = ProjectTools::new(root.path());
 		let folder = root.path().file_name().unwrap().to_string_lossy().into_owned();
 
@@ -410,19 +422,15 @@ mod tests {
 	#[cfg(unix)]
 	#[test]
 	fn project_tools_should_read_eslint_fixes_and_fatal_errors() {
-		use std::os::unix::fs::PermissionsExt as _;
-
 		let root = tempfile::tempdir().unwrap();
 		let bin = root.path().join("node_modules/.bin");
 		std::fs::create_dir_all(&bin).unwrap();
 		let script = bin.join("eslint");
 		let write = |reply: &str| {
-			std::fs::write(
+			write_executable(
 				&script,
-				format!("#!/bin/sh\ncat >/dev/null\nprintf '%s' '{reply}'\nexit 1\n"),
-			)
-			.unwrap();
-			std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+				&format!("#!/bin/sh\ncat >/dev/null\nprintf '%s' '{reply}'\nexit 1\n"),
+			);
 		};
 		let tools = ProjectTools::new(root.path());
 		let path = RelPath::new("a.js").unwrap();

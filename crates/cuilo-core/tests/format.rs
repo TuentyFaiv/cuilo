@@ -12,6 +12,25 @@ use cuilo_core::{Engine, Pack, PieceRequest, RelPath, UserConfig, Value, Values}
 
 type TestResult = Result<(), Box<dyn Error>>;
 
+/// Writes an executable through a child process, so this multi-threaded test process never holds it open
+/// for writing: on Linux, a process another test forks meanwhile would keep it busy (`ETXTBSY`).
+#[cfg(unix)]
+fn write_executable(path: &Path, contents: &str) -> TestResult {
+	use std::io::Write as _;
+
+	let mut child = std::process::Command::new("/bin/sh")
+		.args(["-c", "cat > \"$1\" && chmod 755 \"$1\"", "sh"])
+		.arg(path)
+		.stdin(std::process::Stdio::piped())
+		.spawn()?;
+	child.stdin.take().ok_or("no stdin")?.write_all(contents.as_bytes())?;
+	if child.wait()?.success() {
+		Ok(())
+	} else {
+		Err(format!("could not write {}", path.display()).into())
+	}
+}
+
 /// Double quotes and a semicolon at the end of every line, like a strict formatter.
 #[derive(Debug)]
 struct Semicolons;
@@ -193,17 +212,14 @@ fn project_tools_should_only_be_noted_until_the_project_is_trusted() -> TestResu
 #[cfg(unix)]
 #[test]
 fn trusted_project_tools_should_run_from_node_modules() -> TestResult {
-	use std::os::unix::fs::PermissionsExt as _;
-
 	let v1 = page("1.0.0", "export const page = 'MyPage'\n")?;
 	let dir = project("biome.json")?;
 	let bin = dir.path().join("node_modules/.bin");
 	fs::create_dir_all(&bin)?;
-	fs::write(
-		bin.join("biome"),
+	write_executable(
+		&bin.join("biome"),
 		"#!/bin/sh\n[ \"$1 $2\" = \"check --write\" ] || exit 9\nsed \"s/'/\\\"/g\"\n",
 	)?;
-	fs::set_permissions(bin.join("biome"), fs::Permissions::from_mode(0o755))?;
 	let engine = Engine::builder()
 		.user_config(UserConfig::default())
 		.project_tools(true)

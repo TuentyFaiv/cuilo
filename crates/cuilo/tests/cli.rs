@@ -13,6 +13,25 @@ fn cuilo() -> Result<Command, Box<dyn Error>> {
 	Ok(Command::cargo_bin(brand::BINARY_NAME)?)
 }
 
+/// Writes an executable through a child process, so this multi-threaded test process never holds it open
+/// for writing: on Linux, a process another test forks meanwhile would keep it busy (`ETXTBSY`).
+#[cfg(unix)]
+fn write_executable(path: &std::path::Path, contents: &str) -> TestResult {
+	use std::io::Write as _;
+
+	let mut child = std::process::Command::new("/bin/sh")
+		.args(["-c", "cat > \"$1\" && chmod 755 \"$1\"", "sh"])
+		.arg(path)
+		.stdin(std::process::Stdio::piped())
+		.spawn()?;
+	child.stdin.take().ok_or("no stdin")?.write_all(contents.as_bytes())?;
+	if child.wait()?.success() {
+		Ok(())
+	} else {
+		Err(format!("could not write {}", path.display()).into())
+	}
+}
+
 #[test]
 fn version_flag_should_print_name_and_package_version() -> TestResult {
 	let expected = format!("{} {}", brand::BINARY_NAME, env!("CARGO_PKG_VERSION"));
@@ -261,17 +280,14 @@ fn pack_list_should_include_the_official_packs() -> TestResult {
 #[cfg(unix)]
 #[test]
 fn trust_should_let_the_project_formatter_shape_generated_files() -> TestResult {
-	use std::os::unix::fs::PermissionsExt as _;
-
 	let dir = react_project()?;
 	std::fs::write(dir.path().join("biome.json"), "{}\n")?;
 	let bin = dir.path().join("node_modules/.bin");
 	std::fs::create_dir_all(&bin)?;
-	std::fs::write(
-		bin.join("biome"),
+	write_executable(
+		&bin.join("biome"),
 		"#!/bin/sh\ncat >/dev/null\nprintf '// formatted\\n'\n",
 	)?;
-	std::fs::set_permissions(bin.join("biome"), std::fs::Permissions::from_mode(0o755))?;
 
 	in_project(&dir)?
 		.args(["add", "ui/atom", "Tag", "--dry-run"])
@@ -356,7 +372,13 @@ fn upgrade_background_should_stay_silent_and_record_nothing_in_ci() -> TestResul
 fn copy_in(bin: &std::path::Path) -> Result<std::path::PathBuf, Box<dyn Error>> {
 	std::fs::create_dir_all(bin)?;
 	let exe = bin.join(brand::BINARY_NAME);
-	std::fs::copy(assert_cmd::cargo::cargo_bin(brand::BINARY_NAME), &exe)?;
+	let copied = std::process::Command::new("cp")
+		.arg(assert_cmd::cargo::cargo_bin(brand::BINARY_NAME))
+		.arg(&exe)
+		.status()?;
+	if !copied.success() {
+		return Err(format!("could not copy cuilo to {}", exe.display()).into());
+	}
 	Ok(exe)
 }
 
@@ -364,19 +386,16 @@ fn copy_in(bin: &std::path::Path) -> Result<std::path::PathBuf, Box<dyn Error>> 
 /// `npm says hi`, saves its arguments in `npm-args` and exits with `status`.
 #[cfg(unix)]
 fn npm_install(dir: &std::path::Path, status: u8) -> Result<(std::path::PathBuf, String), Box<dyn Error>> {
-	use std::os::unix::fs::PermissionsExt as _;
-
 	let exe = copy_in(&dir.join("lib/node_modules/@cuilo/cli-test/bin"))?;
 	let fakes = dir.join("fake-bin");
 	std::fs::create_dir_all(&fakes)?;
-	std::fs::write(
-		fakes.join("npm"),
-		format!(
+	write_executable(
+		&fakes.join("npm"),
+		&format!(
 			"#!/bin/sh\necho \"$@\" > '{}'\necho npm says hi\nexit {status}\n",
 			dir.join("npm-args").display()
 		),
 	)?;
-	std::fs::set_permissions(fakes.join("npm"), std::fs::Permissions::from_mode(0o755))?;
 	Ok((exe, format!("{}:/usr/bin:/bin", fakes.display())))
 }
 
@@ -574,8 +593,6 @@ fn verify_should_show_the_plan_and_run_nothing_until_the_user_agrees() -> TestRe
 #[cfg(unix)]
 #[test]
 fn rustfmt_should_run_only_in_a_trusted_project() -> TestResult {
-	use std::os::unix::fs::PermissionsExt as _;
-
 	let dir = tempfile::tempdir()?;
 	std::fs::write(
 		dir.path().join("Cargo.toml"),
@@ -599,11 +616,10 @@ fn rustfmt_should_run_only_in_a_trusted_project() -> TestResult {
 	let bin = dir.path().join(".home/bin");
 	std::fs::create_dir_all(&bin)?;
 	let marker = dir.path().join(".home/rustfmt-ran");
-	std::fs::write(
-		bin.join("rustfmt"),
-		format!("#!/bin/sh\ntouch '{}'\ncat\n", marker.display()),
+	write_executable(
+		&bin.join("rustfmt"),
+		&format!("#!/bin/sh\ntouch '{}'\ncat\n", marker.display()),
 	)?;
-	std::fs::set_permissions(bin.join("rustfmt"), std::fs::Permissions::from_mode(0o755))?;
 	let path = format!("{}:{}", bin.display(), std::env::var("PATH")?);
 	let add = || -> Result<Command, Box<dyn Error>> {
 		let mut command = in_project(&dir)?;
