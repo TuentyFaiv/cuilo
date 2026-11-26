@@ -1,0 +1,31 @@
+---
+import type { LucideName } from "./lucide-icons";
+
+import { lucideIcons } from "./lucide-icons";
+
+interface Props {
+	/** The icon to draw. */
+	name: LucideName;
+	/** Width and height in pixels. */
+	size?: number;
+	/** Extra classes for the `svg`. */
+	class?: string;
+}
+
+const { name, size = 16, class: className } = Astro.props;
+---
+
+<svg
+	class={className}
+	width={size}
+	height={size}
+	viewBox="0 0 24 24"
+	fill="none"
+	stroke="currentColor"
+	stroke-width="2"
+	stroke-linecap="round"
+	stroke-linejoin="round"
+	aria-hidden="true"
+	focusable="false"
+	set:html={lucideIcons[name]}
+/>

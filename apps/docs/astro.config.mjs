@@ -25,7 +25,7 @@ export default defineConfig({
 			credits: false,
 			customCss: [
 				"@fontsource-variable/inter",
-				"@fontsource-variable/bricolage-grotesque",
+				"@fontsource-variable/bricolage-grotesque/opsz.css",
 				"@fontsource/fragment-mono",
 				"./src/styles/theme.css",
 			],

@@ -29,6 +29,9 @@
 	--cu-ok: rgb(79 214 156);
 	--cu-del: rgb(242 160 107);
 	--cu-warn: rgb(242 193 78);
+	--cu-shadow: rgb(0 0 0 / 0.5);
+	--cu-layer-pack: var(--cu-accent-2);
+	--cu-layer-yours: var(--cu-accent-3);
 
 	--sl-font: var(--cu-font-body);
 	--sl-font-mono: var(--cu-font-mono);
@@ -70,6 +73,9 @@
 	--cu-ok: rgb(17 128 79);
 	--cu-del: rgb(180 84 31);
 	--cu-warn: rgb(138 97 0);
+	--cu-shadow: rgb(12 13 16 / 0.14);
+	--cu-layer-pack: var(--cu-accent-text);
+	--cu-layer-yours: rgb(143 28 49);
 
 	--sl-color-white: var(--cu-ink);
 	--sl-color-gray-1: rgb(27 30 36);
@@ -94,13 +100,13 @@ body {
 h1,
 h2,
 h3,
-.sl-markdown-content :is(h1, h2, h3, h4) {
+.sl-markdown-content :is(h1, h2, h3, h4):not(:where(.cu-landing *)) {
 	font-family: var(--cu-font-display);
 	font-weight: 700;
 	letter-spacing: -0.02em;
 }
 
-.sl-markdown-content :is(h2, h3) {
+.sl-markdown-content :is(h2, h3):not(:where(.cu-landing *)) {
 	font-weight: 650;
 }
 
@@ -108,7 +114,7 @@ h3,
 	text-underline-offset: 0.2em;
 }
 
-.sl-markdown-content :not(pre) > code {
+.sl-markdown-content :not(pre) > code:not(:where(.cu-landing *)) {
 	padding: 0.1em 0.35em;
 	font-size: 0.875em;
 	background: var(--cu-surface-2);
@@ -194,11 +200,13 @@ nav.sidebar .group-label .large {
 	display: inline-flex;
 	gap: 0.5rem;
 	align-items: center;
-	padding: 0.75rem 1.25rem;
+	padding: 0.6875rem 1.25rem;
+	font-size: 0.9375rem;
 	font-weight: 600;
+	line-height: 1.2;
 	text-decoration: none;
 	border: 1px solid transparent;
-	border-radius: var(--cu-radius);
+	border-radius: var(--cu-radius-small);
 }
 
 .cu-button--primary {
@@ -212,6 +220,7 @@ nav.sidebar .group-label .large {
 }
 
 .cu-button--secondary {
+	font-weight: 500;
 	color: var(--cu-ink);
 	border-color: var(--cu-line);
 }

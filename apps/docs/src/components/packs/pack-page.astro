@@ -3,6 +3,7 @@ import { Icon } from "@astrojs/starlight/components";
 
 import packs from "../../data/packs.json" with { type: "json" };
 import { stackName, ui } from "../../i18n/ui";
+import { addCommand } from "../../pieces";
 
 interface Props {
 	/** The pack to show, by name. */
@@ -17,12 +18,9 @@ if (!pack) {
 	throw new Error(`no pack named ${name} in src/data/packs.json; run cargo xtask docs`);
 }
 const stacks = [...new Set(pack.pieces.flatMap((piece) => piece.variants.map((variant) => stackName(variant))))];
-/** The first `code` span of a description. */
-const CODE_SPAN = /`([^`]+)`/;
-const exampleName = (description: string | null | undefined) => description?.match(CODE_SPAN)?.[1] ?? "example";
 const pieces = pack.pieces.map((piece) => ({
 	...piece,
-	command: `cuilo add ${pack.name}/${piece.name} ${exampleName(piece.inputs.find((input) => input.name === "name")?.description)}`,
+	command: addCommand(pack.name, piece),
 	packages: [...new Set(piece.dependencies.map((dependency) => `${dependency.name} (${dependency.ecosystem})`))],
 }));
 const details = [

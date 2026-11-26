@@ -1,34 +1,42 @@
 ---
-import { Code, Icon, TabItem, Tabs } from "@astrojs/starlight/components";
+import { Icon } from "@astrojs/starlight/components";
 
 import "../styles/landing.css";
 
-import { ui } from "../i18n/ui";
+import { localized, ui } from "../i18n/ui";
+import LucideIcon from "./lucide-icon.astro";
+import restoreInstallTab from "./restore-install-tab.js?raw";
 
 const { entry, locale } = Astro.locals.starlightRoute;
 const t = ui(locale);
 const { hero } = entry.data;
+/** Each install method: its tab, the matching tab on the install page (both use the `install` sync key), and its command. */
 const install = [
-	[t.installUnix, "curl --proto '=https' --tlsv1.2 -fsSL https://dl.cuilo.dev/install.sh | sh"],
-	[t.installWindows, "irm https://dl.cuilo.dev/install.ps1 | iex"],
-	["npm", "npm install --global @cuilo/cli"],
-	["pnpm", "pnpm add --global @cuilo/cli"],
-	["Bun", "bun add --global @cuilo/cli"],
-	["Homebrew", "brew install tuentyfaiv/tap/cuilo"],
-	["Cargo", "cargo binstall cuilo"],
+	{
+		tab: "curl",
+		synced: t.installUnix,
+		command: "curl --proto '=https' --tlsv1.2 -fsSL https://dl.cuilo.dev/install.sh | sh",
+	},
+	{ tab: "PowerShell", synced: t.installWindows, command: "irm https://dl.cuilo.dev/install.ps1 | iex" },
+	{ tab: "npm", synced: "npm", command: "npm install --global @cuilo/cli" },
+	{ tab: "pnpm", synced: "pnpm", command: "pnpm add --global @cuilo/cli" },
+	{ tab: "bun", synced: "Bun", command: "bun add --global @cuilo/cli" },
+	{ tab: "brew", synced: "Homebrew", command: "brew install tuentyfaiv/tap/cuilo" },
+	{ tab: "cargo", synced: "Cargo", command: "cargo binstall cuilo" },
 ];
 ---
 
 {hero && (
 	<section class="cu-hero">
-		<p class="cu-eyebrow">
+		<a class="cu-eyebrow" href={localized(locale, "/guides/updates/")}>
 			<span class="cu-mini-strata" aria-hidden="true">
 				<span />
 				<span />
 				<span />
 			</span>
 			{t.heroEyebrow}
-		</p>
+			<LucideIcon name="arrow-right" size={14} />
+		</a>
 		<h1 id="_top">
 			<Fragment set:html={hero.title ?? entry.data.title} />
 		</h1>
@@ -41,23 +49,130 @@ const install = [
 						href={action.link}
 					>
 						{action.text}
-						{action.icon?.type === "icon" && <Icon name={action.icon.name} />}
+						{action.icon?.type === "icon" &&
+							(action.icon.name === "right-arrow" ? (
+								<LucideIcon name="arrow-right" />
+							) : (
+								<Icon name={action.icon.name} />
+							))}
 					</a>
 				))}
 			</div>
 		)}
-		<div class="cu-install not-content">
-			<Tabs syncKey="install">
-				{install.map(([label, command]) => (
-					<TabItem label={label}>
-						<Code code={command} lang="sh" />
-					</TabItem>
+		<div class="cu-install-wrap">
+			<div class="cu-install" data-install data-copied={t.copied}>
+				<div class="cu-install-tabs" role="tablist" aria-label={t.installMethod}>
+					{install.map((method, index) => (
+						<button
+							type="button"
+							role="tab"
+							id={`cu-install-tab-${index}`}
+							aria-controls={`cu-install-panel-${index}`}
+							aria-selected={index === 0 ? "true" : "false"}
+							tabindex={index === 0 ? 0 : -1}
+							data-synced={method.synced}
+						>
+							{method.tab}
+						</button>
+					))}
+				</div>
+				{install.map((method, index) => (
+					<div
+						class="cu-install-panel"
+						role="tabpanel"
+						id={`cu-install-panel-${index}`}
+						aria-labelledby={`cu-install-tab-${index}`}
+						hidden={index !== 0}
+					>
+						<span class="cu-install-prompt" aria-hidden="true">
+							$
+						</span>
+						<code>{method.command}</code>
+						<button type="button" class="cu-copy-button" data-copy={method.command} aria-label={t.copy}>
+							<LucideIcon name="copy" class="cu-copy-idle" />
+							<LucideIcon name="check" class="cu-copy-done" />
+						</button>
+					</div>
 				))}
-			</Tabs>
+				<p class="sr-only" role="status" data-install-status></p>
+			</div>
+			<script is:inline set:html={restoreInstallTab} />
 			<p class="cu-install-note">
-				<Icon name="approve-check-circle" />
+				<LucideIcon name="shield-check" size={14} />
 				{t.installNote}
 			</p>
 		</div>
 	</section>
 )}
+
+<script>
+	/** The `localStorage` key Starlight's `<Tabs syncKey="install">` uses, so the install page opens on the same method. */
+	const SYNC_KEY = "starlight-synced-tabs__install";
+	/** How long a copy button shows its check mark. */
+	const COPIED_FOR_MS = 1500;
+	/** The tab a key moves to from tab `index` of `count`, or `undefined` for other keys. */
+	function tabFor(key: string, index: number, count: number): number | undefined {
+		switch (key) {
+			case "ArrowLeft":
+				return (index - 1 + count) % count;
+			case "ArrowRight":
+				return (index + 1) % count;
+			case "Home":
+				return 0;
+			case "End":
+				return count - 1;
+			default:
+				return undefined;
+		}
+	}
+
+	const install = document.querySelector<HTMLElement>("[data-install]");
+	const tabs = [...(install?.querySelectorAll<HTMLButtonElement>("[data-synced]") ?? [])];
+	const status = install?.querySelector<HTMLElement>("[data-install-status]");
+
+	function choose(chosen: HTMLButtonElement) {
+		for (const tab of tabs) {
+			const selected = tab === chosen;
+			tab.setAttribute("aria-selected", String(selected));
+			tab.tabIndex = selected ? 0 : -1;
+			const panel = document.getElementById(tab.getAttribute("aria-controls") ?? "");
+			if (panel) {
+				panel.hidden = !selected;
+			}
+		}
+		if (typeof localStorage !== "undefined" && chosen.dataset.synced) {
+			localStorage.setItem(SYNC_KEY, chosen.dataset.synced);
+		}
+	}
+
+	for (const [index, tab] of tabs.entries()) {
+		tab.addEventListener("click", () => choose(tab));
+		tab.addEventListener("keydown", (event) => {
+			const target = tabFor(event.key, index, tabs.length);
+			const next = target === undefined ? undefined : tabs[target];
+			if (next) {
+				event.preventDefault();
+				choose(next);
+				next.focus();
+			}
+		});
+	}
+
+	async function copy(button: HTMLButtonElement) {
+		await navigator.clipboard.writeText(button.dataset.copy ?? "");
+		button.dataset.copied = "";
+		if (status) {
+			status.textContent = install?.dataset.copied ?? "";
+		}
+		setTimeout(() => {
+			button.removeAttribute("data-copied");
+			if (status) {
+				status.textContent = "";
+			}
+		}, COPIED_FOR_MS);
+	}
+
+	for (const button of install?.querySelectorAll<HTMLButtonElement>("[data-copy]") ?? []) {
+		button.addEventListener("click", () => copy(button));
+	}
+</script>
