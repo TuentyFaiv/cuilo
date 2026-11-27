@@ -4,6 +4,10 @@ title: Registro de cambios
 description: Qué hay de nuevo en cada versión de cuilo, empezando por 2.0.0-alpha.0, la reescritura que reemplaza a tfverse.
 ---
 
+## 2.0.0-alpha.1 (2026-11-27)
+
+La primera versión en npm; por lo demás, igual a 2.0.0-alpha.0. La publicación de 2.0.0-alpha.0 llegó a GitHub Releases, a los scripts de instalación y a crates.io, pero se detuvo antes de npm: el flujo de publicación le pasaba a npm rutas de carpetas que interpretó como repositorios de GitHub. Ahora publica `./npm-out/…`. Todo lo nuevo de cuilo 2 está en 2.0.0-alpha.0, en el [registro de cambios](/es-mx/changelog/).
+
 ## 2.0.0-alpha.0 (2026-11-27)
 
 La primera versión de cuilo 2. Es una reescritura de tfverse, la CLI de v1, con otro nombre: el comando es `cuilo` y el paquete de npm es `@cuilo/cli`. Consulta [Migración desde v1](/es-mx/migrating-from-v1/).

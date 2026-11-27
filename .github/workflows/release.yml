@@ -319,9 +319,9 @@ jobs:
           cargo xtask npm dist npm-out > packages.txt
           # Platform packages first, so the wrapper never points at a missing one.
           grep -v '/cli$' packages.txt | while read -r dir; do
-            npm publish "$dir" --provenance --access public --tag "$TAG"
+            npm publish "./$dir" --provenance --access public --tag "$TAG"
           done
-          npm publish npm-out/cli --provenance --access public --tag "$TAG"
+          npm publish ./npm-out/cli --provenance --access public --tag "$TAG"
 
   crates:
     name: crates.io

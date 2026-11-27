@@ -4,6 +4,10 @@ title: Changelog
 description: What is new in each cuilo version, starting with 2.0.0-alpha.0, the rewrite that replaces tfverse.
 ---
 
+## 2.0.0-alpha.1 (2026-11-27)
+
+The first version on npm, and otherwise the same as 2.0.0-alpha.0. The 2.0.0-alpha.0 release reached GitHub Releases, the install scripts and crates.io, but stopped before npm: the release workflow passed npm folder paths that it read as GitHub repositories. The workflow now publishes `./npm-out/…`. Everything new in cuilo 2 is listed under 2.0.0-alpha.0 in the [changelog](/changelog/).
+
 ## 2.0.0-alpha.0 (2026-11-27)
 
 The first version of cuilo 2. It is a rewrite of tfverse, the v1 CLI, under a new name: the command is `cuilo` and the npm package is `@cuilo/cli`. See [Migrating from v1](/migrating-from-v1/).

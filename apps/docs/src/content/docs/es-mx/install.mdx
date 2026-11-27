@@ -5,7 +5,7 @@ description: Instala cuilo con el script de instalación, npm, Homebrew o Cargo,
 
 import { Aside, Code, Tabs, TabItem } from "@astrojs/starlight/components";
 
-import { cargoBinstall, cargoInstall } from "../../../release";
+import { cargoBinstall, cargoInstall, version } from "../../../release";
 
 <Aside type="caution" title="cuilo 2 está en alfa">
 Todavía no hay ninguna versión publicada. Los canales de esta página abren con la primera versión. Mientras tanto, [compila cuilo desde el código](#compila-desde-el-código).
@@ -277,8 +277,6 @@ Esto pone `cuilo` en `~/.cargo/bin`. Compruébalo:
 cuilo --version
 ```
 
-```text
-cuilo 2.0.0-alpha.0
-```
+<Code code={`cuilo ${version}`} lang="text" />
 
 Ahora, [genera tu primera pieza](/es-mx/first-piece/).
