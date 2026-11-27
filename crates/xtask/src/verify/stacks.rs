@@ -252,7 +252,8 @@ const TYPESCRIPT_6: &[&str] = &["typescript"];
 /// Prisma's `latest` tag is the 8.0 release candidate, which has no client to generate; the pack targets Prisma 7.
 const PRISMA: &[&str] = &["prisma", "@prisma/client", "@prisma/adapter-pg"];
 
-/// The simulator the Xcode tests run on, which the iOS runtimes of Xcode 27 include.
+/// The simulator the Xcode fixture is built for and tested on, which the iOS runtimes of Xcode 27 include. Tests run
+/// on it without parallel clones, so it boots once per run and later tests reuse it.
 const IOS_SIMULATOR: &str = "platform=iOS Simulator,name=iPhone 17";
 
 /// Every stack, in the order they run: Svelte, Astro and Rust first, as cuilo leads with them.
@@ -735,19 +736,7 @@ pub(crate) const STACKS: &[Stack] = &[
 		browser: false,
 		checks: &[Check::run(&[
 			"xcodebuild",
-			"build",
-			"-scheme",
-			XCODE_SCHEME,
-			"-destination",
-			"generic/platform=iOS Simulator",
-			"-derivedDataPath",
-			XCODE_DERIVED_DATA,
-			"SWIFT_TREAT_WARNINGS_AS_ERRORS=YES",
-			"GCC_TREAT_WARNINGS_AS_ERRORS=YES",
-		])],
-		tests: &[Check::run(&[
-			"xcodebuild",
-			"test",
+			"build-for-testing",
 			"-scheme",
 			XCODE_SCHEME,
 			"-destination",
@@ -756,6 +745,18 @@ pub(crate) const STACKS: &[Stack] = &[
 			XCODE_DERIVED_DATA,
 			"SWIFT_TREAT_WARNINGS_AS_ERRORS=YES",
 			"GCC_TREAT_WARNINGS_AS_ERRORS=YES",
+		])],
+		tests: &[Check::run(&[
+			"xcodebuild",
+			"test-without-building",
+			"-scheme",
+			XCODE_SCHEME,
+			"-destination",
+			IOS_SIMULATOR,
+			"-derivedDataPath",
+			XCODE_DERIVED_DATA,
+			"-parallel-testing-enabled",
+			"NO",
 		])],
 		follow: Follow::Nothing,
 	},

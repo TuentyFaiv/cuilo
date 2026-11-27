@@ -141,6 +141,20 @@ jobs:
         run: |
           sudo xcode-select --switch "/Applications/Xcode_$XCODE.app"
           xcodebuild -version
+      # xcodebuild shuts down a simulator it booted itself, so each test run would boot it again (minutes here);
+      # it keeps one that is already booted. SIMULATOR matches IOS_SIMULATOR in crates/xtask/src/verify/stacks.rs.
+      - name: Boot the simulator the SwiftUI tests run on, once for every test
+        if: matrix.group == 'swift'
+        env:
+          SIMULATOR: iPhone 17
+        run: |
+          udid="$(xcrun simctl list devices available --json | jq --raw-output --arg name "$SIMULATOR" '
+            [.devices | to_entries[]
+              | (.key | capture("SimRuntime\\.iOS-(?<major>[0-9]+)-(?<minor>[0-9]+)$")
+                | [(.major | tonumber), (.minor | tonumber)]) as $version
+              | .value[] | select(.name == $name) | {version: $version, udid}]
+            | sort_by(.version) | last | .udid')"
+          xcrun simctl bootstatus "$udid" -b
       - name: Install cargo-edit for `cargo upgrade`
         if: matrix.group == 'rust' && env.LATEST == 'true'
         run: cargo install cargo-edit@0.13.14 --locked --no-default-features --features upgrade
