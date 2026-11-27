@@ -40,11 +40,11 @@ atom · astro (tailwind)
 atom · svelte
   src/ui/atoms/status-badge/index.ts
   src/ui/atoms/status-badge/status-badge.svelte
-  src/ui/atoms/status-badge/status-badge.test.ts
+  src/ui/atoms/status-badge/status-badge.svelte.test.ts
 atom · svelte (tailwind)
   src/ui/atoms/status-badge/index.ts
   src/ui/atoms/status-badge/status-badge.svelte
-  src/ui/atoms/status-badge/status-badge.test.ts
+  src/ui/atoms/status-badge/status-badge.svelte.test.ts
 atom · vue
   src/ui/atoms/status-badge/index.ts
   src/ui/atoms/status-badge/status-badge.test.ts
@@ -95,21 +95,33 @@ atom · flutter (tailwind)
   lib/ui/atoms/status_badge.dart
   test/ui/atoms/status_badge_test.dart
 atom · compose-multiplatform
-  composeApp/src/commonMain/kotlin/dev/acme/shop/ui/atoms/StatusBadge.kt
+  shared/src/commonMain/kotlin/dev/acme/shop/ui/atoms/StatusBadge.kt
+  shared/src/jvmTest/kotlin/dev/acme/shop/ui/atoms/StatusBadgeTest.kt
+  → Let the tests run on the JVM target: add `org.jetbrains.compose.ui:ui-test` and `compose.desktop.currentOs` to the `jvmTest` dependencies of the module the piece is in, `shared` or `composeApp`.
 atom · compose-multiplatform (tailwind)
-  composeApp/src/commonMain/kotlin/dev/acme/shop/ui/atoms/StatusBadge.kt
+  shared/src/commonMain/kotlin/dev/acme/shop/ui/atoms/StatusBadge.kt
+  shared/src/jvmTest/kotlin/dev/acme/shop/ui/atoms/StatusBadgeTest.kt
+  → Let the tests run on the JVM target: add `org.jetbrains.compose.ui:ui-test` and `compose.desktop.currentOs` to the `jvmTest` dependencies of the module the piece is in, `shared` or `composeApp`.
 atom · compose
   app/src/main/java/dev/acme/shop/ui/atoms/StatusBadge.kt
+  app/src/test/java/dev/acme/shop/ui/atoms/StatusBadgeTest.kt
+  → Let the tests run on the JVM with Robolectric: in `app/build.gradle.kts`, add `org.robolectric:robolectric` and `androidx.compose.ui:ui-test-junit4`, with the Compose BOM, to `testImplementation` and `androidx.compose.ui:ui-test-manifest` to `debugImplementation`, and set `testOptions.unitTests.isIncludeAndroidResources = true`.
 atom · compose (tailwind)
   app/src/main/java/dev/acme/shop/ui/atoms/StatusBadge.kt
+  app/src/test/java/dev/acme/shop/ui/atoms/StatusBadgeTest.kt
+  → Let the tests run on the JVM with Robolectric: in `app/build.gradle.kts`, add `org.robolectric:robolectric` and `androidx.compose.ui:ui-test-junit4`, with the Compose BOM, to `testImplementation` and `androidx.compose.ui:ui-test-manifest` to `debugImplementation`, and set `testOptions.unitTests.isIncludeAndroidResources = true`.
 atom · swiftui-package
   Sources/Shop/UI/Atoms/StatusBadge.swift
+  Tests/ShopTests/UI/Atoms/StatusBadgeTests.swift
 atom · swiftui-package (tailwind)
   Sources/Shop/UI/Atoms/StatusBadge.swift
+  Tests/ShopTests/UI/Atoms/StatusBadgeTests.swift
 atom · swiftui
   Shop/UI/Atoms/StatusBadge.swift
+  ShopTests/UI/Atoms/StatusBadgeTests.swift
 atom · swiftui (tailwind)
   Shop/UI/Atoms/StatusBadge.swift
+  ShopTests/UI/Atoms/StatusBadgeTests.swift
 molecule · angular
   src/ui/molecules/status-badge/index.ts
   src/ui/molecules/status-badge/status-badge.css
@@ -150,11 +162,11 @@ molecule · astro (tailwind)
 molecule · svelte
   src/ui/molecules/status-badge/index.ts
   src/ui/molecules/status-badge/status-badge.svelte
-  src/ui/molecules/status-badge/status-badge.test.ts
+  src/ui/molecules/status-badge/status-badge.svelte.test.ts
 molecule · svelte (tailwind)
   src/ui/molecules/status-badge/index.ts
   src/ui/molecules/status-badge/status-badge.svelte
-  src/ui/molecules/status-badge/status-badge.test.ts
+  src/ui/molecules/status-badge/status-badge.svelte.test.ts
 molecule · vue
   src/ui/molecules/status-badge/index.ts
   src/ui/molecules/status-badge/status-badge.test.ts
@@ -205,21 +217,33 @@ molecule · flutter (tailwind)
   lib/ui/molecules/status_badge.dart
   test/ui/molecules/status_badge_test.dart
 molecule · compose-multiplatform
-  composeApp/src/commonMain/kotlin/dev/acme/shop/ui/molecules/StatusBadge.kt
+  shared/src/commonMain/kotlin/dev/acme/shop/ui/molecules/StatusBadge.kt
+  shared/src/jvmTest/kotlin/dev/acme/shop/ui/molecules/StatusBadgeTest.kt
+  → Let the tests run on the JVM target: add `org.jetbrains.compose.ui:ui-test` and `compose.desktop.currentOs` to the `jvmTest` dependencies of the module the piece is in, `shared` or `composeApp`.
 molecule · compose-multiplatform (tailwind)
-  composeApp/src/commonMain/kotlin/dev/acme/shop/ui/molecules/StatusBadge.kt
+  shared/src/commonMain/kotlin/dev/acme/shop/ui/molecules/StatusBadge.kt
+  shared/src/jvmTest/kotlin/dev/acme/shop/ui/molecules/StatusBadgeTest.kt
+  → Let the tests run on the JVM target: add `org.jetbrains.compose.ui:ui-test` and `compose.desktop.currentOs` to the `jvmTest` dependencies of the module the piece is in, `shared` or `composeApp`.
 molecule · compose
   app/src/main/java/dev/acme/shop/ui/molecules/StatusBadge.kt
+  app/src/test/java/dev/acme/shop/ui/molecules/StatusBadgeTest.kt
+  → Let the tests run on the JVM with Robolectric: in `app/build.gradle.kts`, add `org.robolectric:robolectric` and `androidx.compose.ui:ui-test-junit4`, with the Compose BOM, to `testImplementation` and `androidx.compose.ui:ui-test-manifest` to `debugImplementation`, and set `testOptions.unitTests.isIncludeAndroidResources = true`.
 molecule · compose (tailwind)
   app/src/main/java/dev/acme/shop/ui/molecules/StatusBadge.kt
+  app/src/test/java/dev/acme/shop/ui/molecules/StatusBadgeTest.kt
+  → Let the tests run on the JVM with Robolectric: in `app/build.gradle.kts`, add `org.robolectric:robolectric` and `androidx.compose.ui:ui-test-junit4`, with the Compose BOM, to `testImplementation` and `androidx.compose.ui:ui-test-manifest` to `debugImplementation`, and set `testOptions.unitTests.isIncludeAndroidResources = true`.
 molecule · swiftui-package
   Sources/Shop/UI/Molecules/StatusBadge.swift
+  Tests/ShopTests/UI/Molecules/StatusBadgeTests.swift
 molecule · swiftui-package (tailwind)
   Sources/Shop/UI/Molecules/StatusBadge.swift
+  Tests/ShopTests/UI/Molecules/StatusBadgeTests.swift
 molecule · swiftui
   Shop/UI/Molecules/StatusBadge.swift
+  ShopTests/UI/Molecules/StatusBadgeTests.swift
 molecule · swiftui (tailwind)
   Shop/UI/Molecules/StatusBadge.swift
+  ShopTests/UI/Molecules/StatusBadgeTests.swift
 organism · angular
   src/ui/organisms/status-badge/index.ts
   src/ui/organisms/status-badge/status-badge.css
@@ -260,11 +284,11 @@ organism · astro (tailwind)
 organism · svelte
   src/ui/organisms/status-badge/index.ts
   src/ui/organisms/status-badge/status-badge.svelte
-  src/ui/organisms/status-badge/status-badge.test.ts
+  src/ui/organisms/status-badge/status-badge.svelte.test.ts
 organism · svelte (tailwind)
   src/ui/organisms/status-badge/index.ts
   src/ui/organisms/status-badge/status-badge.svelte
-  src/ui/organisms/status-badge/status-badge.test.ts
+  src/ui/organisms/status-badge/status-badge.svelte.test.ts
 organism · vue
   src/ui/organisms/status-badge/index.ts
   src/ui/organisms/status-badge/status-badge.test.ts
@@ -315,18 +339,30 @@ organism · flutter (tailwind)
   lib/ui/organisms/status_badge.dart
   test/ui/organisms/status_badge_test.dart
 organism · compose-multiplatform
-  composeApp/src/commonMain/kotlin/dev/acme/shop/ui/organisms/StatusBadge.kt
+  shared/src/commonMain/kotlin/dev/acme/shop/ui/organisms/StatusBadge.kt
+  shared/src/jvmTest/kotlin/dev/acme/shop/ui/organisms/StatusBadgeTest.kt
+  → Let the tests run on the JVM target: add `org.jetbrains.compose.ui:ui-test` and `compose.desktop.currentOs` to the `jvmTest` dependencies of the module the piece is in, `shared` or `composeApp`.
 organism · compose-multiplatform (tailwind)
-  composeApp/src/commonMain/kotlin/dev/acme/shop/ui/organisms/StatusBadge.kt
+  shared/src/commonMain/kotlin/dev/acme/shop/ui/organisms/StatusBadge.kt
+  shared/src/jvmTest/kotlin/dev/acme/shop/ui/organisms/StatusBadgeTest.kt
+  → Let the tests run on the JVM target: add `org.jetbrains.compose.ui:ui-test` and `compose.desktop.currentOs` to the `jvmTest` dependencies of the module the piece is in, `shared` or `composeApp`.
 organism · compose
   app/src/main/java/dev/acme/shop/ui/organisms/StatusBadge.kt
+  app/src/test/java/dev/acme/shop/ui/organisms/StatusBadgeTest.kt
+  → Let the tests run on the JVM with Robolectric: in `app/build.gradle.kts`, add `org.robolectric:robolectric` and `androidx.compose.ui:ui-test-junit4`, with the Compose BOM, to `testImplementation` and `androidx.compose.ui:ui-test-manifest` to `debugImplementation`, and set `testOptions.unitTests.isIncludeAndroidResources = true`.
 organism · compose (tailwind)
   app/src/main/java/dev/acme/shop/ui/organisms/StatusBadge.kt
+  app/src/test/java/dev/acme/shop/ui/organisms/StatusBadgeTest.kt
+  → Let the tests run on the JVM with Robolectric: in `app/build.gradle.kts`, add `org.robolectric:robolectric` and `androidx.compose.ui:ui-test-junit4`, with the Compose BOM, to `testImplementation` and `androidx.compose.ui:ui-test-manifest` to `debugImplementation`, and set `testOptions.unitTests.isIncludeAndroidResources = true`.
 organism · swiftui-package
   Sources/Shop/UI/Organisms/StatusBadge.swift
+  Tests/ShopTests/UI/Organisms/StatusBadgeTests.swift
 organism · swiftui-package (tailwind)
   Sources/Shop/UI/Organisms/StatusBadge.swift
+  Tests/ShopTests/UI/Organisms/StatusBadgeTests.swift
 organism · swiftui
   Shop/UI/Organisms/StatusBadge.swift
+  ShopTests/UI/Organisms/StatusBadgeTests.swift
 organism · swiftui (tailwind)
   Shop/UI/Organisms/StatusBadge.swift
+  ShopTests/UI/Organisms/StatusBadgeTests.swift

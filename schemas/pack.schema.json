@@ -54,6 +54,45 @@
       "pattern": "^[a-z](?:[a-z0-9]|-(?=[a-z0-9])){0,63}$",
       "type": "string"
     },
+    "PackKind": {
+      "description": "What a pack is for.",
+      "oneOf": [
+        {
+          "const": "ui",
+          "description": "User interface code, such as components, screens and their styles, on any platform.",
+          "type": "string"
+        },
+        {
+          "const": "backend",
+          "description": "Server code, such as HTTP routes, middleware, errors and database access.",
+          "type": "string"
+        },
+        {
+          "const": "mobile",
+          "description": "Code for phone and tablet apps, e.g. with Swift, Flutter or Jetpack Compose.",
+          "type": "string"
+        },
+        {
+          "const": "desktop",
+          "description": "Code for desktop apps on Windows, macOS or Linux, e.g. with Flutter, Compose Multiplatform or Dioxus.",
+          "type": "string"
+        }
+      ]
+    },
+    "PackTranslation": {
+      "additionalProperties": false,
+      "description": "A pack's text in one locale.",
+      "properties": {
+        "description": {
+          "description": "The pack's `description` in this locale; the pack must have a `description`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "Permissions": {
       "additionalProperties": false,
       "description": "What a pack may do; granted by the user on install.",
@@ -115,6 +154,14 @@
         "null"
       ]
     },
+    "kinds": {
+      "description": "What the pack is for, as many as apply: `ui`, `backend`, `mobile` or `desktop`, each once, e.g.\n`[\"ui\", \"mobile\"]`. The pack directory lists the pack under each kind.",
+      "items": {
+        "$ref": "#/$defs/PackKind"
+      },
+      "type": "array",
+      "uniqueItems": true
+    },
     "license": {
       "description": "SPDX license expression.",
       "type": [
@@ -145,6 +192,16 @@
       "format": "uint32",
       "minimum": 0,
       "type": "integer"
+    },
+    "translations": {
+      "additionalProperties": false,
+      "description": "The pack's text in other languages, by locale, e.g. `[translations.es-mx]`. Readers in that locale see it,\nand the English text where it gives none.",
+      "patternProperties": {
+        "^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$": {
+          "$ref": "#/$defs/PackTranslation"
+        }
+      },
+      "type": "object"
     },
     "version": {
       "$ref": "#/$defs/SemVer",

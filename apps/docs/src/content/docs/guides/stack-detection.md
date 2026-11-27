@@ -101,6 +101,7 @@ A few rules decide the less obvious facts:
 - The JavaScript package manager comes from `packageManager` in `package.json`. Without it, cuilo looks for `bun.lock`, `pnpm-lock.yaml`, `yarn.lock` and `package-lock.json`, in that order. It falls back to `deno` in a Deno project and to `npm` otherwise.
 - The Python package manager is `uv` with a `uv.lock`, `poetry` with Poetry settings or a `poetry.lock`, `pdm` with a `pdm.lock`, `pipenv` with a `Pipfile`, and `pip` otherwise.
 - Frameworks with their own ORM add it: Rails adds `activerecord`, Laravel adds `eloquent` and Django adds `django-orm`.
+- Echo and Solid also add their major version, as `echo-v5` or `solid-v2`, since their majors need different code. Echo's comes from the `/v4` or `/v5` its module path in `go.mod` ends in, and Solid's from the `solid-js` range in `package.json`, such as `^1.9.5` for `solid-v1`. A range that spans majors, a tag such as `latest` and a protocol such as `catalog:` or `workspace:` give none.
 - Formatters come from dependencies and from config files such as `biome.json`, `.prettierrc`, `eslint.config.js`, `dprint.json`, `ruff.toml` or `rustfmt.toml`, in a project of any language. Rust projects also get `rustfmt`, and Go projects get `gofmt`.
 - `import_style` comes from the `tsconfig.json` at the root, or Deno. Each piece then uses the one for its own folder. See [Relative imports in generated code](#relative-imports-in-generated-code).
 - Other ecosystems, such as Elixir or .NET, get no facts.
@@ -152,6 +153,14 @@ When no variant matches, cuilo lists the ones the piece has. A React project wit
 error: no variant matches this project; available: angular, qwik, solid, astro, svelte, vue, react, lit, leptos, dioxus, yew, flutter, compose-multiplatform, compose, swiftui-package, swiftui
 ```
 
+A variant written for one major names it, as the `ui` pack's `solid` variant does with `solid-v2`. When a variant fails only for lack of the major it needs, cuilo says so. A Solid 1 project gets this, because the `ui` pack supports Solid 2 only:
+
+```text
+error: no variant matches this project: the variants for solid need solid-v2, and the project has solid-v1; available: angular, qwik, solid, astro, svelte, vue, react, lit, leptos, dioxus, yew, flutter, compose-multiplatform, compose, swiftui-package, swiftui
+```
+
+When `package.json` gives no version cuilo can read, such as `catalog:`, the message says so instead, and you can set the major in `cuilo.json`, as in `"framework": ["solid", "solid-v2"]`. See [Override detection](#override-detection).
+
 To choose a variant for one command, pass `--variant`. See [Packs and pieces](/guides/packs-and-pieces/#choose-a-variant).
 
 `cuilo.lock` records the stack, variant and folder each piece was generated with. [`cuilo update`](/guides/updates/) renders the new pack version with those, so changing your stack later does not move a piece you already have to another variant.
@@ -196,7 +205,7 @@ Add `stack` to `cuilo.json` when detection gets your project wrong. Each fact yo
 }
 ```
 
-In the React project from [Your first piece](/first-piece/), `cuilo detect` then shows:
+In a project whose `package.json` lists only `react` and `typescript`, `cuilo detect` then shows:
 
 ```text
 {

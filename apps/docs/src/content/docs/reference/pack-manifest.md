@@ -19,6 +19,13 @@ Editors can complete and check this file with its JSON Schema, [`pack.schema.jso
 
 One-line summary.
 
+### `kinds`
+
+**Type:** `array of string` · optional
+
+What the pack is for, as many as apply: `ui`, `backend`, `mobile` or `desktop`, each once, e.g.
+`["ui", "mobile"]`. The pack directory lists the pack under each kind.
+
 ### `license`
 
 **Type:** `string` · optional
@@ -112,6 +119,19 @@ Default: `[]`.
 **Type:** `number` · required
 
 Manifest format version; must be `1`.
+
+### `translations`
+
+**Type:** `map of object` · optional
+
+The pack's text in other languages, by locale, e.g. `[translations.es-mx]`. Readers in that locale see it,
+and the English text where it gives none.
+
+#### `translations.<key>.description`
+
+**Type:** `string` · optional
+
+The pack's `description` in this locale; the pack must have a `description`.
 
 ### `version`
 

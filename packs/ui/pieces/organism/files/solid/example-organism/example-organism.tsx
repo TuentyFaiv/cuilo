@@ -1,4 +1,5 @@
-import { type ComponentProps, type JSX, Show, createUniqueId, splitProps } from "solid-js";
+import type { ComponentProps, JSX } from "@solidjs/web";
+import { Show, createUniqueId, omit } from "solid-js";
 // @cuilo if !stack.tailwind
 
 import styles from "./example-organism.module.css";
@@ -24,20 +25,20 @@ const classes = styles;
 
 /** A distinct, labelled region of the page, built from molecules. */
 export function ExampleOrganism(props: ExampleOrganismProps) {
-	const [local, rest] = splitProps(props, ["heading", "actions", "class", "children"]);
+	const rest = omit(props, "heading", "actions", "class", "children");
 	const headingId = createUniqueId();
 
 	return (
-		<section {...rest} aria-labelledby={headingId} class={[classes.root, local.class].filter(Boolean).join(" ")}>
+		<section {...rest} aria-labelledby={headingId} class={[classes.root, props.class]}>
 			<header class={classes.header}>
 				<h2 id={headingId} class={classes.title}>
-					{local.heading}
+					{props.heading}
 				</h2>
-				<Show when={local.actions}>
-					<div class={classes.actions}>{local.actions}</div>
+				<Show when={props.actions}>
+					<div class={classes.actions}>{props.actions}</div>
 				</Show>
 			</header>
-			{local.children}
+			{props.children}
 		</section>
 	);
 }

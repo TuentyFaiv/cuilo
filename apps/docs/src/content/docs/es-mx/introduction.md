@@ -14,8 +14,8 @@ cuilo 2 está en alfa. Todavía no hay ninguna versión publicada, así que [com
 
 Un **pack** es una carpeta versionada de piezas con un `pack.toml` que le da nombre, indica su versión y lista las rutas en las que puede escribir. Dos packs oficiales vienen dentro del binario de cuilo:
 
-- `ui`: componentes de diseño atómico (`atom`, `molecule`, `organism`) para React, Solid, Qwik, Svelte, Vue, Astro, Angular, Lit, Leptos, Dioxus, Yew, Flutter, Jetpack Compose (Android y Multiplatform) y SwiftUI.
-- `backend`: un `resource` REST por capas, respuestas de `error` según RFC 9457, `middleware` para encabezados de la solicitud y una configuración de `database`, para Hono, Express, Axum, FastAPI, chi y Echo.
+- `ui`: componentes de diseño atómico (`atom`, `molecule`, `organism`) para Svelte, Astro, Leptos, Dioxus, Yew, SwiftUI, Angular, Qwik, Solid, Vue, React, Lit, Flutter y Jetpack Compose (Android y Multiplatform).
+- `backend`: un `resource` REST por capas, respuestas de `error` según RFC 9457, `middleware` para encabezados de la solicitud y una configuración de `database`, para Axum, Hono, Express, FastAPI, chi y Echo.
 
 Una **pieza** es una cosa que un pack puede generar. La nombras como `pack/piece`:
 
@@ -31,7 +31,7 @@ Cada pieza declara **entradas** tipadas: texto, verdadero o falso, una opción d
 
 ## Variantes
 
-Las piezas se adaptan a tu stack con **variantes**. cuilo lee los archivos de tu proyecto para saber su framework, lenguaje, estilos, biblioteca de pruebas y más ([`cuilo detect`](/es-mx/reference/cli/detect/) muestra el resultado). Cada variante nombra los datos que necesita, y cuilo usa la primera que coincide. Un proyecto con React y TypeScript recibe un componente `.tsx`. Un proyecto de Flutter recibe un widget de Dart en `lib/`. Si usas Tailwind, se omite el módulo CSS. Consulta [Detección del stack](/es-mx/guides/stack-detection/).
+Las piezas se adaptan a tu stack con **variantes**. cuilo lee los archivos de tu proyecto para saber su framework, lenguaje, estilos, biblioteca de pruebas y más ([`cuilo detect`](/es-mx/reference/cli/detect/) muestra el resultado). Cada variante nombra los datos que necesita, y cuilo usa la primera que coincide. Un proyecto con Svelte y TypeScript recibe un componente `.svelte`. Un proyecto de Leptos recibe un componente de Rust en `src/ui/atoms/`. Si usas Tailwind, el componente recibe clases de utilidad en lugar de sus propios estilos. Consulta [Detección del stack](/es-mx/guides/stack-detection/).
 
 ## El plan
 
@@ -73,6 +73,6 @@ Consulta la [referencia del lockfile](/es-mx/reference/lockfile/).
 ## Qué sigue
 
 - [Instala cuilo](/es-mx/install/).
-- [Genera tu primera pieza](/es-mx/first-piece/) en un proyecto de React. Luego edítala, inspecciónala y deshazla.
+- [Genera tu primera pieza](/es-mx/first-piece/) en un proyecto de SvelteKit. Luego edítala, inspecciónala y deshazla.
 - [Packs y piezas](/es-mx/guides/packs-and-pieces/) cubre entradas, variantes y carpetas de salida.
 - [Seguridad](/es-mx/security/) explica lo que los packs pueden y no pueden hacer.

@@ -84,6 +84,84 @@ impl JsonSchema for Name {
 	}
 }
 
+/// A language tag that translations are keyed by: lowercase, such as `es-mx` or `pt-br`.
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Locale(String);
+
+/// Why a locale was rejected.
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+#[error(
+	"`{0}` must be a lowercase language tag such as `es-mx`: a 2- or 3-letter language, then `-` parts of 2 to 8 letters or digits"
+)]
+pub struct LocaleError(String);
+
+impl Locale {
+	/// Validates `locale`.
+	pub fn new(locale: &str) -> Result<Self, LocaleError> {
+		let mut parts = locale.split('-');
+		let language = parts
+			.next()
+			.is_some_and(|part| (2..=3).contains(&part.len()) && part.bytes().all(|byte| byte.is_ascii_lowercase()));
+		let rest = parts.all(|part| {
+			(2..=8).contains(&part.len())
+				&& part
+					.bytes()
+					.all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+		});
+		if language && rest && locale.len() <= 35 {
+			Ok(Self(locale.to_owned()))
+		} else {
+			Err(LocaleError(locale.to_owned()))
+		}
+	}
+
+	/// The tag as written.
+	#[must_use]
+	pub fn as_str(&self) -> &str {
+		&self.0
+	}
+}
+
+impl fmt::Display for Locale {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.write_str(&self.0)
+	}
+}
+
+impl fmt::Debug for Locale {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		fmt::Debug::fmt(&self.0, f)
+	}
+}
+
+impl Serialize for Locale {
+	fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+		serializer.serialize_str(&self.0)
+	}
+}
+
+impl<'de> Deserialize<'de> for Locale {
+	fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+		let text = Cow::<str>::deserialize(deserializer)?;
+		Self::new(&text).map_err(serde::de::Error::custom)
+	}
+}
+
+impl JsonSchema for Locale {
+	fn schema_name() -> Cow<'static, str> {
+		"Locale".into()
+	}
+
+	fn json_schema(_: &mut SchemaGenerator) -> Schema {
+		json_schema!({
+			"description": "A lowercase language tag, such as `es-mx` for Mexican Spanish or `pt-br` for Brazilian Portuguese.",
+			"type": "string",
+			"pattern": "^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$",
+			"maxLength": 35
+		})
+	}
+}
+
 /// `pack.toml`: a pack's name, version and permissions.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -97,6 +175,11 @@ pub struct PackManifest {
 	/// One-line summary.
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub description: Option<String>,
+	/// What the pack is for, as many as apply: `ui`, `backend`, `mobile` or `desktop`, each once, e.g.
+	/// `["ui", "mobile"]`. The pack directory lists the pack under each kind.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	#[schemars(extend("uniqueItems" = true))]
+	pub kinds: Vec<PackKind>,
 	/// SPDX license expression.
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub license: Option<String>,
@@ -106,6 +189,59 @@ pub struct PackManifest {
 	/// Code changes applied when an update crosses a version.
 	#[serde(default, skip_serializing_if = "Vec::is_empty")]
 	pub migrations: Vec<Migration>,
+	/// The pack's text in other languages, by locale, e.g. `[translations.es-mx]`. Readers in that locale see it,
+	/// and the English text where it gives none.
+	#[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+	pub translations: BTreeMap<Locale, PackTranslation>,
+}
+
+/// What a pack is for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PackKind {
+	/// User interface code, such as components, screens and their styles, on any platform.
+	Ui,
+	/// Server code, such as HTTP routes, middleware, errors and database access.
+	Backend,
+	/// Code for phone and tablet apps, e.g. with Swift, Flutter or Jetpack Compose.
+	Mobile,
+	/// Code for desktop apps on Windows, macOS or Linux, e.g. with Flutter, Compose Multiplatform or Dioxus.
+	Desktop,
+}
+
+impl PackKind {
+	/// The kind as `pack.toml` writes it.
+	#[must_use]
+	pub fn as_str(self) -> &'static str {
+		match self {
+			Self::Ui => "ui",
+			Self::Backend => "backend",
+			Self::Mobile => "mobile",
+			Self::Desktop => "desktop",
+		}
+	}
+}
+
+/// A pack's text in one locale.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PackTranslation {
+	/// The pack's `description` in this locale; the pack must have a `description`.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub description: Option<String>,
+}
+
+/// A piece's text in one locale.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PieceTranslation {
+	/// The piece's `description` in this locale; the piece must have a `description`.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub description: Option<String>,
+	/// Input descriptions in this locale, by input name, e.g. ``name = "Nombre del componente, p. ej.
+	/// `status-badge`."``. Each must name an input of the piece that has a `description`.
+	#[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+	pub inputs: BTreeMap<String, String>,
 }
 
 /// A change to project code made when an update crosses `to`, shown in the plan like any other change.
@@ -189,6 +325,10 @@ pub struct PieceManifest {
 	/// Packages the generated code imports.
 	#[serde(default, skip_serializing_if = "Vec::is_empty")]
 	pub dependencies: Vec<Dependency>,
+	/// The piece's description and input descriptions in other languages, by locale, e.g.
+	/// `[translations.es-mx]`. Readers in that locale see them, and the English text where they give none.
+	#[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+	pub translations: BTreeMap<Locale, PieceTranslation>,
 }
 
 /// What a piece is for.
@@ -300,9 +440,11 @@ pub struct Variant {
 	/// Template folder inside the piece; defaults to `files/<name>`.
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub files: Option<String>,
-	/// Output folder instead of the piece's `target`, e.g. `lib/ui` for Flutter.
+	/// Output folder instead of the piece's `target`, e.g. `lib/ui` for Flutter. A list gives alternatives in order
+	/// of preference, none of them the root: the first folder the project has is used, or the first alternative when
+	/// it has none, e.g. `["shared", "composeApp"]`.
 	#[serde(default, skip_serializing_if = "Option::is_none")]
-	pub target: Option<String>,
+	pub target: Option<Targets>,
 }
 
 /// A kind of project fact.
@@ -646,6 +788,70 @@ impl JsonSchema for Files {
 	}
 }
 
+/// A variant's output folder, or alternatives in order of preference; never empty.
+///
+/// Written as a string for one folder and as a list for several.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Targets(Vec<String>);
+
+impl Targets {
+	/// Alternatives in order of preference; `None` when there are none.
+	#[must_use]
+	pub fn new(alternatives: Vec<String>) -> Option<Self> {
+		(!alternatives.is_empty()).then_some(Self(alternatives))
+	}
+
+	/// The alternatives in order of preference.
+	#[must_use]
+	pub fn as_slice(&self) -> &[String] {
+		&self.0
+	}
+}
+
+impl From<&str> for Targets {
+	fn from(target: &str) -> Self {
+		Self(vec![target.to_owned()])
+	}
+}
+
+impl Serialize for Targets {
+	fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+		serialize_alternatives(&self.0, serializer)
+	}
+}
+
+impl<'de> Deserialize<'de> for Targets {
+	fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+		deserializer
+			.deserialize_any(AlternativesVisitor("a folder or a non-empty list of alternatives"))
+			.map(Self)
+	}
+}
+
+impl JsonSchema for Targets {
+	fn schema_name() -> Cow<'static, str> {
+		"Targets".into()
+	}
+
+	fn json_schema(_: &mut SchemaGenerator) -> Schema {
+		json_schema!({
+			"description": "The folder the variant writes into, or alternatives in order of preference.",
+			"anyOf": [
+				{
+					"description": "Path from the project root; may contain examples, and `\"\"` is the root itself.",
+					"type": "string"
+				},
+				{
+					"description": "Alternatives in order of preference, none of them the root: the first folder the project has is used, and the first alternative when it has none, e.g. `[\"shared\", \"composeApp\"]` for the two layouts of Compose Multiplatform. `cuilo.lock` records the folder used, so updates keep it.",
+					"type": "array",
+					"items": { "type": "string" },
+					"minItems": 1
+				}
+			]
+		})
+	}
+}
+
 /// Writes one alternative as a string and several as a list.
 fn serialize_alternatives<S: Serializer>(alternatives: &[String], serializer: S) -> Result<S::Ok, S::Error> {
 	match alternatives {
@@ -736,6 +942,16 @@ mod tests {
 	#[test]
 	fn name_should_reject_double_dash() {
 		assert!(Name::new("a--b").is_err());
+	}
+
+	#[test]
+	fn locale_should_accept_lowercase_language_tags_only() {
+		for valid in ["es", "es-mx", "pt-br", "zh-hans-cn", "sr-latn", "es-419"] {
+			assert!(Locale::new(valid).is_ok(), "{valid}");
+		}
+		for invalid in ["", "e", "espa", "es-MX", "es_mx", "es-", "-mx", "es-m", "es-abcdefghi"] {
+			assert!(Locale::new(invalid).is_err(), "{invalid}");
+		}
 	}
 
 	#[test]

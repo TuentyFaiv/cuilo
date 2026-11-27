@@ -14,8 +14,8 @@ cuilo 2 is in alpha. No release is published yet, so [build it from source](/ins
 
 A **pack** is a versioned folder of pieces with a `pack.toml` that names it, gives its version and lists the paths it may write. Two official packs ship inside the cuilo binary:
 
-- `ui`: atomic design components (`atom`, `molecule`, `organism`) for React, Solid, Qwik, Svelte, Vue, Astro, Angular, Lit, Leptos, Dioxus, Yew, Flutter, Jetpack Compose (Android and Multiplatform) and SwiftUI.
-- `backend`: a layered REST `resource`, RFC 9457 `error` responses, request header `middleware` and a `database` setup, for Hono, Express, Axum, FastAPI, chi and Echo.
+- `ui`: atomic design components (`atom`, `molecule`, `organism`) for Svelte, Astro, Leptos, Dioxus, Yew, SwiftUI, Angular, Qwik, Solid, Vue, React, Lit, Flutter and Jetpack Compose (Android and Multiplatform).
+- `backend`: a layered REST `resource`, RFC 9457 `error` responses, request header `middleware` and a `database` setup, for Axum, Hono, Express, FastAPI, chi and Echo.
 
 A **piece** is one thing a pack can generate. You name it as `pack/piece`:
 
@@ -31,7 +31,7 @@ Each piece declares typed **inputs**: text, true or false, a choice from a list,
 
 ## Variants
 
-Pieces adapt to your stack through **variants**. cuilo reads your project files to learn its framework, language, styling, test library and more ([`cuilo detect`](/reference/cli/detect/) shows the result). Each variant names the facts it needs, and cuilo uses the first one that matches. A React and TypeScript project gets a `.tsx` component. A Flutter project gets a Dart widget in `lib/`. If you use Tailwind, the CSS module is left out. See [Stack detection](/guides/stack-detection/).
+Pieces adapt to your stack through **variants**. cuilo reads your project files to learn its framework, language, styling, test library and more ([`cuilo detect`](/reference/cli/detect/) shows the result). Each variant names the facts it needs, and cuilo uses the first one that matches. A Svelte and TypeScript project gets a `.svelte` component. A Leptos project gets a Rust component in `src/ui/atoms/`. If you use Tailwind, the component gets utility classes instead of its own styles. See [Stack detection](/guides/stack-detection/).
 
 ## The plan
 
@@ -73,6 +73,6 @@ See the [lockfile reference](/reference/lockfile/).
 ## Where to go next
 
 - [Install cuilo](/install/).
-- [Generate your first piece](/first-piece/) in a React project, then edit it, inspect it and undo it.
+- [Generate your first piece](/first-piece/) in a SvelteKit project, then edit it, inspect it and undo it.
 - [Packs and pieces](/guides/packs-and-pieces/) covers inputs, variants and output folders.
 - [Security](/security/) explains what packs can and cannot do.

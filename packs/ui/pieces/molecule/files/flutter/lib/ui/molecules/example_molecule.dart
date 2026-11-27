@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Groups atoms under one accessible label, such as a field with its hint.
 class ExampleMolecule extends StatelessWidget {

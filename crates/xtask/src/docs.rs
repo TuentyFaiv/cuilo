@@ -1,7 +1,7 @@
 //! `cargo xtask docs`: the docs site's generated pages and data, built from the CLI, the JSON Schemas and the
 //! official packs, so the reference never drifts from the code.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -100,7 +100,8 @@ pub(crate) fn run(check: bool) -> Result<(), String> {
 /// Every generated file, by path relative to the repository root.
 fn generate(root: &Path) -> Result<BTreeMap<PathBuf, String>, String> {
 	let mut files = BTreeMap::new();
-	let cli = cuilo(root, &["--json", "man"])?;
+	let cuilo = Cuilo::build(root)?;
+	let cli = cuilo.run(&["--json", "man"])?;
 	files.insert(Path::new(CLI_DIR).join("index.md"), cli_index(&cli));
 	for (index, command) in list(&cli["commands"]).enumerate() {
 		let name = text(&command["name"]);
@@ -117,7 +118,7 @@ fn generate(root: &Path) -> Result<BTreeMap<PathBuf, String>, String> {
 			schema_page(page, &schema),
 		);
 	}
-	files.insert(PathBuf::from(PACKS_JSON), packs(root)?);
+	files.insert(PathBuf::from(PACKS_JSON), packs(root, &cuilo)?);
 	Ok(files)
 }
 
@@ -139,31 +140,67 @@ fn stale_cli_pages(root: &Path, files: &BTreeMap<PathBuf, String>) -> Result<Vec
 	Ok(stale)
 }
 
-/// Runs this workspace's `cuilo` with `args` in an empty project and user folder, and parses its JSON output.
-fn cuilo(root: &Path, args: &[&str]) -> Result<Value, String> {
-	let scratch = root.join("target/xtask-docs");
-	for dir in ["project", "config", "cache"] {
-		fs::create_dir_all(scratch.join(dir))
-			.map_err(|error| format!("could not create {}: {error}", scratch.display()))?;
-	}
+/// Builds this workspace's `cuilo` and returns the path of the binary.
+pub(crate) fn build_cuilo(root: &Path) -> Result<PathBuf, String> {
 	let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
 	let output = Command::new(cargo)
-		.args(["run", "--quiet", "--locked", "--package", "cuilo", "--"])
-		.args(args)
-		.current_dir(scratch.join("project"))
-		.env("CUILO_CONFIG_DIR", scratch.join("config"))
-		.env("CUILO_CACHE_DIR", scratch.join("cache"))
-		.env("NO_COLOR", "1")
+		.args(["build", "--quiet", "--locked", "--package", "cuilo"])
+		.arg("--message-format=json-render-diagnostics")
+		.current_dir(root)
 		.output()
-		.map_err(|error| format!("could not run cuilo: {error}"))?;
+		.map_err(|error| format!("could not run cargo: {error}"))?;
 	if !output.status.success() {
 		return Err(format!(
-			"`cuilo {}` failed: {}",
-			args.join(" "),
+			"could not build cuilo: {}",
 			String::from_utf8_lossy(&output.stderr).trim()
 		));
 	}
-	serde_json::from_slice(&output.stdout).map_err(|error| format!("`cuilo {}` printed no JSON: {error}", args.join(" ")))
+	String::from_utf8_lossy(&output.stdout)
+		.lines()
+		.filter_map(|line| serde_json::from_str::<Value>(line).ok())
+		.find(|message| message["reason"] == "compiler-artifact" && message["target"]["name"] == "cuilo")
+		.and_then(|message| message["executable"].as_str().map(PathBuf::from))
+		.ok_or_else(|| "cargo built no cuilo binary".to_owned())
+}
+
+/// This workspace's `cuilo`, built once and run in an empty project and user folder.
+struct Cuilo {
+	binary: PathBuf,
+	scratch: PathBuf,
+}
+
+impl Cuilo {
+	/// Builds the binary and creates the empty folders it runs in, under `target/xtask-docs`.
+	fn build(root: &Path) -> Result<Self, String> {
+		let scratch = root.join("target/xtask-docs");
+		for dir in ["project", "config", "cache"] {
+			fs::create_dir_all(scratch.join(dir))
+				.map_err(|error| format!("could not create {}: {error}", scratch.display()))?;
+		}
+		let binary = build_cuilo(root)?;
+		Ok(Self { binary, scratch })
+	}
+
+	/// Runs `cuilo` with `args` and parses its JSON output.
+	fn run(&self, args: &[&str]) -> Result<Value, String> {
+		let output = Command::new(&self.binary)
+			.args(args)
+			.current_dir(self.scratch.join("project"))
+			.env("CUILO_CONFIG_DIR", self.scratch.join("config"))
+			.env("CUILO_CACHE_DIR", self.scratch.join("cache"))
+			.env("NO_COLOR", "1")
+			.output()
+			.map_err(|error| format!("could not run cuilo: {error}"))?;
+		if !output.status.success() {
+			return Err(format!(
+				"`cuilo {}` failed: {}",
+				args.join(" "),
+				String::from_utf8_lossy(&output.stderr).trim()
+			));
+		}
+		serde_json::from_slice(&output.stdout)
+			.map_err(|error| format!("`cuilo {}` printed no JSON: {error}", args.join(" ")))
+	}
 }
 
 fn read_json(path: &Path) -> Result<Value, String> {
@@ -408,12 +445,10 @@ fn known_types(schema: &Value, node: &Value) -> Vec<String> {
 	for kind in kinds.into_iter().filter(|kind| *kind != "null") {
 		names.push(match kind {
 			"array" => format!("array of {}", type_names(schema, &node["items"]).join(" or ")),
-			"object" if node["additionalProperties"].is_object() => {
-				format!(
-					"map of {}",
-					type_names(schema, &node["additionalProperties"]).join(" or ")
-				)
-			}
+			"object" => map_values(node).map_or_else(
+				|| "object".to_owned(),
+				|values| format!("map of {}", type_names(schema, values).join(" or ")),
+			),
 			"integer" | "number" => "number".to_owned(),
 			other => other.to_owned(),
 		});
@@ -448,10 +483,18 @@ fn objects_of<'a>(schema: &'a Value, node: &'a Value) -> (Vec<&'a Value>, &'stat
 	if node["items"].is_object() {
 		return (objects_of(schema, &node["items"]).0, "[]");
 	}
-	if node["additionalProperties"].is_object() {
-		return (objects_of(schema, &node["additionalProperties"]).0, ".<key>");
+	if let Some(values) = map_values(node) {
+		return (objects_of(schema, values).0, ".<key>");
 	}
 	(Vec::new(), "")
+}
+
+/// The schema of a map's values: its `additionalProperties`, or the first of its `patternProperties`, which
+/// a map with pattern-checked keys has instead.
+fn map_values(node: &Value) -> Option<&Value> {
+	Some(&node["additionalProperties"])
+		.filter(|values| values.is_object())
+		.or_else(|| node["patternProperties"].as_object()?.values().next())
 }
 
 /// The `type` constant that tells a union's object variants apart, e.g. `"bool"`.
@@ -593,17 +636,25 @@ fn schema_page(page: &SchemaPage, schema: &Value) -> String {
 }
 
 /// The official packs as the directory and pack pages show them.
-fn packs(root: &Path) -> Result<String, String> {
+fn packs(root: &Path, cuilo: &Cuilo) -> Result<String, String> {
 	let mut packs = Vec::new();
-	for pack in list(&cuilo(root, &["--json", "pack", "list"])?) {
+	for pack in list(&cuilo.run(&["--json", "pack", "list"])?) {
 		let name = text(&pack["name"]);
-		let shown = cuilo(root, &["--json", "pack", "show", name])?;
+		let shown = cuilo.run(&["--json", "pack", "show", name])?;
 		let manifest = manifest(root, name)?;
-		let pieces: Vec<Value> = list(&shown["pieces"]).map(piece).collect();
+		let all: Vec<Value> = list(&shown["pieces"]).cloned().collect();
+		let pieces = all
+			.iter()
+			.map(|shown_piece| piece(root, cuilo, name, &all, shown_piece))
+			.collect::<Result<Vec<Value>, String>>()?;
+		let translations = serde_json::to_value(manifest.get("translations"))
+			.map_err(|error| format!("could not read the translations of {name}: {error}"))?;
 		packs.push(json!({
 			"name": name,
 			"version": pack["version"],
 			"description": pack["description"],
+			"translations": described(&translations, |translation| &translation["description"]),
+			"kinds": manifest.get("kinds").and_then(toml::Value::as_array).map(|kinds| kinds.iter().filter_map(toml::Value::as_str).collect::<Vec<_>>()).unwrap_or_default(),
 			"source": pack["source"],
 			"license": manifest.get("license").and_then(toml::Value::as_str),
 			"permissions": {
@@ -626,28 +677,44 @@ fn manifest(root: &Path, name: &str) -> Result<toml::Table, String> {
 		.map_err(|error| format!("{} is not TOML: {error}", path.display()))
 }
 
-fn piece(piece: &Value) -> Value {
+/// One of a pack's `pieces` as its page shows it, with its inputs in the order its manifest declares them.
+fn piece(root: &Path, cuilo: &Cuilo, pack: &str, pieces: &[Value], piece: &Value) -> Result<Value, String> {
+	let name = text(&piece["name"]);
+	let path = root
+		.join("packs")
+		.join(pack)
+		.join("pieces")
+		.join(name)
+		.join("piece.toml");
+	let manifest = fs::read_to_string(&path).map_err(|error| format!("could not read {}: {error}", path.display()))?;
+	let order = input_order(&manifest).map_err(|error| format!("{}: {error}", path.display()))?;
 	let mut inputs: Vec<(&String, &Value)> = piece["inputs"]
 		.as_object()
 		.map(Map::iter)
 		.into_iter()
 		.flatten()
 		.collect();
-	inputs.sort_by_key(|(name, _)| (name.as_str() != "name", name.as_str()));
+	inputs.sort_by_key(|(input, _)| {
+		order
+			.iter()
+			.position(|declared| declared == *input)
+			.unwrap_or(usize::MAX)
+	});
 	let inputs: Vec<Value> = inputs
 		.into_iter()
-		.map(|(name, input)| {
+		.map(|(input_name, input)| {
 			json!({
-				"name": name,
+				"name": input_name,
 				"type": input["type"],
 				"description": input["description"],
+				"translations": described(&piece["translations"], |translation| &translation["inputs"][input_name.as_str()]),
 				"default": input.get("default"),
 				"example": input.get("example"),
+				"required": is_required(input),
 			})
 		})
 		.collect();
-	let mut variants: Vec<&str> = list(&piece["variants"]).map(|variant| text(&variant["name"])).collect();
-	variants.dedup();
+	let variants: Vec<&str> = variant_names(piece).collect();
 	let dependencies: Vec<Value> = list(&piece["dependencies"])
 		.map(|dependency| {
 			json!({
@@ -655,18 +722,152 @@ fn piece(piece: &Value) -> Value {
 				"name": dependency["name"],
 				"version": dependency["version"],
 				"dev": dependency["dev"],
+				"variants": dependency["variants"],
 			})
 		})
 		.collect();
-	json!({
+	let examples = examples(cuilo, pack, pieces, piece)?;
+	Ok(json!({
 		"name": piece["name"],
 		"kind": piece["kind"],
 		"description": piece["description"],
+		"translations": described(&piece["translations"], |translation| &translation["description"]),
 		"target": piece["target"],
 		"inputs": inputs,
 		"variants": variants,
+		"needs": needs(piece),
 		"dependencies": dependencies,
-	})
+		"examples": examples,
+	}))
+}
+
+/// The project facts beyond its framework, language and runtime that every variant of `piece` requires, e.g.
+/// `database` for a piece that only fits projects using a database library.
+fn needs(piece: &Value) -> Vec<String> {
+	const STACK: [&str; 3] = ["framework", "language", "runtime"];
+	let mut variants = list(&piece["variants"]).map(|variant| {
+		variant["when"]
+			.as_object()
+			.into_iter()
+			.flatten()
+			.map(|(fact, _)| fact.as_str())
+			.filter(|fact| !STACK.contains(fact))
+			.collect::<BTreeSet<&str>>()
+	});
+	let Some(first) = variants.next() else {
+		return Vec::new();
+	};
+	variants
+		.fold(first, |all, facts| all.intersection(&facts).copied().collect())
+		.into_iter()
+		.map(str::to_owned)
+		.collect()
+}
+
+/// `{"<locale>": {"description": …}}` for each locale in `translations` whose entry has a description where
+/// `description_in` looks.
+fn described<'a>(translations: &'a Value, description_in: impl Fn(&'a Value) -> &'a Value) -> Value {
+	let found: Map<String, Value> = translations
+		.as_object()
+		.into_iter()
+		.flatten()
+		.filter_map(|(locale, translation)| {
+			let description = description_in(translation).as_str()?;
+			Some((locale.clone(), json!({ "description": description })))
+		})
+		.collect();
+	Value::Object(found)
+}
+
+/// The names of a piece manifest's inputs, in the order the file declares them.
+fn input_order(manifest: &str) -> Result<Vec<String>, String> {
+	let document = toml::de::DeTable::parse(manifest).map_err(|error| format!("not TOML: {error}"))?;
+	let Some(inputs) = document
+		.get_ref()
+		.get("inputs")
+		.and_then(|inputs| inputs.get_ref().as_table())
+	else {
+		return Ok(Vec::new());
+	};
+	let mut names: Vec<(usize, String)> = inputs
+		.keys()
+		.map(|key| (key.span().start, key.get_ref().to_string()))
+		.collect();
+	names.sort();
+	Ok(names.into_iter().map(|(_, name)| name).collect())
+}
+
+/// The example an input's description gives, e.g. `blog-post` in "Singular name, e.g. `blog-post`."
+pub(crate) fn described_example(description: &str) -> Option<&str> {
+	let (_, rest) = description.split_once("e.g. `")?;
+	rest.split_once('`').map(|(example, _)| example)
+}
+
+/// Whether `cuilo add` needs a value for an input: a string, number or choice without a default.
+pub(crate) fn is_required(input: &Value) -> bool {
+	input["type"] != "bool" && input.get("default").is_none_or(Value::is_null)
+}
+
+/// The files `cuilo add` plans for one of `pieces` in an empty project with each of its variants, leaving out those of
+/// the pieces it requires; empty when it has no variant or a required input's description gives no example.
+fn examples(cuilo: &Cuilo, pack: &str, pieces: &[Value], piece: &Value) -> Result<Vec<Value>, String> {
+	let mut examples = Vec::new();
+	for variant in variant_names(piece) {
+		let Some(files) = planned_files(cuilo, pack, piece, variant)? else {
+			return Ok(Vec::new());
+		};
+		let mut required = Vec::new();
+		for name in list(&piece["requires"]).map(text) {
+			if let Some(other) = pieces.iter().find(|candidate| text(&candidate["name"]) == name)
+				&& variant_names(other).any(|declared| declared == variant)
+			{
+				required.extend(planned_files(cuilo, pack, other, variant)?.unwrap_or_default());
+			}
+		}
+		let own: Vec<String> = files.into_iter().filter(|file| !required.contains(file)).collect();
+		examples.push(json!({ "variant": variant, "files": own }));
+	}
+	Ok(examples)
+}
+
+/// The names of a piece's variants, in the order its manifest declares them.
+fn variant_names(piece: &Value) -> impl Iterator<Item = &str> {
+	list(&piece["variants"]).map(|variant| text(&variant["name"]))
+}
+
+/// The files `cuilo add --dry-run` plans for `piece` with `variant` in an empty project, given the examples its
+/// required inputs' descriptions name; `None` when one names none.
+fn planned_files(cuilo: &Cuilo, pack: &str, piece: &Value, variant: &str) -> Result<Option<Vec<String>>, String> {
+	let mut name = Vec::new();
+	let mut others = Vec::new();
+	for (input_name, input) in piece["inputs"].as_object().into_iter().flatten() {
+		if !is_required(input) {
+			continue;
+		}
+		let Some(value) = described_example(text(&input["description"])) else {
+			return Ok(None);
+		};
+		if input_name == "name" {
+			name.push(value.to_owned());
+		} else {
+			others.extend(["--input".to_owned(), format!("{input_name}={value}")]);
+		}
+	}
+	let mut args = vec![
+		"--json".to_owned(),
+		"--no-input".to_owned(),
+		"add".to_owned(),
+		format!("{pack}/{}", text(&piece["name"])),
+	];
+	args.extend(name);
+	args.extend(others);
+	args.extend(["--variant".to_owned(), variant.to_owned(), "--dry-run".to_owned()]);
+	let planned = cuilo.run(&args.iter().map(String::as_str).collect::<Vec<_>>())?;
+	let mut files: Vec<String> = list(&planned["plan"]["changes"])
+		.map(|change| text(&change["path"]).to_owned())
+		.collect();
+	files.sort_unstable();
+	Ok(Some(files))
 }
 
 #[cfg(test)]
@@ -704,6 +905,69 @@ mod tests {
 	fn sentence_should_end_with_one_full_stop() {
 		assert_eq!(sentence("Undo the last transaction"), "Undo the last transaction.");
 		assert_eq!(sentence("Already one."), "Already one.");
+	}
+
+	#[test]
+	fn input_order_should_follow_the_manifest_not_the_alphabet() {
+		let manifest = "name = \"atom\"\n\n[inputs.name]\ntype = \"string\"\n\n[inputs.tests]\ntype = \"bool\"\n\n[inputs.app]\ntype = \"string\"\n";
+
+		assert_eq!(
+			input_order(manifest),
+			Ok(vec!["name".to_owned(), "tests".to_owned(), "app".to_owned()])
+		);
+		assert_eq!(input_order("name = \"error\"\n"), Ok(Vec::new()));
+	}
+
+	#[test]
+	fn described_example_should_read_the_first_code_span_after_eg() {
+		assert_eq!(described_example("Singular name, e.g. `blog-post`."), Some("blog-post"));
+		assert_eq!(described_example("Kotlin package for Jetpack Compose."), None);
+	}
+
+	#[test]
+	fn described_should_keep_the_locales_that_describe_the_item() {
+		let translations = json!({
+			"es-mx": {"description": "Una cosa.", "inputs": {"name": "Nombre."}},
+			"pt-br": {"description": "Uma coisa."}
+		});
+
+		assert_eq!(
+			described(&translations, |translation| &translation["description"]),
+			json!({"es-mx": {"description": "Una cosa."}, "pt-br": {"description": "Uma coisa."}})
+		);
+		assert_eq!(
+			described(&translations, |translation| &translation["inputs"]["name"]),
+			json!({"es-mx": {"description": "Nombre."}})
+		);
+		assert_eq!(described(&Value::Null, |translation| translation), json!({}));
+	}
+
+	#[test]
+	fn schema_page_should_list_the_fields_of_maps_with_checked_keys() {
+		let schema = json!({
+			"properties": {
+				"translations": {
+					"type": "object",
+					"additionalProperties": false,
+					"patternProperties": {"^[a-z]{2,3}$": {"$ref": "#/$defs/Translation"}},
+					"description": "Text by locale."
+				}
+			},
+			"$defs": {"Translation": {"type": "object", "properties": {"description": {"type": "string", "description": "The text."}}}}
+		});
+		let page = SchemaPage {
+			schema: "demo",
+			slug: "demo",
+			title: "demo.toml",
+		};
+
+		let text = schema_page(&page, &schema);
+
+		assert!(
+			text.contains("### `translations`\n\n**Type:** `map of object`"),
+			"{text}"
+		);
+		assert!(text.contains("#### `translations.<key>.description`"), "{text}");
 	}
 
 	#[test]

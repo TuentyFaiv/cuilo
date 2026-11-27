@@ -1,5 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
-
+import type { PrismaClient } from "../../shared/database";
 import type { CreateExampleItem, ExampleItem, UpdateExampleItem } from "./example-item.model";
 import type { ExampleItemRepository, Page } from "./example-item.repository";
 

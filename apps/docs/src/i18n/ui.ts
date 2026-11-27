@@ -36,7 +36,7 @@ const english = {
 	official: "official",
 	finderCopy: "copy command",
 	finderOpen: "open piece",
-	stacksEyebrow: "cuilo add ui/atom StatusBadge",
+	stacksEyebrow: "cuilo add ui/atom status-badge",
 	stacksTitle: "One piece.\n{count} stacks.",
 	stacksLead:
 		"Cuilo detects your framework, language and tools, then writes the variant that fits: file names, folders, tests and styles included.",
@@ -64,15 +64,56 @@ const english = {
 	featureAgentsTitle: "Made for agents",
 	featureAgentsBody: "cuilo mcp gives agents plan, apply, status and why. They see the same plan you do.",
 	directoryCount: "packs",
+	directoryCountOne: "pack",
+	directoryResults: "Packs",
+	directorySearchLabel: "Search packs",
+	directorySearchPlaceholder: "Search packs, pieces and stacks",
+	directorySort: "Sort",
+	directorySortName: "Name",
+	directorySortPieces: "Most pieces",
+	directorySortStacks: "Most stacks",
+	directoryFilters: "Filters",
 	directoryTrust: "Trust",
 	directoryBuiltIn: "Built in",
 	directoryReviewed: "Reviewed",
 	directorySigned: "Signed, not reviewed",
+	directorySignedShort: "Signed",
+	directoryKind: "Kind",
+	kindUi: "UI",
+	kindBackend: "Backend",
+	kindMobile: "Mobile",
+	kindDesktop: "Desktop",
+	directoryShowAllStacks: "Show all {count} stacks",
+	directoryShowFewerStacks: "Show fewer stacks",
+	directoryDetect: "Not sure what you use? In your project:",
+	directoryEmpty: "No pack matches these filters.",
+	directoryClear: "Clear filters",
+	directoryCopyAdd: "Copy cuilo add",
+	directoryCopyPackAdd: "Copy pack add",
 	directoryCommunity:
 		"The community directory opens with the first release: anyone will be able to list a pack they host, as Reviewed or Signed.",
 	pieces: "pieces",
 	stacks: "stacks",
+	piece: "piece",
+	packSections: "Pack sections",
 	packPieces: "Pieces",
+	packPermissions: "Permissions",
+	packVersions: "Versions",
+	packInstall: "Add this pack's first piece",
+	packDefault: "default",
+	packNoInputs: "No inputs.",
+	packStacksLead:
+		"The pieces each stack gets. cuilo picks the variant that fits your project; --variant picks another.",
+	packMayWriteLead: "cuilo refuses any file outside these globs, and never writes .git, .cuilo or cuilo.lock.",
+	packNoDependencies: "Adds no packages.",
+	packPackagesTitle: "Packages each piece may add",
+	packPackageDev: "dev",
+	packNoPackages: "None.",
+	packVersionCurrent: "Current",
+	packVersionShips: "Ships inside cuilo {version}",
+	packVersionsNote:
+		"Earlier versions are not listed yet. The changelog says what each cuilo release changed, the built-in packs included.",
+	packChangelog: "Read the changelog",
 	packDetails: "Details",
 	packSource: "Source",
 	packVersion: "Version",
@@ -90,6 +131,7 @@ const english = {
 	required: "required",
 	copy: "Copy",
 	copied: "Copied",
+	copyCommand: "Copy command",
 };
 
 /** Every string the site's own components show. */
@@ -132,7 +174,7 @@ const spanish: UiStrings = {
 	official: "oficial",
 	finderCopy: "copiar comando",
 	finderOpen: "abrir pieza",
-	stacksEyebrow: "cuilo add ui/atom StatusBadge",
+	stacksEyebrow: "cuilo add ui/atom status-badge",
 	stacksTitle: "Una pieza.\n{count} stacks.",
 	stacksLead:
 		"Cuilo detecta tu framework, lenguaje y herramientas, y escribe la variante que encaja: nombres de archivo, carpetas, pruebas y estilos incluidos.",
@@ -160,15 +202,56 @@ const spanish: UiStrings = {
 	featureAgentsTitle: "Hecho para agentes",
 	featureAgentsBody: "cuilo mcp da a los agentes plan, apply, status y why. Ven el mismo plan que tú.",
 	directoryCount: "packs",
+	directoryCountOne: "pack",
+	directoryResults: "Packs",
+	directorySearchLabel: "Buscar packs",
+	directorySearchPlaceholder: "Busca packs, piezas y stacks",
+	directorySort: "Ordenar",
+	directorySortName: "Nombre",
+	directorySortPieces: "Más piezas",
+	directorySortStacks: "Más stacks",
+	directoryFilters: "Filtros",
 	directoryTrust: "Confianza",
 	directoryBuiltIn: "Incluido",
 	directoryReviewed: "Revisado",
 	directorySigned: "Firmado, sin revisar",
+	directorySignedShort: "Firmado",
+	directoryKind: "Tipo",
+	kindUi: "UI",
+	kindBackend: "Backend",
+	kindMobile: "Móvil",
+	kindDesktop: "Escritorio",
+	directoryShowAllStacks: "Mostrar los {count} stacks",
+	directoryShowFewerStacks: "Mostrar menos stacks",
+	directoryDetect: "¿No sabes qué usas? En tu proyecto:",
+	directoryEmpty: "Ningún pack coincide con estos filtros.",
+	directoryClear: "Quitar filtros",
+	directoryCopyAdd: "Copiar cuilo add",
+	directoryCopyPackAdd: "Copiar pack add",
 	directoryCommunity:
 		"El directorio de la comunidad abre con la primera versión: cualquiera podrá listar un pack que hospede, como Revisado o Firmado.",
 	pieces: "piezas",
 	stacks: "stacks",
+	piece: "pieza",
+	packSections: "Secciones del pack",
 	packPieces: "Piezas",
+	packPermissions: "Permisos",
+	packVersions: "Versiones",
+	packInstall: "Agrega la primera pieza de este pack",
+	packDefault: "por defecto",
+	packNoInputs: "Sin entradas.",
+	packStacksLead:
+		"Las piezas que recibe cada stack. cuilo elige la variante que encaja con tu proyecto; --variant elige otra.",
+	packMayWriteLead: "cuilo rechaza cualquier archivo fuera de estos globs, y nunca escribe .git, .cuilo ni cuilo.lock.",
+	packNoDependencies: "No agrega paquetes.",
+	packPackagesTitle: "Paquetes que puede agregar cada pieza",
+	packPackageDev: "dev",
+	packNoPackages: "Ninguno.",
+	packVersionCurrent: "Actual",
+	packVersionShips: "Viene dentro de cuilo {version}",
+	packVersionsNote:
+		"Todavía no se listan versiones anteriores. Los cambios dicen qué trajo cada versión de cuilo, incluidos los packs que vienen dentro.",
+	packChangelog: "Leer los cambios",
 	packDetails: "Detalles",
 	packSource: "Origen",
 	packVersion: "Versión",
@@ -186,6 +269,7 @@ const spanish: UiStrings = {
 	required: "obligatoria",
 	copy: "Copiar",
 	copied: "Copiado",
+	copyCommand: "Copiar comando",
 };
 
 const byLocale: Record<string, UiStrings> = { "es-mx": spanish };
@@ -200,7 +284,7 @@ export function localized(locale: string | undefined, path: string): string {
 	return locale ? `/${locale}${path}` : path;
 }
 
-/** Display names of the variants packs declare, which are also the stacks they support. */
+/** Display names of the variants packs declare. Most variants are a stack; `stackOf` names the stack of the others. */
 const stackNames: Record<string, string> = {
 	angular: "Angular",
 	astro: "Astro",
@@ -210,10 +294,15 @@ const stackNames: Record<string, string> = {
 	"compose-multiplatform": "Compose Multiplatform",
 	dioxus: "Dioxus",
 	echo: "Echo",
+	"echo-v5": "Echo v5",
 	express: "Express",
+	"express-drizzle": "Express · Drizzle",
+	"express-prisma": "Express · Prisma",
 	fastapi: "FastAPI",
 	flutter: "Flutter",
 	hono: "Hono",
+	"hono-drizzle": "Hono · Drizzle",
+	"hono-prisma": "Hono · Prisma",
 	leptos: "Leptos",
 	lit: "Lit",
 	qwik: "Qwik",
@@ -226,7 +315,21 @@ const stackNames: Record<string, string> = {
 	yew: "Yew",
 };
 
-/** The display name of a variant. */
-export function stackName(variant: string): string {
+/** Variants for a stack with one library, such as an ORM, or one major of it, by the variant of that stack. */
+const stackOf: Record<string, string> = {
+	"echo-v5": "echo",
+	"express-drizzle": "express",
+	"express-prisma": "express",
+	"hono-drizzle": "hono",
+	"hono-prisma": "hono",
+};
+
+/** The display name of a variant, e.g. `Hono · Drizzle` for `hono-drizzle`. */
+export function variantName(variant: string): string {
 	return stackNames[variant] ?? variant;
+}
+
+/** The display name of the stack a variant is for, e.g. `Hono` for both `hono` and `hono-drizzle`. */
+export function stackName(variant: string): string {
+	return variantName(stackOf[variant] ?? variant);
 }

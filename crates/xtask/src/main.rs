@@ -2,6 +2,7 @@
 
 mod docs;
 mod release;
+mod verify;
 
 use std::env;
 use std::fmt;
@@ -21,6 +22,10 @@ Tasks:
   schema  Regenerate the JSON Schemas in schemas/
   docs    Regenerate the docs site's CLI and schema reference and pack data;
           with --check, fail if they differ from the code instead
+  verify-packs [options]
+          Add every official piece, in each variant, to its stack's fixture and
+          run that ecosystem's checks and tests; `verify-packs --help` lists
+          the options
 
 Release tasks:
   version                   Print the version every channel ships
@@ -229,6 +234,8 @@ fn main() -> ExitCode {
 
 	let result = if name == "docs" {
 		Some(docs::run(args.get(1).is_some_and(|flag| flag == "--check")))
+	} else if name == "verify-packs" {
+		Some(verify::run(&args[1..]))
 	} else {
 		release_task(&name, &args[1..])
 	};

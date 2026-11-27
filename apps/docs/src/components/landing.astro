@@ -3,11 +3,13 @@ import type { LucideName } from "./lucide-icons";
 
 import "../styles/landing.css";
 
-import packs from "../data/packs.json" with { type: "json" };
-import { localized, stackName, ui } from "../i18n/ui";
+import { localized, ui } from "../i18n/ui";
+import { comparePieces, describe, PACKS, packNamed, packStacks, pieceStacks } from "../packs";
 import { addCommand } from "../pieces";
+import { compareStacks } from "../stack-priority";
 import FinderOption from "./finder-option.astro";
 import LucideIcon from "./lucide-icon.astro";
+import SelectMenu from "./select-menu.astro";
 
 /** A command-line flag in running text, e.g. `--review`. */
 const FLAG = /(--[a-z-]+)/;
@@ -24,43 +26,35 @@ const pieceIcons: Record<string, LucideName> = {
 	"ui/molecule": "component",
 	"ui/organism": "layout-template",
 };
-const pieces = packs.flatMap((pack) =>
-	pack.pieces.map((piece) => {
+/** Every official piece, those for the stacks with first support first, so the finder starts on one of them. */
+const pieces = PACKS.flatMap((pack) => pack.pieces.map((piece) => ({ pack, piece })))
+	.sort((a, b) => comparePieces(a.piece, b.piece))
+	.map(({ pack, piece }) => {
 		const path = `${pack.name}/${piece.name}`;
-		const description = piece.description.replaceAll("`", "");
+		const description = describe(piece, locale).replaceAll("`", "");
 		return {
 			path,
 			name: piece.name,
 			description,
-			stacks: [...new Set(piece.variants.map((variant) => stackName(variant)))],
+			stacks: pieceStacks(piece),
 			command: addCommand(pack.name, piece),
 			href: localized(locale, `/directory/${pack.name}/#${piece.name}`),
 			icon: pieceIcons[path] ?? "package",
-			search: `${path} ${description}`.toLowerCase(),
+			search: [path, description, piece.description].join(" ").toLowerCase(),
 		};
-	})
-);
-const stacks = [...new Set(pieces.flatMap((piece) => piece.stacks))].sort((a, b) => a.localeCompare(b));
+	});
+const stacks = [...new Set(pieces.flatMap((piece) => piece.stacks))].sort(compareStacks);
 /** The stacks the `ui` pieces support, by display name: two variants can share one stack. */
-const uiStacks = [
-	...new Set(packs.find((pack) => pack.name === "ui")?.pieces[0]?.variants.map((variant) => stackName(variant)) ?? []),
-];
+const uiStacks = packStacks(packNamed("ui"));
 const [first] = pieces;
 /** Icon sizes in pixels, from the design. */
-const iconSize = { search: 20, stack: 14, feature: 20 } as const;
+const iconSize = { search: 20, feature: 20 } as const;
+/** What `cuilo add ui/atom status-badge --dry-run` plans in a minimal project of each stack. */
 const outputs = [
-	{
-		stack: "React",
-		dir: "src/ui/atoms/status-badge/",
-		files: ["status-badge.tsx", "status-badge.module.css", "status-badge.test.tsx", "index.ts"],
-	},
-	{
-		stack: "Svelte",
-		dir: "src/ui/atoms/status-badge/",
-		files: ["status-badge.svelte", "status-badge.test.ts", "index.ts"],
-	},
-	{ stack: "Flutter", dir: "lib/ · test/", files: ["ui/atoms/status_badge.dart", "ui/atoms/status_badge_test.dart"] },
-	{ stack: "SwiftUI", dir: "MyApp/UI/Atoms/", files: ["StatusBadge.swift"] },
+	{ stack: "Svelte", dir: "src/ui/atoms/status-badge/", files: ["status-badge.svelte", "index.ts"] },
+	{ stack: "Astro", dir: "src/ui/atoms/status-badge/", files: ["status-badge.astro", "index.ts"] },
+	{ stack: "Leptos", dir: "src/ui/atoms/", files: ["status_badge.rs"] },
+	{ stack: "SwiftUI", dir: "App/UI/Atoms/", files: ["StatusBadge.swift"] },
 ];
 const merged = [
 	{ code: "export function Button(props) {" },
@@ -189,15 +183,16 @@ const features = [
 					spellcheck="false"
 					data-query
 				>
-				<label class="cu-stack">
-					<LucideIcon name="layers" size={iconSize.stack} />
-					<span>{t.stackLabel}:</span>
-					<select data-stack>
-						<option value="">{t.stackAny}</option>
-						{stacks.map((stack) => <option value={stack}>{stack}</option>)}
-					</select>
-					<LucideIcon name="chevron-down" size={iconSize.stack} class="cu-stack-chevron" />
-				</label>
+				<SelectMenu
+					id="cu-finder-stack"
+					look="pill"
+					icon="layers"
+					label={t.stackLabel}
+					prefix={`${t.stackLabel}:`}
+					options={[{ value: "", label: t.stackAny }, ...stacks.map((stack) => ({ value: stack, label: stack }))]}
+					align="end"
+					data-stack
+				/>
 			</div>
 			<div class="cu-results" id="cu-finder-list" role="listbox" aria-label={t.packPieces} data-results>
 				{pieces.map((piece, index) => (
@@ -323,7 +318,7 @@ const features = [
 
 	const finder = document.querySelector<HTMLElement>("[data-finder]");
 	const query = finder?.querySelector<HTMLInputElement>("[data-query]");
-	const stack = finder?.querySelector<HTMLSelectElement>("[data-stack]");
+	const stack = finder?.querySelector<HTMLElement>("[data-stack]");
 	const list = finder?.querySelector<HTMLElement>("[data-results]");
 	const options = [...(list?.querySelectorAll<HTMLElement>("[data-option]") ?? [])];
 	const empty = finder?.querySelector<HTMLElement>("[data-empty]");
@@ -397,7 +392,7 @@ const features = [
 	/** Applies the query and the stack, lists rows that support the stack first, and selects the first row. */
 	function filter() {
 		const words = (query?.value ?? "").toLowerCase().split(WHITESPACE).filter(Boolean);
-		const chosen = stack?.value ?? "";
+		const chosen = stack?.getAttribute("value") ?? "";
 		const fitting = options.filter((row) => place(row, words, chosen));
 		list?.append(...fitting, ...options.filter((row) => !fitting.includes(row)));
 		const rows = shown();

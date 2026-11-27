@@ -7,7 +7,8 @@ import (
 
 // @cuilo if stack.echo
 	"github.com/google/uuid"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4" // @cuilo if !stack.echo-v5
+	"github.com/labstack/echo/v5" // @cuilo if stack.echo-v5
 // @cuilo else
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -42,7 +43,8 @@ func (h *Handler) Register(g *echo.Group) {
 	g.DELETE("/:id", h.delete)
 }
 
-func (h *Handler) list(c echo.Context) error {
+func (h *Handler) list(c echo.Context) error { // @cuilo if !stack.echo-v5
+func (h *Handler) list(c *echo.Context) error { // @cuilo if stack.echo-v5
 	limit, offset, err := page(c.QueryParam("limit"), c.QueryParam("offset"))
 	if err != nil {
 		return err
@@ -54,7 +56,8 @@ func (h *Handler) list(c echo.Context) error {
 	return c.JSON(http.StatusOK, items)
 }
 
-func (h *Handler) get(c echo.Context) error {
+func (h *Handler) get(c echo.Context) error { // @cuilo if !stack.echo-v5
+func (h *Handler) get(c *echo.Context) error { // @cuilo if stack.echo-v5
 	id, err := parseID(c.Param("id"))
 	if err != nil {
 		return err
@@ -66,7 +69,8 @@ func (h *Handler) get(c echo.Context) error {
 	return c.JSON(http.StatusOK, item)
 }
 
-func (h *Handler) create(c echo.Context) error {
+func (h *Handler) create(c echo.Context) error { // @cuilo if !stack.echo-v5
+func (h *Handler) create(c *echo.Context) error { // @cuilo if stack.echo-v5
 	var input NewExampleItem
 	if err := decode(c.Request(), &input); err != nil {
 		return err
@@ -78,7 +82,8 @@ func (h *Handler) create(c echo.Context) error {
 	return c.JSON(http.StatusCreated, item)
 }
 
-func (h *Handler) update(c echo.Context) error {
+func (h *Handler) update(c echo.Context) error { // @cuilo if !stack.echo-v5
+func (h *Handler) update(c *echo.Context) error { // @cuilo if stack.echo-v5
 	id, err := parseID(c.Param("id"))
 	if err != nil {
 		return err
@@ -94,7 +99,8 @@ func (h *Handler) update(c echo.Context) error {
 	return c.JSON(http.StatusOK, item)
 }
 
-func (h *Handler) delete(c echo.Context) error {
+func (h *Handler) delete(c echo.Context) error { // @cuilo if !stack.echo-v5
+func (h *Handler) delete(c *echo.Context) error { // @cuilo if stack.echo-v5
 	id, err := parseID(c.Param("id"))
 	if err != nil {
 		return err

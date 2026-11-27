@@ -1,34 +1,26 @@
 ---
 title: Tu primera pieza
-description: Agrega un componente de React desde el pack ui, lee el plan, aplícalo, edítalo, rastrea una línea hasta el pack y deshaz el cambio.
+description: Agrega un componente de Svelte desde el pack ui a un proyecto de SvelteKit, lee el plan, aplícalo, edítalo, rastrea una línea hasta el pack y deshaz el cambio.
 ---
 
 import { Aside, Steps } from "@astrojs/starlight/components";
 
-En este tutorial agregas un átomo `status-badge` del pack oficial `ui` a un proyecto de React. Después lo editas, ves lo que cuilo registra de él y deshaces el cambio. Necesitas cuilo en tu `PATH`; consulta [Instalación](/es-mx/install/).
+En este tutorial agregas un átomo `status-badge` del pack oficial `ui` a un proyecto de SvelteKit. Después lo editas, ves lo que cuilo registra de él y deshaces el cambio. Necesitas cuilo en tu `PATH`; consulta [Instalación](/es-mx/install/). También necesitas Node.js para crear el proyecto.
 
 ## Prepara un proyecto
 
-Usa un proyecto de React y TypeScript que ya tengas, o crea uno vacío. En este tutorial no se instala nada. cuilo solo lee `package.json`.
+Usa un proyecto de SvelteKit con TypeScript que ya tengas, o crea uno con la CLI de Svelte.
 
 <Steps>
 
-1. Crea una carpeta y entra en ella:
+1. Crea el proyecto y entra en él. La CLI de Svelte instala sus dependencias con npm:
 
    ```sh
-   mkdir my-app && cd my-app
+   npx sv create my-app --template minimal --types ts --no-add-ons --install npm
+   cd my-app
    ```
 
-2. Crea `package.json`:
-
-   ```json title="package.json"
-   {
-   	"dependencies": { "react": "19.0.0" },
-   	"devDependencies": { "typescript": "6.0.0" }
-   }
-   ```
-
-3. Revisa lo que detecta cuilo:
+2. Revisa lo que detecta cuilo:
 
    ```sh
    cuilo detect
@@ -38,7 +30,8 @@ Usa un proyecto de React y TypeScript que ya tengas, o crea uno vacío. En este 
    {
      "stack": {
        "framework": [
-         "react"
+         "svelte",
+         "sveltekit"
        ],
        "language": [
          "typescript"
@@ -50,7 +43,7 @@ Usa un proyecto de React y TypeScript que ya tengas, o crea uno vacío. En este 
          "npm"
        ],
        "import_style": [
-         "imports-extensionless"
+         "imports-ts"
        ]
      },
      "env": []
@@ -59,7 +52,7 @@ Usa un proyecto de React y TypeScript que ya tengas, o crea uno vacío. En este 
 
 </Steps>
 
-La variante de React del pack `ui` necesita tanto `react` como `typescript`. Sin `typescript` en `package.json` o un `tsconfig.json`, cuilo avisa que ninguna variante coincide. Consulta [Detección del stack](/es-mx/guides/stack-detection/).
+La variante de Svelte del pack `ui` necesita tanto `svelte` como TypeScript. Sin `typescript` en `package.json` o un `tsconfig.json`, cuilo avisa que ninguna variante coincide. Consulta [Detección del stack](/es-mx/guides/stack-detection/).
 
 ## Revisa el plan
 
@@ -71,8 +64,7 @@ cuilo add ui/atom status-badge --dry-run
 
 ```text
 add ui/atom
-  create  src/ui/atoms/status-badge/status-badge.module.css
-  create  src/ui/atoms/status-badge/status-badge.tsx
+  create  src/ui/atoms/status-badge/status-badge.svelte
   create  src/ui/atoms/status-badge/index.ts
 ```
 
@@ -80,7 +72,7 @@ Así se lee:
 
 - `ui/atom` es el pack y la pieza. `status-badge` es la entrada `name` de la pieza. También puedes escribirlo como `StatusBadge`.
 - Los archivos van a `src/ui/atoms/`, la carpeta por defecto de la pieza.
-- El plan trae un módulo CSS porque el proyecto no usa Tailwind.
+- El componente trae sus estilos en un bloque `<style>` porque el proyecto no usa Tailwind. Con Tailwind, recibe clases de utilidad en su lugar.
 - El plan no trae archivo de pruebas porque el proyecto no tiene Vitest. Agrega `-i tests=true` para obtener uno. Entonces el plan también lista los paquetes de pruebas que hay que agregar.
 
 ## Aplícalo
@@ -93,33 +85,67 @@ cuilo add ui/atom status-badge
 
 ```text
 add ui/atom
-  create  src/ui/atoms/status-badge/status-badge.module.css
-  create  src/ui/atoms/status-badge/status-badge.tsx
+  create  src/ui/atoms/status-badge/status-badge.svelte
   create  src/ui/atoms/status-badge/index.ts
 Apply these changes? [y/N] y
-Applied transaction 1 (3 file(s)). Undo it with `cuilo undo`.
+Applied transaction 1 (2 file(s)). Undo it with `cuilo undo`.
 ```
 
-El componente es código normal y puedes editarlo:
+El componente es código de Svelte normal y puedes editarlo:
 
-```tsx title="src/ui/atoms/status-badge/status-badge.tsx"
-import type { ComponentProps } from "react";
+```svelte title="src/ui/atoms/status-badge/status-badge.svelte"
+<script lang="ts" module>
+	export type StatusBadgeTone = "neutral" | "accent";
+</script>
 
-import styles from "./status-badge.module.css";
+<script lang="ts">
+	import type { HTMLAttributes } from "svelte/elements";
 
-export type StatusBadgeTone = "neutral" | "accent";
+	interface Props extends HTMLAttributes<HTMLSpanElement> {
+		/** Visual emphasis. */
+		tone?: StatusBadgeTone;
+	}
 
-export type StatusBadgeProps = ComponentProps<"span"> & {
-	/** Visual emphasis. */
-	tone?: StatusBadgeTone;
-};
+	let { tone = "neutral", class: className, children, ...rest }: Props = $props();
 
-const classes = styles;
+	const classes = { root: "root" };
+</script>
 
-/** The smallest UI building block: an inline, label-sized element. */
-export function StatusBadge({ tone = "neutral", className, ...props }: StatusBadgeProps) {
-	return <span {...props} data-tone={tone} className={[classes.root, className].filter(Boolean).join(" ")} />;
-}
+<span {...rest} class={[classes.root, className]} data-tone={tone}>
+	{@render children?.()}
+</span>
+
+<style>
+	.root {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.125rem 0.5rem;
+		border-radius: 999px;
+		font-size: 0.75rem;
+		font-weight: 600;
+		line-height: 1.5;
+		color: var(--ui-neutral-foreground, #3f3f46);
+		background: var(--ui-neutral, #f4f4f5);
+	}
+
+	.root[data-tone="accent"] {
+		color: var(--ui-accent-foreground, #ffffff);
+		background: var(--ui-accent, #4f46e5);
+	}
+</style>
+```
+
+`index.ts` lo exporta como `StatusBadge`. El componente pasa la revisión de tipos con el resto del proyecto:
+
+```sh
+npm run check
+```
+
+La última línea que imprime `svelte-check`:
+
+```text
+svelte-check found 0 errors and 0 warnings
 ```
 
 cuilo también creó dos cosas junto a `package.json`:
@@ -135,14 +161,14 @@ cuilo también creó dos cosas junto a `package.json`:
   name = "ui"
   version = "0.2.0"
   source = "official:ui"
-  digest = "sha256:659daddc6c30ad71639fbda1bee3051eefa532680676fd546cbfaed8fef47cf4"
+  digest = "sha256:bdc4594e8a21617e1c4bb94cfd651498ff56cc33169bbf9048d40773d80b696e"
 
   [[instance]]
   id = "atom-d479162786"
   pack = "ui"
   pack_version = "0.2.0"
   piece = "atom"
-  variant = "react"
+  variant = "svelte"
   target = "src/ui/atoms"
   ```
 
@@ -166,13 +192,12 @@ Sin una terminal, por ejemplo en un script, cuilo no pregunta. Imprime el plan, 
 
    ```text
    clean     src/ui/atoms/status-badge/index.ts
-   clean     src/ui/atoms/status-badge/status-badge.module.css
-   clean     src/ui/atoms/status-badge/status-badge.tsx
+   clean     src/ui/atoms/status-badge/status-badge.svelte
    ```
 
-2. Edita la línea 5 de `status-badge.tsx` para agregar un tono:
+2. Edita la línea 2 de `status-badge.svelte` para agregar un tono:
 
-   ```tsx
+   ```svelte
    export type StatusBadgeTone = "neutral" | "accent" | "success";
    ```
 
@@ -184,20 +209,19 @@ Sin una terminal, por ejemplo en un script, cuilo no pregunta. Imprime el plan, 
 
    ```text
    clean     src/ui/atoms/status-badge/index.ts
-   clean     src/ui/atoms/status-badge/status-badge.module.css
-   modified  src/ui/atoms/status-badge/status-badge.tsx
+   modified  src/ui/atoms/status-badge/status-badge.svelte
    ```
 
 4. Pregunta de dónde viene una línea, con `path:line`:
 
    ```sh
-   cuilo why src/ui/atoms/status-badge/status-badge.tsx:5
-   cuilo why src/ui/atoms/status-badge/status-badge.tsx:15
+   cuilo why src/ui/atoms/status-badge/status-badge.svelte:2
+   cuilo why src/ui/atoms/status-badge/status-badge.svelte:13
    ```
 
    ```text
-   src/ui/atoms/status-badge/status-badge.tsx:5 is yours: added or changed since generation; ui 0.2.0 piece `atom`
-   src/ui/atoms/status-badge/status-badge.tsx:15 is from the pack (line 15 of the original); ui 0.2.0 piece `atom`
+   src/ui/atoms/status-badge/status-badge.svelte:2 is yours: added or changed since generation; ui 0.2.0 piece `atom`
+   src/ui/atoms/status-badge/status-badge.svelte:13 is from the pack (line 13 of the original); ui 0.2.0 piece `atom`
    ```
 
 </Steps>
@@ -215,7 +239,7 @@ Este registro es lo que hace seguras las actualizaciones. Cuando el pack `ui` pu
    ```
 
    ```text
-      1  add ui/atom  (3 file(s))
+      1  add ui/atom  (2 file(s))
    ```
 
 2. Deshaz la última:
@@ -225,12 +249,12 @@ Este registro es lo que hace seguras las actualizaciones. Cuando el pack `ui` pu
    ```
 
    ```text
-   error: these files changed after transaction 1; undo with force to discard the edits: src/ui/atoms/status-badge/status-badge.tsx
+   error: these files changed after transaction 1; undo with force to discard the edits: src/ui/atoms/status-badge/status-badge.svelte
    ```
 
-   cuilo se niega, porque deshacerla tiraría tu cambio en la línea 5.
+   cuilo se niega, porque deshacerla tiraría tu cambio en la línea 2.
 
-3. Deja la línea 5 como estaba y vuelve a correr `cuilo undo`. O descarta el cambio con `--force`:
+3. Deja la línea 2 como estaba y vuelve a correr `cuilo undo`. O descarta el cambio con `--force`:
 
    ```sh
    cuilo undo --force
@@ -252,11 +276,11 @@ Este registro es lo que hace seguras las actualizaciones. Cuando el pack `ui` pu
 
 </Steps>
 
-La transacción creó `cuilo.lock`, así que al deshacerla también se borró el lockfile. Solo quedan `package.json` y `.cuilo/`.
+La transacción creó `cuilo.lock`, así que al deshacerla también se borró el lockfile. De lo que agregó cuilo, solo queda `.cuilo/`.
 
 ## Siguientes pasos
 
 - [Packs y piezas](/es-mx/guides/packs-and-pieces/): las demás piezas, entradas, variantes y carpetas de salida.
-- [Detección del stack](/es-mx/guides/stack-detection/): cómo eligió cuilo la variante de React y cómo cambiar esa elección.
+- [Detección del stack](/es-mx/guides/stack-detection/): cómo eligió cuilo la variante de Svelte y cómo cambiar esa elección.
 - [Historial y deshacer](/es-mx/guides/history/): lo que registran las transacciones.
 - [Formateadores y confianza](/es-mx/guides/formatters-and-trust/): si tu proyecto usa Biome, Prettier o ESLint, cuilo pregunta una vez antes de correrlos sobre los archivos generados.

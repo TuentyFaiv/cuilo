@@ -1,7 +1,9 @@
 import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
 
-const spanish = "es-MX";
+import { LOCALES } from "./src/i18n/locales.ts";
+
+const spanish = LOCALES["es-mx"].lang;
 
 /** A sidebar link to `slug`, with its label in both languages. */
 const page = (slug, label, translation) => ({ slug, label, translations: { [spanish]: translation } });
@@ -16,10 +18,7 @@ export default defineConfig({
 				"Generate components, resources and middleware from versioned packs, see every file before it lands, and keep your edits when packs update.",
 			favicon: "/favicon.svg",
 			defaultLocale: "root",
-			locales: {
-				root: { label: "English", lang: "en" },
-				"es-mx": { label: "Español", lang: spanish },
-			},
+			locales: LOCALES,
 			social: [{ icon: "github", label: "GitHub", href: "https://github.com/TuentyFaiv/cuilo" }],
 			editLink: { baseUrl: "https://github.com/TuentyFaiv/cuilo/edit/main/apps/docs/" },
 			credits: false,
@@ -62,11 +61,17 @@ export default defineConfig({
 				// biome-ignore lint/style/useNamingConvention: Starlight component override key
 				Hero: "./src/components/hero.astro",
 				// biome-ignore lint/style/useNamingConvention: Starlight component override key
+				LanguageSelect: "./src/components/language-select.astro",
+				// biome-ignore lint/style/useNamingConvention: Starlight component override key
+				MobileMenuFooter: "./src/components/mobile-menu-footer.astro",
+				// biome-ignore lint/style/useNamingConvention: Starlight component override key
 				PageTitle: "./src/components/page-title.astro",
 				// biome-ignore lint/style/useNamingConvention: Starlight component override key
 				Sidebar: "./src/components/sidebar.astro",
 				// biome-ignore lint/style/useNamingConvention: Starlight component override key
 				SiteTitle: "./src/components/site-title.astro",
+				// biome-ignore lint/style/useNamingConvention: Starlight component override key
+				ThemeSelect: "./src/components/theme-select.astro",
 			},
 			routeMiddleware: "./src/route-data.ts",
 			// Each page shows only the groups of its section in src/sections.ts.

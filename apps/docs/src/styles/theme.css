@@ -100,13 +100,13 @@ body {
 h1,
 h2,
 h3,
-.sl-markdown-content :is(h1, h2, h3, h4):not(:where(.cu-landing *)) {
+.sl-markdown-content :is(h1, h2, h3, h4):not(:where(.cu-landing *, .cu-bleed *)) {
 	font-family: var(--cu-font-display);
 	font-weight: 700;
 	letter-spacing: -0.02em;
 }
 
-.sl-markdown-content :is(h2, h3):not(:where(.cu-landing *)) {
+.sl-markdown-content :is(h2, h3):not(:where(.cu-landing *, .cu-bleed *)) {
 	font-weight: 650;
 }
 
@@ -114,14 +114,14 @@ h3,
 	text-underline-offset: 0.2em;
 }
 
-.sl-markdown-content :not(pre) > code:not(:where(.cu-landing *)) {
+.sl-markdown-content :not(pre) > code:not(:where(.cu-landing *, .cu-bleed *)) {
 	padding: 0.1em 0.35em;
 	font-size: 0.875em;
 	background: var(--cu-surface-2);
 	border-radius: 0.3rem;
 }
 
-.sl-markdown-content table {
+.sl-markdown-content table:not(:where(.cu-bleed *)) {
 	display: block;
 	max-width: 100%;
 	overflow-x: auto;
@@ -130,25 +130,25 @@ h3,
 }
 
 @media (min-width: 50rem) {
-	.sl-markdown-content table {
+	.sl-markdown-content table:not(:where(.cu-bleed *)) {
 		display: table;
 		width: 100%;
 	}
 }
 
-.sl-markdown-content :is(th, td) {
+.sl-markdown-content :is(th, td):not(:where(.cu-bleed *)) {
 	padding: 0.6rem 0.75rem;
 	vertical-align: top;
 	border-bottom: 1px solid var(--cu-line);
 }
 
-.sl-markdown-content th {
+.sl-markdown-content th:not(:where(.cu-bleed *)) {
 	font-weight: 600;
 	color: var(--cu-muted);
 	text-align: start;
 }
 
-.sl-markdown-content td:first-child {
+.sl-markdown-content td:first-child:not(:where(.cu-bleed *)) {
 	white-space: nowrap;
 }
 
@@ -250,4 +250,17 @@ nav.sidebar .group-label .large {
 	background: var(--cu-surface);
 	border: 1px solid var(--cu-line);
 	border-radius: var(--cu-radius);
+}
+
+/* Starlight draws the mobile menu button as a filled circle; the design uses a plain icon. */
+.sl-menu-button {
+	color: var(--cu-ink);
+	background-color: transparent;
+	border-radius: var(--cu-radius-small);
+	box-shadow: none;
+}
+
+.sl-menu-button:hover,
+.sl-menu-button:has(~ :popover-open) {
+	background-color: var(--cu-surface-2);
 }

@@ -1,0 +1,21 @@
+---
+import LanguageSelect from "./language-select.astro";
+import ThemeSelect from "./theme-select.astro";
+---
+
+<div class="mobile-preferences">
+	<LanguageSelect />
+	<ThemeSelect />
+</div>
+
+<style>
+	.mobile-preferences {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 1rem;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.875rem 0 1.5rem;
+		border-top: 1px solid var(--cu-line);
+	}
+</style>

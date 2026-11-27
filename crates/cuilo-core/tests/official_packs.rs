@@ -6,7 +6,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use cuilo_core::model::{Fact, Input, Value};
+use cuilo_core::model::{Fact, Input, Locale, Value};
 use cuilo_core::{Engine, MemoryFs, Pack, PieceRequest, RelPath, UserConfig, Values};
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -156,6 +156,75 @@ fn rendered_paths(name: &str, stacks: &[(&str, &str)]) -> Result<String, Box<dyn
 	Ok(listing)
 }
 
+/// Every official pack in `packs/`.
+fn official_packs() -> Result<Vec<Pack>, Box<dyn Error>> {
+	let mut packs = Vec::new();
+	for entry in std::fs::read_dir(packs_dir())? {
+		packs.push(Pack::load(&entry?.path())?);
+	}
+	Ok(packs)
+}
+
+/// Adds `what` to `problems` unless it has an English description and a Mexican Spanish one that differs from it.
+fn check_spanish(problems: &mut Vec<String>, what: &str, english: Option<&str>, spanish: Option<&str>) {
+	match (english, spanish) {
+		(None, _) => problems.push(format!("{what} has no description")),
+		(Some(_), None) => problems.push(format!("{what} has no es-mx description")),
+		(Some(english), Some(spanish)) if english == spanish => {
+			problems.push(format!("{what} has an es-mx description that is still the English one"));
+		}
+		_ => {}
+	}
+}
+
+#[test]
+fn official_packs_should_describe_every_pack_piece_and_input_in_mexican_spanish() -> TestResult {
+	let spanish = Locale::new("es-mx")?;
+	let mut problems = Vec::new();
+	for pack in official_packs()? {
+		let manifest = pack.manifest();
+		let translation = manifest.translations.get(&spanish);
+		check_spanish(
+			&mut problems,
+			&format!("pack `{}`", manifest.name),
+			manifest.description.as_deref(),
+			translation.and_then(|translation| translation.description.as_deref()),
+		);
+		for piece in pack.pieces() {
+			let piece = piece.manifest();
+			let path = format!("{}/{}", manifest.name, piece.name);
+			let translation = piece.translations.get(&spanish);
+			check_spanish(
+				&mut problems,
+				&format!("piece `{path}`"),
+				piece.description.as_deref(),
+				translation.and_then(|translation| translation.description.as_deref()),
+			);
+			for (name, input) in &piece.inputs {
+				check_spanish(
+					&mut problems,
+					&format!("input `{name}` of `{path}`"),
+					input.description(),
+					translation
+						.and_then(|translation| translation.inputs.get(name))
+						.map(String::as_str),
+				);
+			}
+		}
+	}
+
+	assert!(problems.is_empty(), "{}", problems.join("\n"));
+	Ok(())
+}
+
+#[test]
+fn official_packs_should_declare_their_kinds() -> TestResult {
+	for pack in official_packs()? {
+		assert!(!pack.manifest().kinds.is_empty(), "pack `{}`", pack.manifest().name);
+	}
+	Ok(())
+}
+
 #[test]
 fn ui_pack_should_render_every_variant_with_and_without_tailwind() -> TestResult {
 	let listing = rendered_paths("ui", &[("", "{}"), (" (tailwind)", r#"{"styling": ["tailwind"]}"#)])?;
@@ -225,10 +294,20 @@ const AXUM_MAIN: &str = "use axum::{Router, routing::get};\n\n#[tokio::main]\nas
 /// Adds `resource` (with the `error` piece it requires) and then `middleware` to a project with `files`, wiring
 /// them when `wire`, and returns every next step and note left, and the project.
 fn add_backend(stack: &str, files: &[(&str, &str)], wire: bool) -> Result<(String, Arc<MemoryFs>), Box<dyn Error>> {
+	add_backend_pieces(stack, files, wire, &["resource", "middleware"])
+}
+
+/// [`add_backend`] with the backend `pieces` given, added in order.
+fn add_backend_pieces(
+	stack: &str,
+	files: &[(&str, &str)],
+	wire: bool,
+	pieces: &[&str],
+) -> Result<(String, Arc<MemoryFs>), Box<dyn Error>> {
 	let pack = pack("backend")?;
 	let (fs, engine) = project(stack, files)?;
 	let mut listing = String::new();
-	for piece in ["resource", "middleware"] {
+	for &piece in pieces {
 		let inputs = inputs(&pack, piece)?;
 		let plan = engine.plan(&PieceRequest {
 			pack: &pack,
@@ -648,5 +727,229 @@ fn backend_pack_should_wire_fastapi_into_its_entry_file() -> TestResult {
 #[test]
 fn backend_pack_should_wire_axum_into_its_entry_file() -> TestResult {
 	insta::assert_snapshot!(wired_snapshot(r#"{"framework": ["axum"]}"#, "src/main.rs", AXUM_MAIN)?);
+	Ok(())
+}
+
+/// The Kotlin files `cuilo add ui/atom` writes to a Compose Multiplatform project with these Gradle modules, and
+/// the folder `cuilo.lock` records for it.
+fn compose_multiplatform_atom(modules: &[&str]) -> Result<(Vec<String>, String), Box<dyn Error>> {
+	let pack = pack("ui")?;
+	let builds: Vec<String> = modules
+		.iter()
+		.map(|module| format!("{module}/build.gradle.kts"))
+		.collect();
+	let files: Vec<(&str, &str)> = builds.iter().map(|path| (path.as_str(), "")).collect();
+	let (fs, engine) = project(r#"{"framework": ["compose-multiplatform", "compose"]}"#, &files)?;
+	let plan = engine.plan(&PieceRequest {
+		pack: &pack,
+		piece: "atom",
+		inputs: &inputs(&pack, "atom")?,
+		variant: None,
+		target: None,
+		granted: None,
+		force: false,
+		wire: false,
+	})?;
+	engine.apply(plan)?;
+
+	let written = fs.files();
+	let lock = String::from_utf8_lossy(written.get(&RelPath::new("cuilo.lock")?).ok_or("no cuilo.lock")?);
+	let target = lock
+		.lines()
+		.find_map(|line| line.strip_prefix("target = "))
+		.ok_or("no target in cuilo.lock")?
+		.trim_matches('"')
+		.to_owned();
+	let kotlin = written
+		.keys()
+		.map(ToString::to_string)
+		.filter(|path| has_extension(path, "kt"))
+		.collect();
+	Ok((kotlin, target))
+}
+
+#[test]
+fn compose_multiplatform_pieces_should_go_to_shared_or_else_to_the_older_compose_app_module() -> TestResult {
+	let into = |module: &str| {
+		(
+			vec![
+				format!("{module}/src/commonMain/kotlin/dev/acme/shop/ui/atoms/StatusBadge.kt"),
+				format!("{module}/src/jvmTest/kotlin/dev/acme/shop/ui/atoms/StatusBadgeTest.kt"),
+			],
+			module.to_owned(),
+		)
+	};
+
+	assert_eq!(compose_multiplatform_atom(&["shared", "desktopApp"])?, into("shared"));
+	assert_eq!(compose_multiplatform_atom(&["composeApp"])?, into("composeApp"));
+	assert_eq!(compose_multiplatform_atom(&["composeApp", "shared"])?, into("shared"));
+	assert_eq!(compose_multiplatform_atom(&[])?, into("shared"));
+	Ok(())
+}
+
+/// The variant `cuilo add backend/database` picks in an empty project with `stack`.
+fn database_variant(stack: &str) -> Result<String, Box<dyn Error>> {
+	chosen_variant("backend", "database", stack)
+}
+
+/// The variant `cuilo add <pack>/<piece>` picks in an empty project with `stack`.
+fn chosen_variant(pack_name: &str, piece: &str, stack: &str) -> Result<String, Box<dyn Error>> {
+	let pack = pack(pack_name)?;
+	let (_, engine) = project(stack, &[])?;
+	let inputs = inputs(&pack, piece)?;
+	let plan = engine.plan(&PieceRequest {
+		pack: &pack,
+		piece,
+		inputs: &inputs,
+		variant: None,
+		target: None,
+		granted: None,
+		force: false,
+		wire: false,
+	})?;
+	engine.apply(plan)?;
+	let lock = engine.lockfile()?;
+	let variant = lock.instances.first().and_then(|instance| instance.variant.as_ref());
+	Ok(variant.ok_or("no variant recorded")?.to_string())
+}
+
+#[test]
+fn database_should_pick_the_variant_of_the_project_s_framework_and_orm() -> TestResult {
+	for (stack, expected) in [
+		(
+			r#"{"framework": ["hono"], "language": ["typescript"], "database": ["drizzle"]}"#,
+			"hono-drizzle",
+		),
+		(
+			r#"{"framework": ["hono"], "language": ["typescript"], "database": ["prisma"]}"#,
+			"hono-prisma",
+		),
+		(
+			r#"{"framework": ["hono"], "language": ["typescript"], "database": ["prisma", "drizzle"]}"#,
+			"hono-drizzle",
+		),
+		(
+			r#"{"framework": ["express"], "language": ["typescript"], "database": ["drizzle"]}"#,
+			"express-drizzle",
+		),
+		(
+			r#"{"framework": ["express"], "language": ["typescript"], "database": ["prisma"]}"#,
+			"express-prisma",
+		),
+		(r#"{"framework": ["axum"], "database": ["sqlx"]}"#, "axum"),
+		(r#"{"framework": ["fastapi"], "database": ["sqlalchemy"]}"#, "fastapi"),
+		(r#"{"framework": ["chi"], "database": ["gorm"]}"#, "chi"),
+		(r#"{"framework": ["echo", "echo-v4"], "database": ["gorm"]}"#, "echo"),
+		(r#"{"framework": ["echo", "echo-v5"], "database": ["gorm"]}"#, "echo-v5"),
+	] {
+		assert_eq!(database_variant(stack)?, expected, "{stack}");
+	}
+	Ok(())
+}
+
+#[test]
+fn database_should_refuse_a_project_without_a_supported_orm() -> TestResult {
+	for stack in [
+		r#"{"framework": ["hono"], "language": ["typescript"]}"#,
+		r#"{"framework": ["axum"], "database": ["diesel"]}"#,
+		r#"{"framework": ["chi"], "database": ["ent"]}"#,
+	] {
+		let error = database_variant(stack).err().ok_or("a variant matched")?;
+
+		assert!(error.to_string().contains("no variant matches"), "{stack}: {error}");
+	}
+	Ok(())
+}
+
+#[test]
+fn backend_and_ui_pieces_should_pick_the_variant_of_the_framework_s_major() -> TestResult {
+	for piece in ["error", "middleware", "resource"] {
+		assert_eq!(
+			chosen_variant("backend", piece, r#"{"framework": ["echo", "echo-v4"]}"#)?,
+			"echo"
+		);
+		assert_eq!(
+			chosen_variant("backend", piece, r#"{"framework": ["echo", "echo-v5"]}"#)?,
+			"echo-v5"
+		);
+	}
+	for piece in ["atom", "molecule", "organism"] {
+		let solid_2 = r#"{"framework": ["solid", "solid-v2"], "language": ["typescript"]}"#;
+		assert_eq!(chosen_variant("ui", piece, solid_2)?, "solid");
+	}
+	Ok(())
+}
+
+#[test]
+fn ui_pieces_should_refuse_solid_1_naming_the_major_they_need() -> TestResult {
+	for piece in ["atom", "molecule", "organism"] {
+		let solid_1 = r#"{"framework": ["solid", "solid-v1"], "language": ["typescript"]}"#;
+		let error = chosen_variant("ui", piece, solid_1).err().ok_or("a variant matched")?;
+
+		assert!(
+			error
+				.to_string()
+				.contains("the variants for solid need solid-v2, and the project has solid-v1"),
+			"{piece}: {error}"
+		);
+	}
+	Ok(())
+}
+
+#[test]
+fn prisma_resource_should_import_its_client_through_the_database_piece_in_each_import_style() -> TestResult {
+	for (style, client, database) in [
+		(
+			"imports-js",
+			"../generated/prisma/client.js",
+			"../../shared/database.js",
+		),
+		(
+			"imports-ts",
+			"../generated/prisma/client.ts",
+			"../../shared/database.ts",
+		),
+		(
+			"imports-extensionless",
+			"../generated/prisma/client",
+			"../../shared/database",
+		),
+	] {
+		let stack = format!(
+			r#"{{"framework": ["hono"], "language": ["typescript"], "database": ["prisma"], "import_style": ["{style}"]}}"#
+		);
+		let (listing, fs) = add_backend_pieces(&stack, &[], false, &["database", "resource"])?;
+		let imports = relative_imports(&fs);
+
+		assert!(
+			imports.contains(&("src/shared/database.ts".to_owned(), client.to_owned())),
+			"{style}: {imports:?}"
+		);
+		assert!(
+			imports.contains(&(
+				"src/modules/status-badges/status-badge.prisma-repository.ts".to_owned(),
+				database.to_owned()
+			)),
+			"{style}: {imports:?}"
+		);
+		assert!(!listing.contains("no file matches"), "{style}: {listing}");
+	}
+	Ok(())
+}
+
+#[test]
+fn backend_pack_should_wire_the_database_and_an_sqlx_resource_into_axum() -> TestResult {
+	let (listing, fs) = add_backend_pieces(
+		r#"{"framework": ["axum"], "database": ["sqlx"]}"#,
+		&[("src/main.rs", AXUM_MAIN)],
+		true,
+		&["database", "resource"],
+	)?;
+	let main = fs
+		.files()
+		.remove(&RelPath::new("src/main.rs")?)
+		.ok_or("entry file is gone")?;
+
+	insta::assert_snapshot!(format!("{listing}---\n{}", String::from_utf8_lossy(&main)));
 	Ok(())
 }

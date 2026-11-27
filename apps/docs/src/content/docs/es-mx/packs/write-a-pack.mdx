@@ -39,6 +39,7 @@ schema_version = 1
 name = "acme-ui"
 version = "0.1.0"
 description = "Cards for Acme apps."
+kinds = ["ui"]
 license = "MIT"
 
 [permissions]
@@ -47,6 +48,8 @@ dependencies = true
 ```
 
 `version` es una versión semántica. Cámbiala cada vez que cambien los archivos: en cuanto un proyecto fija una versión en `cuilo.lock`, cuilo rechaza archivos distintos con esa misma versión. Los nombres `ui` y `backend` son de los packs oficiales, así que un pack de cualquier otro origen tiene que usar otro nombre. Todas las claves están en la [referencia del manifiesto del pack](/es-mx/reference/pack-manifest/).
+
+`kinds` dice para qué es el pack: `ui`, `backend`, `mobile` o `desktop`, todos los que apliquen, cada uno una sola vez. El [directorio de packs](/es-mx/directory/) lista el pack en cada uno de sus tipos. El pack oficial `ui` declara `["ui", "mobile", "desktop"]`, porque sus componentes también corren en apps de Flutter, Compose Multiplatform, SwiftUI y Dioxus para teléfonos y escritorio.
 
 ### Permisos
 
@@ -204,7 +207,8 @@ Una pieza con `[[variants]]` tiene una carpeta de plantillas por stack. cuilo pr
 
 - `when` acepta los datos `framework`, `language`, `runtime`, `database`, `styling`, `package_manager`, `testing`, `formatter` e `import_style`. Corre `cuilo detect` para ver los datos de un proyecto, y lee [detección del stack](/es-mx/guides/stack-detection/) para saber cómo se obtienen.
 - Las plantillas de una variante están en `files/<name>`, a menos que `files` indique otra carpeta. Así, varias variantes pueden compartir una, por ejemplo `files = "files/typescript"`.
-- El `target` de una variante reemplaza el de la pieza. La variante de Compose del pack `ui` escribe en `app/src/main/java/com/example/app/ui/atoms`, y su variante de Flutter usa `""` porque también agrega archivos en `test/`.
+- El `target` de una variante reemplaza el de la pieza. La variante de Compose del pack `ui` escribe en el módulo `app`, con su código en `src/main/java` y sus pruebas en `src/test/java`, y su variante de Flutter usa `""` porque también agrega archivos en `test/`.
+- El `target` de una variante también puede listar alternativas en orden de preferencia: cuilo usa la primera carpeta que tiene el proyecto, y la primera alternativa cuando no tiene ninguna. La variante de Compose Multiplatform del pack `ui` usa `["shared", "composeApp"]`, para la estructura actual del asistente de KMP y la anterior. `cuilo.lock` registra la carpeta usada, así que las actualizaciones la conservan.
 - Una pieza sin variantes guarda sus plantillas en `files/`.
 
 Si ninguna variante coincide, cuilo se detiene con `no variant matches this project; available: …` y lista los nombres de las variantes.
@@ -304,6 +308,29 @@ variants = ["react"]
 `ecosystem` es `npm`, `cargo`, `pypi`, `go`, `pub`, `rubygems` o `packagist`. Las claves opcionales son `dev`, `features`, `variants` y `when`. Los planes listan estos paquetes y ofrecen agregarlos con el gestor de paquetes del proyecto; consulta [dependencias](/es-mx/guides/dependencies/).
 
 Un pack también puede incluir migraciones que corren al actualizar; consulta [actualizaciones](/es-mx/guides/updates/).
+
+## Descripciones en otros idiomas
+
+Las descripciones están en inglés: la del pack, la de cada pieza y la de cada entrada. Una tabla `[translations.<locale>]` las da en otro idioma, con una etiqueta de idioma en minúsculas como clave, por ejemplo `es-mx` o `pt-br`. Quien lee en ese idioma, como en las páginas en español del [directorio de packs](/es-mx/directory/), ve la traducción, y el texto en inglés donde la traducción no da uno.
+
+```toml title="pack.toml"
+[translations.es-mx]
+description = "Tarjetas para las apps de Acme."
+```
+
+```toml title="pieces/card/piece.toml"
+[translations.es-mx]
+description = "Una tarjeta con un título."
+
+[translations.es-mx.inputs]
+name = "Nombre del componente, p. ej. `user-card`."
+styled = "Agrega un módulo CSS."
+```
+
+- Una `description` traducida necesita una `description` en inglés que traducir, y no puede estar vacía.
+- Cada clave dentro de `inputs` nombra una entrada de la pieza que tiene `description`. La entrada `size` de arriba no tiene, así que traducirla hace que el pack no cargue, con `` `pieces/card/piece.toml`: translation `es-mx` describes input `size`, which has no `description` to translate ``.
+- Las claves de idioma van en minúsculas: `es-mx`, no `es-MX`.
+- cuilo sigue en inglés: las preguntas, los siguientes pasos y el texto de `cuilo pack show`.
 
 ## Pruébalo localmente
 

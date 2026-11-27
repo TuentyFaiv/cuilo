@@ -1,0 +1,198 @@
+name: Packs
+
+# Generates every official piece in every variant into the fixture projects of fixtures/stacks/ and runs each
+# ecosystem's checks and tests (`cargo xtask verify-packs`). Mark `packs-ok` as the required check: it passes when
+# the verification passed or was not needed.
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+    inputs:
+      latest:
+        description: Update every fixture dependency to its newest release first, as the nightly run does
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  changes:
+    name: Relevant changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      verify: ${{ steps.diff.outputs.verify }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Look for changes to the packs, the engine, the fixtures or this workflow
+        id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          case "$EVENT" in
+            pull_request) base="HEAD^1" ;;
+            push) base="$BEFORE" ;;
+            *) base="" ;;
+          esac
+          if [ -z "$base" ] || ! git rev-parse --verify --quiet "$base^{commit}" > /dev/null; then
+            verify=true
+          elif git diff --name-only "$base" HEAD \
+            | grep -qE '^(packs/|crates/(cuilo|cuilo-core|cuilo-packs|xtask)/|fixtures/|Cargo\.lock$|rust-toolchain\.toml$|\.github/workflows/packs\.yml$)'; then
+            verify=true
+          else
+            verify=false
+          fi
+          echo "verify=$verify" | tee -a "$GITHUB_OUTPUT"
+
+  verify:
+    name: Verify (${{ matrix.group }})
+    needs: changes
+    if: needs.changes.outputs.verify == 'true'
+    strategy:
+      matrix:
+        include:
+          - group: typescript
+            os: ubuntu-latest
+          - group: rust
+            os: ubuntu-latest
+          - group: go
+            os: ubuntu-latest
+          - group: python
+            os: ubuntu-latest
+          - group: flutter
+            os: ubuntu-latest
+          - group: kotlin
+            os: ubuntu-latest
+          # Xcode 27, which the SwiftUI fixtures target, is only on this image; macos-latest has Xcode 26.
+          - group: swift
+            os: xcode-27
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      GROUP: ${{ matrix.group }}
+      LATEST: ${{ github.event_name == 'schedule' || inputs.latest == true }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - if: matrix.group == 'typescript'
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+      - if: matrix.group == 'typescript'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26.13.0"
+          package-manager-cache: false
+      - if: matrix.group == 'go'
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version: "1.27.4"
+          cache-dependency-path: fixtures/stacks/*/go.sum
+      - if: matrix.group == 'python'
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: "0.13.10"
+          enable-cache: true
+          cache-dependency-glob: fixtures/stacks/*/uv.lock
+      - if: matrix.group == 'flutter'
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          flutter-version: "3.50.1"
+          cache: true
+      - if: matrix.group == 'kotlin'
+        uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          min-wrapper-count: 2
+      - if: matrix.group == 'kotlin'
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: gradle
+          cache-dependency-path: |
+            fixtures/stacks/*/gradle/libs.versions.toml
+            fixtures/stacks/*/gradle/wrapper/gradle-wrapper.properties
+      - name: Select the Xcode the SwiftUI fixtures target
+        if: matrix.group == 'swift'
+        env:
+          XCODE: "27.2"
+        run: |
+          sudo xcode-select --switch "/Applications/Xcode_$XCODE.app"
+          xcodebuild -version
+      - name: Install cargo-edit for `cargo upgrade`
+        if: matrix.group == 'rust' && env.LATEST == 'true'
+        run: cargo install cargo-edit@0.13.14 --locked --no-default-features --features upgrade
+      - name: Verify the packs
+        run: |
+          if [ "$LATEST" = true ]; then
+            cargo xtask verify-packs --group "$GROUP" --require-toolchains --latest
+          else
+            cargo xtask verify-packs --group "$GROUP" --require-toolchains
+          fi
+      - name: Remove the fixture copies so the Rust cache keeps only the workspace build
+        if: always()
+        run: rm -rf target/verify-packs
+
+  packs-ok:
+    name: packs-ok
+    needs: [changes, verify]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Pass when every group passed or none had to run
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          VERIFY: ${{ needs.verify.result }}
+        run: |
+          echo "changes: $CHANGES, verify: $VERIFY"
+          [ "$CHANGES" = success ] && { [ "$VERIFY" = success ] || [ "$VERIFY" = skipped ]; }
+
+  nightly-issue:
+    name: Report the nightly failure
+    needs: verify
+    if: always() && github.event_name == 'schedule' && needs.verify.result == 'failure'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write # to open the nightly failure issue or comment on it
+    steps:
+      - name: Open an issue, or comment on the open one
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHA: ${{ github.sha }}
+        run: |
+          title="Nightly pack verification fails with the newest dependencies"
+          body="The nightly \`cargo xtask verify-packs --latest\` failed on $SHA: $RUN_URL
+
+          Reproduce it locally with the command the failing job prints, e.g. \`cargo xtask verify-packs --latest --stack <stack> --piece <pack/piece>\`."
+          number="$(gh issue list --state open --search "\"$title\" in:title" --json number,title \
+            --jq ".[] | select(.title == \"$title\") | .number" | head -n 1)"
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi

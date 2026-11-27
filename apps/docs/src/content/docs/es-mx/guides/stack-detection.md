@@ -101,6 +101,7 @@ Algunas reglas deciden los datos menos obvios:
 - El gestor de paquetes de JavaScript sale de `packageManager` en `package.json`. Si no está, cuilo busca `bun.lock`, `pnpm-lock.yaml`, `yarn.lock` y `package-lock.json`, en ese orden. Si no encuentra ninguno, usa `deno` en un proyecto de Deno y `npm` en cualquier otro.
 - El gestor de paquetes de Python es `uv` si hay un `uv.lock`, `poetry` si hay configuración de Poetry o un `poetry.lock`, `pdm` si hay un `pdm.lock`, `pipenv` si hay un `Pipfile`, y `pip` en cualquier otro caso.
 - Los frameworks con ORM propio lo agregan: Rails agrega `activerecord`, Laravel agrega `eloquent` y Django agrega `django-orm`.
+- Echo y Solid también agregan su versión mayor, como `echo-v5` o `solid-v2`, porque sus versiones mayores necesitan código distinto. La de Echo sale del `/v4` o `/v5` con que termina la ruta de su módulo en `go.mod`, y la de Solid, del rango de `solid-js` en `package.json`, como `^1.9.5` para `solid-v1`. Un rango que abarca varias versiones mayores, una etiqueta como `latest` y un protocolo como `catalog:` o `workspace:` no dan ninguna.
 - Los formateadores salen de las dependencias y de archivos de configuración como `biome.json`, `.prettierrc`, `eslint.config.js`, `dprint.json`, `ruff.toml` o `rustfmt.toml`, en un proyecto de cualquier lenguaje. Los proyectos de Rust también reciben `rustfmt`, y los de Go reciben `gofmt`.
 - `import_style` sale del `tsconfig.json` de la raíz, o de Deno. Luego cada pieza usa el de su propia carpeta. Consulta [Imports relativos en el código generado](#imports-relativos-en-el-código-generado).
 - Otros ecosistemas, como Elixir o .NET, no reciben ningún dato.
@@ -152,6 +153,14 @@ Cuando ninguna variante coincide, cuilo lista las que tiene la pieza. Un proyect
 error: no variant matches this project; available: angular, qwik, solid, astro, svelte, vue, react, lit, leptos, dioxus, yew, flutter, compose-multiplatform, compose, swiftui-package, swiftui
 ```
 
+Una variante escrita para una versión mayor la nombra, como la variante `solid` del pack `ui` hace con `solid-v2`. Cuando una variante falla solo porque le falta la versión mayor que necesita, cuilo lo dice. Un proyecto de Solid 1 recibe esto, porque el pack `ui` solo es compatible con Solid 2:
+
+```text
+error: no variant matches this project: the variants for solid need solid-v2, and the project has solid-v1; available: angular, qwik, solid, astro, svelte, vue, react, lit, leptos, dioxus, yew, flutter, compose-multiplatform, compose, swiftui-package, swiftui
+```
+
+Cuando `package.json` no da una versión que cuilo pueda leer, como `catalog:`, el mensaje lo dice, y puedes poner la versión mayor en `cuilo.json`, como en `"framework": ["solid", "solid-v2"]`. Consulta [Sobrescribe la detección](#sobrescribe-la-detección).
+
 Para elegir una variante en un solo comando, pasa `--variant`. Consulta [Packs y piezas](/es-mx/guides/packs-and-pieces/#elige-una-variante).
 
 `cuilo.lock` registra el stack, la variante y la carpeta con los que se generó cada pieza. [`cuilo update`](/es-mx/guides/updates/) genera la versión nueva del pack con esos mismos valores, así que si después cambias tu stack, una pieza que ya tienes no se pasa a otra variante.
@@ -196,7 +205,7 @@ Agrega `stack` a `cuilo.json` cuando la detección se equivoca con tu proyecto. 
 }
 ```
 
-En el proyecto de React de [Tu primera pieza](/es-mx/first-piece/), `cuilo detect` ahora muestra:
+En un proyecto cuyo `package.json` solo lista `react` y `typescript`, `cuilo detect` ahora muestra:
 
 ```text
 {

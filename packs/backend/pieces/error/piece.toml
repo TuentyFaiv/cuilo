@@ -9,6 +9,12 @@ description = "Add tests; on by default when the project can run them."
 prompt = "Add tests?"
 default_when = "stack.vitest || stack.pytest || stack.go || stack.rust"
 
+[translations.es-mx]
+description = "Errores de la aplicación con formato problem details de RFC 9457, con el manejador de errores del framework."
+
+[translations.es-mx.inputs]
+tests = "Agrega pruebas; se activa por defecto cuando el proyecto puede correrlas."
+
 [[variants]]
 name = "hono"
 when = { framework = "hono", language = "typescript" }
@@ -37,7 +43,13 @@ target = "internal/apperror"
 
 [[variants]]
 name = "echo"
-when = { framework = "echo" }
+when = { framework = "echo-v4" }
+files = "files/go"
+target = "internal/apperror"
+
+[[variants]]
+name = "echo-v5"
+when = { framework = "echo-v5" }
 files = "files/go"
 target = "internal/apperror"
 
@@ -47,6 +59,10 @@ when = "tests"
 
 [[files]]
 path = "tests/test_errors.py"
+when = "tests"
+
+[[files]]
+path = "tests/__init__.py"
 when = "tests"
 
 [[files]]
@@ -102,7 +118,7 @@ insert = "register_error_handlers(app)"
 
 [[steps]]
 text = "Send errors as problem details with `e.HTTPErrorHandler = apperror.Handler`."
-variants = ["echo"]
+variants = ["echo", "echo-v5"]
 
 [[dependencies]]
 ecosystem = "npm"

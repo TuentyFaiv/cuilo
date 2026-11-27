@@ -1,7 +1,7 @@
 ---
-import MobileMenuFooter from "@astrojs/starlight/components/MobileMenuFooter.astro";
 import MobileMenuToggle from "@astrojs/starlight/components/MobileMenuToggle.astro";
 
+import MobileMenuFooter from "./mobile-menu-footer.astro";
 import SectionTabs from "./section-tabs.astro";
 ---
 
@@ -10,7 +10,7 @@ import SectionTabs from "./section-tabs.astro";
 	<div popover id="starlight__sidebar" class="pane" data-mobile-menu>
 		<div class="pane-content">
 			<SectionTabs />
-			<div class="md:sl-hidden"><MobileMenuFooter /></div>
+			<div class="footer md:sl-hidden"><MobileMenuFooter /></div>
 		</div>
 	</div>
 </div>
@@ -51,6 +51,11 @@ import SectionTabs from "./section-tabs.astro";
 		display: flex;
 		flex-direction: column;
 		gap: 1rem;
+		min-height: 100%;
 		padding: 1rem var(--sl-sidebar-pad-x) 0;
+	}
+
+	.footer {
+		margin-top: auto;
 	}
 </style>

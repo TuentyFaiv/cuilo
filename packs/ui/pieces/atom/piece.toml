@@ -26,6 +26,15 @@ description = "Kotlin package for Jetpack Compose."
 example = "com.example.app"
 default = "com.example.app"
 
+[translations.es-mx]
+description = "El bloque de UI más pequeño, como un badge, un ícono o una etiqueta."
+
+[translations.es-mx.inputs]
+name = "Nombre del componente, p. ej. `status-badge`."
+tests = "Agrega un archivo de pruebas; se activa por defecto cuando el proyecto puede correrlo."
+app = "Nombre de la app: la carpeta de la app de SwiftUI o el paquete de Flutter."
+package = "Paquete de Kotlin para Jetpack Compose."
+
 [[variants]]
 name = "angular"
 when = { framework = "angular" }
@@ -36,7 +45,7 @@ when = { framework = "qwik", language = "typescript" }
 
 [[variants]]
 name = "solid"
-when = { framework = "solid", language = "typescript" }
+when = { framework = "solid-v2", language = "typescript" }
 
 [[variants]]
 name = "astro"
@@ -78,24 +87,22 @@ target = ""
 [[variants]]
 name = "compose-multiplatform"
 when = { framework = "compose-multiplatform" }
-files = "files/compose"
-target = "composeApp/src/commonMain/kotlin/com/example/app/ui/atoms"
+target = ["shared", "composeApp"]
 
 [[variants]]
 name = "compose"
 when = { framework = "compose" }
-target = "app/src/main/java/com/example/app/ui/atoms"
+target = "app"
 
 [[variants]]
 name = "swiftui-package"
 when = { language = "swift", package_manager = "swiftpm" }
-files = "files/swiftui"
-target = "Sources/ExampleApp/UI/Atoms"
+target = ""
 
 [[variants]]
 name = "swiftui"
 when = { language = "swift" }
-target = "ExampleApp/UI/Atoms"
+target = ""
 
 [[files]]
 path = "example-atom/example-atom.test.tsx"
@@ -103,6 +110,10 @@ when = "tests"
 
 [[files]]
 path = "example-atom/example-atom.test.ts"
+when = "tests"
+
+[[files]]
+path = "example-atom/example-atom.svelte.test.ts"
 when = "tests"
 
 [[files]]
@@ -121,9 +132,35 @@ when = "!stack.tailwind"
 path = "test/ui/atoms/example_atom_test.dart"
 when = "tests"
 
+[[files]]
+path = "src/test/java/com/example/app/ui/atoms/ExampleAtomTest.kt"
+when = "tests"
+
+[[files]]
+path = "src/jvmTest/kotlin/com/example/app/ui/atoms/ExampleAtomTest.kt"
+when = "tests"
+
+[[files]]
+path = "ExampleAppTests/UI/Atoms/ExampleAtomTests.swift"
+when = "tests"
+
+[[files]]
+path = "Tests/ExampleAppTests/UI/Atoms/ExampleAtomTests.swift"
+when = "tests"
+
 [[steps]]
 text = "Declare the module with `pub mod example_atom;` in `src/ui/atoms/mod.rs`, which `src/ui/mod.rs` declares with `pub mod atoms;`."
 variants = ["leptos", "dioxus", "yew"]
+
+[[steps]]
+text = "Let the tests run on the JVM with Robolectric: in `app/build.gradle.kts`, add `org.robolectric:robolectric` and `androidx.compose.ui:ui-test-junit4`, with the Compose BOM, to `testImplementation` and `androidx.compose.ui:ui-test-manifest` to `debugImplementation`, and set `testOptions.unitTests.isIncludeAndroidResources = true`."
+variants = ["compose"]
+when = "tests"
+
+[[steps]]
+text = "Let the tests run on the JVM target: add `org.jetbrains.compose.ui:ui-test` and `compose.desktop.currentOs` to the `jvmTest` dependencies of the module the piece is in, `shared` or `composeApp`."
+variants = ["compose-multiplatform"]
+when = "tests"
 
 [[dependencies]]
 ecosystem = "npm"
@@ -152,7 +189,7 @@ when = "tests"
 [[dependencies]]
 ecosystem = "npm"
 name = "@solidjs/testing-library"
-version = "^0.8"
+version = "^1.0.0-rc.2"
 dev = true
 variants = ["solid"]
 when = "tests"
@@ -172,3 +209,9 @@ version = "^2.4"
 dev = true
 variants = ["vue"]
 when = "tests"
+
+[[dependencies]]
+ecosystem = "pub"
+name = "material_ui"
+version = "^1.1.0"
+variants = ["flutter"]

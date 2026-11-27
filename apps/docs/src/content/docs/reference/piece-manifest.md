@@ -346,6 +346,26 @@ Condition on inputs or stack facts, e.g. `stack.vitest`.
 
 Default output folder, relative to the project root; may contain examples. Empty for the root.
 
+### `translations`
+
+**Type:** `map of object` · optional
+
+The piece's description and input descriptions in other languages, by locale, e.g.
+`[translations.es-mx]`. Readers in that locale see them, and the English text where they give none.
+
+#### `translations.<key>.description`
+
+**Type:** `string` · optional
+
+The piece's `description` in this locale; the piece must have a `description`.
+
+#### `translations.<key>.inputs`
+
+**Type:** `map of string` · optional
+
+Input descriptions in this locale, by input name, e.g. ``name = "Nombre del componente, p. ej.
+`status-badge`."``. Each must name an input of the piece that has a `description`.
+
 ### `variants`
 
 **Type:** `array of object` · optional
@@ -366,9 +386,11 @@ Recorded in the lockfile; lowercase letters, digits and `-`.
 
 #### `variants[].target`
 
-**Type:** `string` · optional
+**Type:** `string` or `array of string` · optional
 
-Output folder instead of the piece's `target`, e.g. `lib/ui` for Flutter.
+Output folder instead of the piece's `target`, e.g. `lib/ui` for Flutter. A list gives alternatives in order
+of preference, none of them the root: the first folder the project has is used, or the first alternative when
+it has none, e.g. `["shared", "composeApp"]`.
 
 #### `variants[].when`
 

@@ -19,6 +19,25 @@ The header tabs come from the sections in `src/sections.ts`, keyed by path prefi
 links that stay inside the section. When a page moves, add its old URL to `public/_redirects`, with and without the
 trailing slash.
 
+## Pack directory
+
+`src/components/packs/` draws the directory and the pack pages from `src/data/packs.json`. The generator copies each
+pack's `kinds` and every description's translations from the manifests, keeps each piece's inputs in its manifest's
+order, and records an example per variant: the files `cuilo add --dry-run` plans for it in an empty project. The pack
+page shows the folder of the example whose variant comes first in priority as the piece's output folder. Pages in
+another locale show the manifests' translations for it, and English where a pack has none; `llms.txt` stays English.
+`src/packs.ts` derives the rest, such as official packs being Built in. The directory keeps its search, filters and
+sort in the URL's query, and a pack page keeps its tab in the hash (`#tab-stacks`).
+
+`src/stack-priority.ts` is the one order the site lists stacks in, in the finder, the directory, the pack pages and
+`llms.txt`: Svelte, Astro, the Rust stacks (Leptos, Dioxus, Yew, Axum) and SwiftUI first, then the other UI stacks,
+then the other backend stacks. The finder lists pieces by the same order, so it starts on a Svelte piece. Variants
+for one stack with one ORM, such as `hono-drizzle`, count as that stack (Hono) in chips, filters and counts, and show
+their own name (`Hono · Drizzle`) where the site names the variant.
+
+The site has no native `<select>`: `src/components/select-menu.astro` is the one select the finder, the directory's
+sort and the language and theme pickers share.
+
 ## Deployment
 
 [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) builds and deploys the site from GitHub: a

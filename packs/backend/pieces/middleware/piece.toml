@@ -14,6 +14,13 @@ description = "Add tests; on by default when the project can run them."
 prompt = "Add tests?"
 default_when = "stack.vitest || stack.pytest || stack.go || stack.rust"
 
+[translations.es-mx]
+description = "Middleware que propaga o crea un encabezado de la solicitud, p. ej. `request-id`, y lo deja disponible para los manejadores."
+
+[translations.es-mx.inputs]
+name = "Nombre del encabezado sin `x-`, p. ej. `request-id` o `correlation-id`."
+tests = "Agrega pruebas; se activa por defecto cuando el proyecto puede correrlas."
+
 [[variants]]
 name = "hono"
 when = { framework = "hono", language = "typescript" }
@@ -42,7 +49,13 @@ target = "internal/middleware"
 
 [[variants]]
 name = "echo"
-when = { framework = "echo" }
+when = { framework = "echo-v4" }
+files = "files/go"
+target = "internal/middleware"
+
+[[variants]]
+name = "echo-v5"
+when = { framework = "echo-v5" }
 files = "files/go"
 target = "internal/middleware"
 
@@ -52,6 +65,14 @@ when = "tests"
 
 [[files]]
 path = "tests/middleware/test_request_id.py"
+when = "tests"
+
+[[files]]
+path = "tests/__init__.py"
+when = "tests"
+
+[[files]]
+path = "tests/middleware/__init__.py"
 when = "tests"
 
 [[files]]
@@ -104,7 +125,7 @@ variants = ["chi"]
 
 [[steps]]
 text = "Add the middleware with `e.Use(middleware.RequestId())`."
-variants = ["echo"]
+variants = ["echo", "echo-v5"]
 
 [[dependencies]]
 ecosystem = "npm"
@@ -117,7 +138,7 @@ when = "tests"
 [[dependencies]]
 ecosystem = "cargo"
 name = "uuid"
-version = "1"
+version = "1.10"
 features = ["v7"]
 variants = ["axum"]
 
@@ -159,4 +180,4 @@ when = "tests"
 ecosystem = "go"
 name = "github.com/google/uuid"
 version = "v1.6.0"
-variants = ["chi", "echo"]
+variants = ["chi", "echo", "echo-v5"]

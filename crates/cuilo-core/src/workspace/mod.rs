@@ -114,6 +114,15 @@ impl Workspace {
 		Ok(self.entry(path)? == Some(EntryKind::File))
 	}
 
+	/// Whether a folder exists at `path`; one reached through a symlink, or a symlink to one, does not count.
+	pub(crate) fn is_dir(&self, path: &RelPath) -> Result<bool, WorkspaceError> {
+		match self.entry(path) {
+			Ok(kind) => Ok(kind == Some(EntryKind::Dir)),
+			Err(WorkspaceError::NotADir(_) | WorkspaceError::Symlink(_)) => Ok(false),
+			Err(error) => Err(error),
+		}
+	}
+
 	/// Whether anything is at `path`: a file, a folder or a symlink.
 	pub(crate) fn occupied(&self, path: &RelPath) -> Result<bool, WorkspaceError> {
 		Ok(self.entry(path)?.is_some())

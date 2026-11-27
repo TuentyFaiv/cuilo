@@ -1,6 +1,10 @@
+// @cuilo if !stack.sqlx || tests
+#[cfg(test)] // @cuilo if stack.sqlx
 use std::collections::HashMap;
+#[cfg(test)] // @cuilo if stack.sqlx
 use std::sync::{PoisonError, RwLock};
 
+// @cuilo end
 // @cuilo if stack.sqlx
 use sqlx::PgPool;
 // @cuilo end
@@ -22,13 +26,16 @@ pub trait ExampleItemRepository: Send + Sync + 'static {
 	/// Deletes an item; returns whether it existed.
 	fn delete(&self, id: Uuid) -> impl Future<Output = Result<bool, AppError>> + Send;
 }
+// @cuilo if !stack.sqlx || tests
 
 /// Keeps example items in memory, for tests and prototypes.
+#[cfg(test)] // @cuilo if stack.sqlx
 #[derive(Debug, Default)]
 pub struct InMemoryExampleItemRepository {
 	items: RwLock<HashMap<Uuid, ExampleItem>>,
 }
 
+#[cfg(test)] // @cuilo if stack.sqlx
 impl ExampleItemRepository for InMemoryExampleItemRepository {
 	async fn list(&self, limit: u32, offset: u32) -> Result<Vec<ExampleItem>, AppError> {
 		let items = self.items.read().unwrap_or_else(PoisonError::into_inner);
@@ -59,6 +66,7 @@ impl ExampleItemRepository for InMemoryExampleItemRepository {
 		Ok(self.items.write().unwrap_or_else(PoisonError::into_inner).remove(&id).is_some())
 	}
 }
+// @cuilo end
 // @cuilo if stack.sqlx
 
 /// Stores example items in the PostgreSQL table `example_items`.

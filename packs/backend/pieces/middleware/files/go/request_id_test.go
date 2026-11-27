@@ -6,7 +6,8 @@ import (
 	"testing"
 // @cuilo if stack.echo
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4" // @cuilo if !stack.echo-v5
+	"github.com/labstack/echo/v5" // @cuilo if stack.echo-v5
 // @cuilo end
 )
 
@@ -19,7 +20,8 @@ func send(header string) *httptest.ResponseRecorder {
 // @cuilo if stack.echo
 	app := echo.New()
 	app.Use(RequestId())
-	app.GET("/", func(c echo.Context) error { return c.String(http.StatusOK, RequestIdFrom(c.Request().Context())) })
+	app.GET("/", func(c echo.Context) error { return c.String(http.StatusOK, RequestIdFrom(c.Request().Context())) }) // @cuilo if !stack.echo-v5
+	app.GET("/", func(c *echo.Context) error { return c.String(http.StatusOK, RequestIdFrom(c.Request().Context())) }) // @cuilo if stack.echo-v5
 	app.ServeHTTP(recorder, request)
 // @cuilo else
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(RequestIdFrom(r.Context()))) })

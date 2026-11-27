@@ -7,7 +7,8 @@ import (
 	"regexp"
 
 	"github.com/google/uuid"
-	"github.com/labstack/echo/v4" // @cuilo if stack.echo
+	"github.com/labstack/echo/v4" // @cuilo if stack.echo && !stack.echo-v5
+	"github.com/labstack/echo/v5" // @cuilo if stack.echo-v5
 )
 
 // RequestIdHeader carries the request id.
@@ -34,7 +35,8 @@ func requestId(incoming string) string {
 // RequestId reuses a valid incoming request id or creates one, stores it in the request context and echoes it.
 func RequestId() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
+		return func(c echo.Context) error { // @cuilo if !stack.echo-v5
+		return func(c *echo.Context) error { // @cuilo if stack.echo-v5
 			id := requestId(c.Request().Header.Get(RequestIdHeader))
 			c.SetRequest(c.Request().WithContext(context.WithValue(c.Request().Context(), requestIdKey{}, id)))
 			c.Response().Header().Set(RequestIdHeader, id)

@@ -39,6 +39,7 @@ schema_version = 1
 name = "acme-ui"
 version = "0.1.0"
 description = "Cards for Acme apps."
+kinds = ["ui"]
 license = "MIT"
 
 [permissions]
@@ -47,6 +48,8 @@ dependencies = true
 ```
 
 `version` is a semantic version. Change it whenever the files change: once a project pins a version in `cuilo.lock`, cuilo refuses different files under the same version. The names `ui` and `backend` belong to the official packs, so a pack from any other source must use another name. Every key is listed in the [pack manifest reference](/reference/pack-manifest/).
+
+`kinds` says what the pack is for: `ui`, `backend`, `mobile` or `desktop`, as many as apply, each once. The [pack directory](/directory/) lists the pack under each of its kinds. The official `ui` pack declares `["ui", "mobile", "desktop"]`, since its components also run in Flutter, Compose Multiplatform, SwiftUI and Dioxus apps on phones and desktops.
 
 ### Permissions
 
@@ -204,7 +207,8 @@ A piece with `[[variants]]` has one template folder per stack. cuilo tries the v
 
 - `when` takes the facts `framework`, `language`, `runtime`, `database`, `styling`, `package_manager`, `testing`, `formatter` and `import_style`. Run `cuilo detect` to see a project's facts, and read [stack detection](/guides/stack-detection/) for how they are found.
 - A variant's templates are in `files/<name>` unless `files` names another folder, so several variants can share one, e.g. `files = "files/typescript"`.
-- A variant's `target` replaces the piece's. The `ui` pack's Compose variant writes to `app/src/main/java/com/example/app/ui/atoms`, and its Flutter variant uses `""` because it also adds files under `test/`.
+- A variant's `target` replaces the piece's. The `ui` pack's Compose variant writes into the `app` module, with its sources under `src/main/java` and its tests under `src/test/java`, and its Flutter variant uses `""` because it also adds files under `test/`.
+- A variant's `target` can also list alternatives in order of preference: cuilo uses the first folder the project has, and the first alternative when it has none. The `ui` pack's Compose Multiplatform variant uses `["shared", "composeApp"]`, for the current layout of the KMP wizard and the older one. `cuilo.lock` records the folder used, so updates keep it.
 - A piece without variants keeps its templates in `files/`.
 
 If no variant matches, cuilo stops with `no variant matches this project; available: …` and lists the variant names.
@@ -304,6 +308,29 @@ variants = ["react"]
 `ecosystem` is `npm`, `cargo`, `pypi`, `go`, `pub`, `rubygems` or `packagist`. Optional keys are `dev`, `features`, `variants` and `when`. Plans list these packages and offer to add them with the project's package manager; see [dependencies](/guides/dependencies/).
 
 A pack can also ship migrations that run on update; see [updates](/guides/updates/).
+
+## Descriptions in other languages
+
+Descriptions are in English: the pack's, each piece's and each input's. A `[translations.<locale>]` table gives them in another language, keyed by a lowercase language tag such as `es-mx` or `pt-br`. Readers in that locale, such as the Spanish pages of the [pack directory](/directory/), see the translation, and the English text wherever it gives none.
+
+```toml title="pack.toml"
+[translations.es-mx]
+description = "Tarjetas para las apps de Acme."
+```
+
+```toml title="pieces/card/piece.toml"
+[translations.es-mx]
+description = "Una tarjeta con un título."
+
+[translations.es-mx.inputs]
+name = "Nombre del componente, p. ej. `user-card`."
+styled = "Agrega un módulo CSS."
+```
+
+- A translated `description` needs an English `description` to translate, and can't be empty.
+- Each key under `inputs` names an input of the piece that has a `description`. The `size` input above has none, so translating it stops the pack from loading with `` `pieces/card/piece.toml`: translation `es-mx` describes input `size`, which has no `description` to translate ``.
+- Locale keys are lowercase: `es-mx`, not `es-MX`.
+- cuilo itself stays in English: prompts, next steps and the text of `cuilo pack show`.
 
 ## Test it locally
 

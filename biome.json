@@ -21,6 +21,7 @@
 			"!!apps/docs/src/content/docs/reference/pack-manifest.md",
 			"!!apps/docs/src/content/docs/reference/piece-manifest.md",
 			"!!crates/*/tests/fixtures",
+			"!!fixtures",
 			"!!packs/*/pieces/*/files",
 			"!!schemas",
 			"!!**/node_modules",

@@ -6,7 +6,7 @@ use std::collections::btree_map::Entry;
 use super::{Engine, EngineError, PieceRequest};
 use crate::model::{Digest, Input, Name, Permissions, RelPath, Stack, Values, or_list};
 use crate::pack::{
-	Pack, Piece, RenderRequest, Rendered, RenderedFile, RenderedPatch, RenderedStep, render, resolve_inputs,
+	Pack, Piece, RenderRequest, Rendered, RenderedFile, RenderedPatch, RenderedStep, own_targets, render, resolve_inputs,
 	target as render_target,
 };
 use crate::patch::{Patch, PatchError, Patched};
@@ -89,13 +89,21 @@ impl Engine {
 		target: Option<&RelPath>,
 		stack: &Stack,
 	) -> Result<(), EngineError> {
-		let request = RenderRequest {
+		let mut request = RenderRequest {
 			piece,
 			values,
 			stack,
 			variant,
 			target: target.or_else(|| self.config.paths.get(piece.manifest().name.as_str())),
 		};
+		let found = if request.target.is_none() {
+			self.found_target(&request)?
+		} else {
+			None
+		};
+		if found.is_some() {
+			request.target = found.as_ref();
+		}
 		let stack = &self.piece_stack(stack, render_target(&request)?.as_ref());
 		let rendered = render(&RenderRequest { stack, ..request })?;
 		let Rendered {
@@ -135,6 +143,21 @@ impl Engine {
 		}
 		added.instances.push(instance);
 		Ok(())
+	}
+
+	/// The first of the piece's own folders for `request` that the project has, when it lists alternatives;
+	/// `None` leaves the choice to the render, which takes the first.
+	fn found_target(&self, request: &RenderRequest<'_>) -> Result<Option<RelPath>, EngineError> {
+		let alternatives = own_targets(request)?;
+		if alternatives.len() < 2 {
+			return Ok(None);
+		}
+		for folder in alternatives.into_iter().flatten() {
+			if self.workspace.is_dir(&folder)? {
+				return Ok(Some(folder));
+			}
+		}
+		Ok(None)
 	}
 
 	pub(super) fn values(

@@ -1,4 +1,5 @@
-import { type ComponentProps, type JSX, Show, createUniqueId, splitProps } from "solid-js";
+import type { ComponentProps, JSX } from "@solidjs/web";
+import { Show, createUniqueId, omit } from "solid-js";
 // @cuilo if !stack.tailwind
 
 import styles from "./example-molecule.module.css";
@@ -24,7 +25,7 @@ const classes = styles;
 
 /** Groups atoms under one accessible label, such as a field with its hint. */
 export function ExampleMolecule(props: ExampleMoleculeProps) {
-	const [local, rest] = splitProps(props, ["label", "description", "class", "children"]);
+	const rest = omit(props, "label", "description", "class", "children");
 	const id = createUniqueId();
 	const labelId = `${id}-label`;
 	const descriptionId = `${id}-description`;
@@ -33,18 +34,18 @@ export function ExampleMolecule(props: ExampleMoleculeProps) {
 		<fieldset
 			{...rest}
 			aria-labelledby={labelId}
-			aria-describedby={local.description ? descriptionId : undefined}
-			class={[classes.root, local.class].filter(Boolean).join(" ")}
+			aria-describedby={props.description ? descriptionId : undefined}
+			class={[classes.root, props.class]}
 		>
 			<span id={labelId} class={classes.label}>
-				{local.label}
+				{props.label}
 			</span>
-			<Show when={local.description}>
+			<Show when={props.description}>
 				<p id={descriptionId} class={classes.description}>
-					{local.description}
+					{props.description}
 				</p>
 			</Show>
-			<div class={classes.content}>{local.children}</div>
+			<div class={classes.content}>{props.children}</div>
 		</fieldset>
 	);
 }

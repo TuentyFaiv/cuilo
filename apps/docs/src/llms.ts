@@ -2,6 +2,7 @@ import { getCollection } from "astro:content";
 
 import packs from "./data/packs.json" with { type: "json" };
 import { SECTIONS } from "./sections";
+import { compareVariants } from "./stack-priority";
 
 /** The site the links in llms.txt point to. */
 export const SITE = "https://cuilo.dev";
@@ -50,7 +51,7 @@ export function packsText(): string {
 				"",
 				piece.description ?? "",
 				"",
-				`Stacks: ${piece.variants.join(", ") || "any"}`,
+				`Stacks: ${[...piece.variants].sort(compareVariants).join(", ") || "any"}`,
 				"",
 				"Inputs:",
 				...inputs,

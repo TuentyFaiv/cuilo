@@ -31,7 +31,7 @@ Los packs oficiales vienen dentro del binario de cuilo, así que un cuilo más n
 | `backend/resource`   | Un recurso REST por capas: modelo, repositorio, servicio, rutas y pruebas    | `src/modules/<plural>`  |
 | `backend/error`      | Errores de la aplicación con formato problem details de RFC 9457             | `src/shared`            |
 | `backend/middleware` | Middleware que propaga o crea un encabezado de la solicitud                  | `src/shared/middleware` |
-| `backend/database`   | Un motor async de SQLAlchemy, sesiones y una base declarativa para FastAPI   | `app`                   |
+| `backend/database`   | La conexión que usan los repositorios del ORM, leída de `DATABASE_URL`       | `src/shared`            |
 
 Algunas variantes usan su propia carpeta. Por ejemplo, Flutter escribe en `lib/`, Axum en `src/` y las variantes de Go en `internal/`. Las páginas de [ui](/es-mx/directory/ui/) y [backend](/es-mx/directory/backend/) listan cada stack y cada carpeta.
 
@@ -55,26 +55,26 @@ cuilo pack show backend
 
 ```text
 backend 0.2.0
-Layered backend pieces: REST resources, problem-details errors and middleware for Hono, Express, Axum, FastAPI, chi and Echo.
+Layered backend pieces: REST resources, problem-details errors, middleware and database connections for Axum, Hono, Express, FastAPI, chi and Echo.
 
-backend/database  SQLAlchemy async engine, sessions and the declarative base for FastAPI.
-  variants: fastapi
+backend/database  The database connection the `resource` repositories use, read from `DATABASE_URL`: an sqlx pool, a Drizzle or Prisma client, SQLAlchemy sessions or a GORM connection.
+  variants: hono-drizzle, hono-prisma, express-drizzle, express-prisma, axum, fastapi, chi, echo, echo-v5
 
 backend/error  Application errors rendered as RFC 9457 problem details, with the framework's error handler.
   -i tests=…  Add tests; on by default when the project can run them.
-  variants: hono, express, axum, fastapi, chi, echo
+  variants: hono, express, axum, fastapi, chi, echo, echo-v5
 
 backend/middleware  Middleware that propagates or creates a request header, e.g. `request-id`, and exposes it to handlers.
   -i name=…  Header name without `x-`, e.g. `request-id` or `correlation-id`.
   -i tests=…  Add tests; on by default when the project can run them.
-  variants: hono, express, axum, fastapi, chi, echo
+  variants: hono, express, axum, fastapi, chi, echo, echo-v5
 
 backend/resource  A REST resource in layers: model, repository, service, routes and tests; adds the `error` piece if missing.
   -i module=…  Go module path from `go.mod`.
   -i name=…  Singular name, e.g. `blog-post`.
   -i plural=…  Plural name for routes, tables and folders, e.g. `blog-posts`.
   -i tests=…  Add tests; on by default when the project can run them.
-  variants: hono, express, axum, fastapi, chi, echo
+  variants: hono, express, axum, fastapi, chi, echo, echo-v5
 ```
 
 El argumento después de la pieza llena su entrada `name`. Puedes escribirlo con cualquier combinación de mayúsculas y minúsculas, así que `blog-post` y `BlogPost` dan los mismos archivos. Define las demás entradas con `-i key=value`, una vez por entrada. Las entradas de verdadero o falso aceptan `true` o `false`, `yes` o `no`, `y` o `n`, `1` o `0`, y `on` u `off`.
@@ -140,7 +140,7 @@ cuilo elige la carpeta en este orden:
 
 1. `--target` en la línea de comandos.
 2. `paths` en `cuilo.json`.
-3. La carpeta propia de la variante, si tiene una.
+3. La carpeta propia de la variante, si tiene una; si lista alternativas, la primera que tiene el proyecto.
 4. La carpeta por defecto de la pieza.
 
 ```sh

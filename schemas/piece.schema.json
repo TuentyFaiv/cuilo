@@ -474,6 +474,27 @@
         }
       ]
     },
+    "PieceTranslation": {
+      "additionalProperties": false,
+      "description": "A piece's text in one locale.",
+      "properties": {
+        "description": {
+          "description": "The piece's `description` in this locale; the piece must have a `description`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "inputs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Input descriptions in this locale, by input name, e.g. ``name = \"Nombre del componente, p. ej.\n`status-badge`.\"``. Each must name an input of the piece that has a `description`.",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "Position": {
       "description": "Where an anchor patch inserts its text.",
       "oneOf": [
@@ -524,6 +545,23 @@
       ],
       "type": "object"
     },
+    "Targets": {
+      "anyOf": [
+        {
+          "description": "Path from the project root; may contain examples, and `\"\"` is the root itself.",
+          "type": "string"
+        },
+        {
+          "description": "Alternatives in order of preference, none of them the root: the first folder the project has is used, and the first alternative when it has none, e.g. `[\"shared\", \"composeApp\"]` for the two layouts of Compose Multiplatform. `cuilo.lock` records the folder used, so updates keep it.",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      ],
+      "description": "The folder the variant writes into, or alternatives in order of preference."
+    },
     "Variant": {
       "additionalProperties": false,
       "description": "A set of templates for one stack.",
@@ -540,11 +578,15 @@
           "description": "Recorded in the lockfile; lowercase letters, digits and `-`."
         },
         "target": {
-          "description": "Output folder instead of the piece's `target`, e.g. `lib/ui` for Flutter.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Targets"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Output folder instead of the piece's `target`, e.g. `lib/ui` for Flutter. A list gives alternatives in order\nof preference, none of them the root: the first folder the project has is used, or the first alternative when\nit has none, e.g. `[\"shared\", \"composeApp\"]`."
         },
         "when": {
           "additionalProperties": {
@@ -632,6 +674,16 @@
     "target": {
       "description": "Default output folder, relative to the project root; may contain examples. Empty for the root.",
       "type": "string"
+    },
+    "translations": {
+      "additionalProperties": false,
+      "description": "The piece's description and input descriptions in other languages, by locale, e.g.\n`[translations.es-mx]`. Readers in that locale see them, and the English text where they give none.",
+      "patternProperties": {
+        "^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$": {
+          "$ref": "#/$defs/PieceTranslation"
+        }
+      },
+      "type": "object"
     },
     "variants": {
       "description": "Stack-specific template sets, tried in order.",

@@ -11,6 +11,8 @@ export const collections = {
 			extend: z.object({
 				/** What a generated page is built from, shown under its title; set only by `cargo xtask docs`. */
 				generated: z.string().optional(),
+				/** The page draws its own header and spans the window: Starlight's title block, edit link and pagination are left out. */
+				fullBleed: z.boolean().optional(),
 			}),
 		}),
 	}),
