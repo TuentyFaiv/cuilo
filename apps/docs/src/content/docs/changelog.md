@@ -4,7 +4,7 @@ title: Changelog
 description: What is new in each cuilo version, starting with 2.0.0-alpha.0, the rewrite that replaces tfverse.
 ---
 
-## 2.0.0-alpha.0 (unreleased)
+## 2.0.0-alpha.0 (2026-11-27)
 
 The first version of cuilo 2. It is a rewrite of tfverse, the v1 CLI, under a new name: the command is `cuilo` and the npm package is `@cuilo/cli`. See [Migrating from v1](/migrating-from-v1/).
 

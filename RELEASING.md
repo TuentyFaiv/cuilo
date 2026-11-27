@@ -81,7 +81,8 @@ Apple notarization yet; that takes paid certificates.
   write access to `tuentyfaiv/homebrew-tap` only). Variable: `R2_BUCKET`.
 - [ ] **Immutable releases** (repository settings → General → Releases) so a published release cannot be edited.
 - [ ] **Tag protection**: a ruleset that only lets maintainers create `v*` tags.
-- [ ] **Homebrew tap**: create the public repository `tuentyfaiv/homebrew-tap` with an empty `Formula/` folder.
+- [ ] **Homebrew tap**: create the public repository `tuentyfaiv/homebrew-tap`; the release job adds `Formula/cuilo.rb`
+  through a pull request. `HOMEBREW_TAP_TOKEN` needs write access to its contents and pull requests.
 - [ ] **npm**: create the free npm organization `cuilo`, which owns the `@cuilo` scope. Trusted publishing can only
   be set on a package that exists, so claim the nine names first with `0.0.0` placeholders: a `package.json` with
   the name, version `0.0.0`, a description, the license and the repository, plus a README saying the release
