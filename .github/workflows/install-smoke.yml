@@ -1,0 +1,204 @@
+name: Install smoke test
+
+# Installs a published version through every channel on fresh runners and checks that it runs. The release workflow
+# calls it once the channels are published. The tap pull request is merged by hand, so only a manual run includes
+# Homebrew. Installing outside a lockfile is what this checks, hence the adhoc-packages ignores.
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: The published version, e.g. 2.0.0-alpha.1
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The published version, e.g. 2.0.0-alpha.1
+        type: string
+        required: true
+      homebrew:
+        description: Install with Homebrew too (merge the tap pull request for this version first)
+        type: boolean
+        default: true
+
+permissions: {}
+
+# A group of its own: in a call from release.yml, `github.workflow` and `github.ref` are the caller's.
+concurrency:
+  group: install-smoke-${{ inputs.version }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  version:
+    name: Check the version
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Check the version input
+        id: version
+        env:
+          INPUT: ${{ inputs.version }}
+        run: |
+          version="${INPUT#v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::the version must look like 2.0.0 or 2.0.0-alpha.1"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      # npm may not serve a version for a short while after accepting it.
+      - name: Wait until npm serves it
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          for _ in $(seq 20); do
+            if curl --proto '=https' --tlsv1.2 -fs -o /dev/null "https://registry.npmjs.org/@cuilo%2Fcli/$VERSION"; then
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::npm does not serve @cuilo/cli@$VERSION"
+          exit 1
+
+  install:
+    name: ${{ matrix.channel }} (${{ matrix.os }})
+    needs: version
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+        channel: [script, npm, pnpm, bun, yarn, binstall]
+        include:
+          # A build from source adds a check of the published crates, which are the same on every OS.
+          - os: ubuntu-latest
+            channel: cargo-install
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions: {}
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - name: Install with install.sh
+        if: matrix.channel == 'script' && runner.os != 'Windows'
+        run: |
+          curl --proto '=https' --tlsv1.2 -fsSL https://dl.cuilo.dev/install.sh | CUILO_VERSION="$VERSION" sh
+          echo "$HOME/.cuilo/bin" >> "$GITHUB_PATH"
+      - name: Install with install.ps1
+        if: matrix.channel == 'script' && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:CUILO_VERSION = $env:VERSION
+          irm https://dl.cuilo.dev/install.ps1 | iex
+          Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $HOME '.cuilo\bin')
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: contains(fromJSON('["npm", "pnpm", "yarn"]'), matrix.channel)
+        with:
+          node-version: lts/*
+          package-manager-cache: false
+      - name: Install with npm
+        if: matrix.channel == 'npm'
+        run: npm install --global "@cuilo/cli@$VERSION" # zizmor: ignore[adhoc-packages]
+      # pnpm refuses a global install until its bin folder is on PATH, so the folder is chosen first.
+      - name: Choose pnpm's global folder
+        if: matrix.channel == 'pnpm'
+        shell: pwsh
+        run: |
+          $pnpmHome = Join-Path $env:RUNNER_TEMP 'pnpm'
+          Add-Content -Path $env:GITHUB_ENV -Value "PNPM_HOME=$pnpmHome"
+          Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $pnpmHome 'bin')
+      - name: Install with pnpm
+        if: matrix.channel == 'pnpm'
+        run: | # zizmor: ignore[adhoc-packages]
+          npm install --global pnpm@12.23.0
+          pnpm add --global "@cuilo/cli@$VERSION"
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        if: matrix.channel == 'bun'
+        with:
+          bun-version: 1.4.5
+      - name: Install with Bun
+        if: matrix.channel == 'bun'
+        run: |
+          bun add --global "@cuilo/cli@$VERSION"
+          bun pm bin --global >> "$GITHUB_PATH"
+      - name: Install with Yarn
+        if: matrix.channel == 'yarn'
+        run: | # zizmor: ignore[adhoc-packages]
+          npm install --global yarn@1.22.22
+          yarn global add "@cuilo/cli@$VERSION"
+          yarn global bin >> "$GITHUB_PATH"
+
+      - uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
+        if: matrix.channel == 'binstall'
+        with:
+          tool: cargo-binstall@1.26.2
+      # The documented flags plus `compile`, so a missing or badly signed binary fails instead of building from source.
+      - name: Install with cargo binstall
+        if: matrix.channel == 'binstall'
+        run: cargo binstall cuilo --version "$VERSION" --disable-strategies quick-install,compile --no-confirm
+      - name: Build from crates.io with cargo install
+        if: matrix.channel == 'cargo-install'
+        run: cargo install cuilo --locked --version "$VERSION"
+
+      - name: Check that it runs and generates from its embedded packs offline
+        run: |
+          command -v cuilo
+          installed="$(cuilo --version | tr -d '\r')"
+          if [ "$installed" != "cuilo $VERSION" ]; then
+            echo "::error::expected cuilo $VERSION, got $installed"
+            exit 1
+          fi
+          cuilo --help
+          cd "$(mktemp -d)"
+          printf '{"devDependencies":{"svelte":"^5.0.0","typescript":"^5.0.0"}}\n' > package.json
+          plan="$(cuilo --json --no-input add ui/atom badge --dry-run)"
+          printf '%s\n' "$plan"
+          grep -qF '"path": "src/ui/atoms/badge/badge.svelte"' <<< "$plan"
+          [ "$(ls -A)" = package.json ]
+
+  homebrew:
+    name: homebrew (${{ matrix.os }})
+    needs: version
+    if: inputs.homebrew
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions: {}
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - name: Put Homebrew on PATH
+        if: runner.os == 'Linux'
+        run: echo /home/linuxbrew/.linuxbrew/bin >> "$GITHUB_PATH"
+      - name: Check that the tap has this version
+        run: |
+          brew tap tuentyfaiv/tap
+          formula="$(brew info --json=v2 tuentyfaiv/tap/cuilo | jq -r '.formulae[0].versions.stable')"
+          if [ "$formula" != "$VERSION" ]; then
+            echo "::error::tuentyfaiv/tap has cuilo $formula, not $VERSION; merge the tap pull request first"
+            exit 1
+          fi
+      - name: Install with Homebrew
+        run: brew install tuentyfaiv/tap/cuilo
+
+      - name: Check that it runs and generates from its embedded packs offline
+        run: |
+          command -v cuilo
+          installed="$(cuilo --version | tr -d '\r')"
+          if [ "$installed" != "cuilo $VERSION" ]; then
+            echo "::error::expected cuilo $VERSION, got $installed"
+            exit 1
+          fi
+          cuilo --help
+          cd "$(mktemp -d)"
+          printf '{"devDependencies":{"svelte":"^5.0.0","typescript":"^5.0.0"}}\n' > package.json
+          plan="$(cuilo --json --no-input add ui/atom badge --dry-run)"
+          printf '%s\n' "$plan"
+          grep -qF '"path": "src/ui/atoms/badge/badge.svelte"' <<< "$plan"
+          [ "$(ls -A)" = package.json ]

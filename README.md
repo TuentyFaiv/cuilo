@@ -59,8 +59,10 @@ made and what protects them.
 The npm package has no dependencies and runs
 nothing at install time: the package manager picks the one platform package (`@cuilo/cli-darwin-arm64`,
 `…-linux-x64-musl`, …) that matches the system. The install scripts put `cuilo` in `~/.cuilo/bin`
-(`CUILO_INSTALL` changes it; `CUILO_VERSION` or an argument picks a version, else the newest stable one), and
-`CUILO_REQUIRE_SIGNATURE=1` makes them refuse to install without checking the signature. Only those copies update
+(`CUILO_INSTALL` changes it; `CUILO_VERSION` or an argument picks a version, else the newest stable one, or the newest
+pre-release while there is no stable one). Until 2.0 is stable, npm's `latest` tag is the newest pre-release too, but
+Cargo installs a pre-release only when it is named: `cargo binstall cuilo --version <version>`.
+`CUILO_REQUIRE_SIGNATURE=1` makes the scripts refuse to install without checking the signature. Script copies update
 themselves, once a day in the background or with `cuilo upgrade`, and only when the release's `SHA256SUMS` carries a
 valid signature by the release key built into cuilo; without `--version`, they never move to an older version. For
 global installs made another way, `cuilo upgrade` runs their package manager, and the daily check prints a notice
@@ -390,10 +392,10 @@ out of the lockfile, so the next update offers it again.
 and runs the stack's own tools on the result: svelte-check, `astro check`, `ng build`, `tsc` or `vue-tsc`,
 `cargo clippy -- -D warnings`, `go vet` and `gofmt -l`, strict mypy, `flutter analyze` with infos and warnings
 fatal, the Kotlin compiler with `allWarningsAsErrors` (plus Android lint with warnings as errors for Jetpack
-Compose), and `xcodebuild build` or `swift build` with warnings as errors. Then it runs the tests the piece wrote
-(Vitest, `ng test`, `cargo test`, `go test`, pytest, `flutter test`, Robolectric through `testDebugUnitTest`,
-Compose's UI tests through `jvmTest`, and Swift Testing through `xcodebuild test` on an iOS simulator and
-`swift test`). The `swiftui-package` tests import the library without `@testable`, so a view or initializer that is
+Compose), and `xcodebuild build-for-testing` or `swift build` with warnings as errors. Then it runs the tests the
+piece wrote (Vitest, `ng test`, `cargo test`, `go test`, pytest, `flutter test`, Robolectric through
+`testDebugUnitTest`, Compose's UI tests through `jvmTest`, and Swift Testing through `xcodebuild
+test-without-building` on one iOS simulator, without parallel clones so it boots once per run, and `swift test`). The `swiftui-package` tests import the library without `@testable`, so a view or initializer that is
 not `public` fails the run. No database is needed: commands see a placeholder `DATABASE_URL`.
 
 ```bash

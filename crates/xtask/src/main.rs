@@ -30,6 +30,7 @@ Tasks:
 Release tasks:
   version                   Print the version every channel ships
   release-check             Check that every channel agrees, and nothing still blocks a release
+  release-notes             Print this version's changelog section, for the GitHub Release
   download-url              Print the download host the channels fetch from
   channels <latest> <pre>   Print the channel files this version moves forward, given the
                             versions they name now (empty for none)
@@ -200,6 +201,7 @@ fn release_task(name: &str, args: &[String]) -> Option<Result<(), String>> {
 				Err(problems.join("\n"))
 			}
 		}),
+		"release-notes" => release::notes().map(|notes| print!("{notes}")),
 		"download-url" => release::download_url().map(|url| println!("{url}")),
 		"channels" => {
 			let current = |index: usize| args.get(index).map_or("", String::as_str);

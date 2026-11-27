@@ -11,6 +11,15 @@ use serde_json::{Value, json};
 /// The workspace version, the one version of every channel.
 pub(crate) const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// The changelogs, English first, with the word each heading uses until its version is released.
+const CHANGELOGS: [(&str, &str); 2] = [
+	("apps/docs/src/content/docs/changelog.md", "unreleased"),
+	("apps/docs/src/content/docs/es-mx/changelog.md", "sin publicar"),
+];
+
+/// The docs site that the changelog's root-relative links point into.
+const SITE: &str = "https://cuilo.dev";
+
 /// A release target and its npm package.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Platform {
@@ -350,7 +359,41 @@ pub(crate) fn blockers() -> Result<Vec<String>, String> {
 			"brand::DOWNLOAD_URL is the placeholder `{download}`; set the Cloudflare download domain (RELEASING.md)"
 		));
 	}
+	for (path, unreleased) in CHANGELOGS {
+		match section(&read(&root.join(path))?, VERSION) {
+			None => blockers.push(format!("{path} has no section for {VERSION}")),
+			Some((heading, _)) if heading.contains(unreleased) => blockers.push(format!(
+				"{path} still calls {VERSION} {unreleased}; put the release date in its heading"
+			)),
+			Some(_) => {}
+		}
+	}
 	Ok(blockers)
+}
+
+/// This version's GitHub Release notes: its section of the English changelog.
+pub(crate) fn notes() -> Result<String, String> {
+	let (path, _) = CHANGELOGS[0];
+	notes_in(&read(&root().join(path))?, VERSION).ok_or_else(|| format!("{path} has no section for {VERSION}"))
+}
+
+/// `version`'s section of `changelog` without its heading, with links into the docs site made absolute.
+fn notes_in(changelog: &str, version: &str) -> Option<String> {
+	let (_, body) = section(changelog, version)?;
+	Some(format!("{}\n", body.trim().replace("](/", &format!("]({SITE}/"))))
+}
+
+/// `version`'s heading line in `changelog` and the text up to the next version's heading.
+fn section<'a>(changelog: &'a str, version: &str) -> Option<(&'a str, &'a str)> {
+	let heading = format!("## {version} ");
+	let start = if changelog.starts_with(&heading) {
+		0
+	} else {
+		changelog.find(&format!("\n{heading}"))? + 1
+	};
+	let (heading, body) = changelog[start..].split_once('\n').unwrap_or((&changelog[start..], ""));
+	let end = body.find("\n## ").map_or(body.len(), |end| end + 1);
+	Some((heading, &body[..end]))
 }
 
 /// The channel files this version moves forward, given the versions they name now (empty when a
@@ -383,6 +426,34 @@ mod tests {
 	#[test]
 	fn check_should_find_the_channels_in_agreement() -> Result<(), String> {
 		assert_eq!(check()?, Vec::<String>::new());
+		Ok(())
+	}
+
+	#[test]
+	fn section_should_end_at_the_next_version() {
+		let changelog = "---\ntitle: Changelog\n---\n\n## 2.0.1 (2027-01-02)\n\nFixed [a](/b/).\n\n### Bugs\n\n- c\n\n## 2.0.0 (2027-01-01)\n\nFirst.\n";
+
+		assert_eq!(
+			section(changelog, "2.0.1"),
+			Some(("## 2.0.1 (2027-01-02)", "\nFixed [a](/b/).\n\n### Bugs\n\n- c\n\n"))
+		);
+		assert_eq!(section(changelog, "2.0.0").map(|(_, body)| body), Some("\nFirst.\n"));
+		assert_eq!(section(changelog, "2.0"), None);
+	}
+
+	#[test]
+	fn notes_should_point_docs_links_at_the_site() {
+		let changelog = "## 2.0.1 (2027-01-02)\n\nSee [Install](/install/) and [Rust](https://rust-lang.org).\n";
+
+		assert_eq!(
+			notes_in(changelog, "2.0.1").as_deref(),
+			Some("See [Install](https://cuilo.dev/install/) and [Rust](https://rust-lang.org).\n")
+		);
+	}
+
+	#[test]
+	fn notes_should_find_this_versions_section() -> Result<(), String> {
+		assert_ne!(notes()?.trim(), "");
 		Ok(())
 	}
 

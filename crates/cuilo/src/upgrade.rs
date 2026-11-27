@@ -220,13 +220,13 @@ impl Install {
 
 	/// The command that puts `version` in place of this copy, or `None` for script and unknown
 	/// installs: for a global install the one `upgrade` runs, otherwise the one to run yourself.
-	/// Homebrew cannot pin a version, so it moves to its formula's. A one-off runner gets the dist-tag
-	/// when `version` is the `newest` release. `binstall` says whether `cargo-binstall` is on `PATH`.
+	/// Homebrew cannot pin a version, so it moves to its formula's. A one-off runner gets `@latest` when
+	/// `version` is the `newest` stable release and the version itself otherwise, because a pre-release's
+	/// dist-tag depends on whether a stable release exists. `binstall` says whether `cargo-binstall` is on `PATH`.
 	pub(crate) fn command(&self, version: &Version, newest: bool, binstall: bool) -> Option<Invocation> {
 		let package = format!("{}@{version}", brand::NPM_PACKAGE);
-		let tag = if version.pre.is_empty() { "latest" } else { "next" };
-		let run = if newest {
-			format!("{}@{tag}", brand::NPM_PACKAGE)
+		let run = if newest && version.pre.is_empty() {
+			format!("{}@latest", brand::NPM_PACKAGE)
 		} else {
 			package.clone()
 		};
@@ -255,7 +255,7 @@ impl Install {
 					"--version",
 					&version,
 					"--disable-strategies",
-					"quick-install",
+					"quick-install,compile",
 					"--no-confirm",
 				],
 			),
@@ -1468,10 +1468,10 @@ pub(crate) mod tests {
 				Install::Global(Manager::Yarn),
 				"yarn global add @cuilo/cli@2.1.0-beta.1",
 			),
-			(Install::Ephemeral(Manager::Npm), "npx @cuilo/cli@next"),
-			(Install::Ephemeral(Manager::Pnpm), "pnpm dlx @cuilo/cli@next"),
-			(Install::Ephemeral(Manager::Bun), "bunx @cuilo/cli@next"),
-			(Install::Ephemeral(Manager::Yarn), "yarn dlx @cuilo/cli@next"),
+			(Install::Ephemeral(Manager::Npm), "npx @cuilo/cli@2.1.0-beta.1"),
+			(Install::Ephemeral(Manager::Pnpm), "pnpm dlx @cuilo/cli@2.1.0-beta.1"),
+			(Install::Ephemeral(Manager::Bun), "bunx @cuilo/cli@2.1.0-beta.1"),
+			(Install::Ephemeral(Manager::Yarn), "yarn dlx @cuilo/cli@2.1.0-beta.1"),
 			(project(Manager::Npm), "npm install --save-dev @cuilo/cli@2.1.0-beta.1"),
 			(project(Manager::Pnpm), "pnpm add --save-dev @cuilo/cli@2.1.0-beta.1"),
 			(project(Manager::Bun), "bun add --dev @cuilo/cli@2.1.0-beta.1"),
@@ -1485,7 +1485,7 @@ pub(crate) mod tests {
 
 		assert_eq!(
 			command(Install::Cargo, true, true).as_deref(),
-			Some("cargo binstall cuilo --version 2.1.0-beta.1 --disable-strategies quick-install --no-confirm")
+			Some("cargo binstall cuilo --version 2.1.0-beta.1 --disable-strategies quick-install,compile --no-confirm")
 		);
 		assert_eq!(
 			command(Install::Ephemeral(Manager::Npm), false, false).as_deref(),
@@ -1924,7 +1924,7 @@ pub(crate) mod tests {
 
 		assert_eq!(
 			*with.ran.borrow(),
-			["cargo binstall cuilo --version 99.0.0 --disable-strategies quick-install --no-confirm"]
+			["cargo binstall cuilo --version 99.0.0 --disable-strategies quick-install,compile --no-confirm"]
 		);
 		assert_eq!(*without.ran.borrow(), ["cargo install cuilo --locked --version 99.0.0"]);
 		Ok(())
