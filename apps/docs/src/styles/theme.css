@@ -18,6 +18,26 @@
 	--cu-radius: 0.75rem;
 	--cu-radius-small: 0.5rem;
 
+	/* Controls: inputs, select triggers and button-like actions. The default size is for fields, toolbars, the
+	   mobile menu and hero actions; the compact size is for the header and for actions inside cards and lists. */
+	--cu-control-height: 2.5rem;
+	--cu-control-pad-x: 0.875rem;
+	--cu-control-font-size: 0.875rem;
+	--cu-control-height-compact: 2rem;
+	--cu-control-pad-x-compact: 0.625rem;
+	--cu-control-font-size-compact: 0.8125rem;
+	/* Text fields and the select triggers beside them; below 16px, iOS Safari zooms in on focus. */
+	--cu-field-font-size: 1rem;
+	--cu-control-gap: 0.5rem;
+	--cu-control-radius: var(--cu-radius-small);
+	--cu-control-border: var(--cu-line);
+	--cu-control-border-hover: var(--cu-muted);
+	--cu-control-bg: var(--cu-surface);
+	--cu-control-bg-hover: var(--cu-surface-2);
+	--cu-control-primary-hover: rgb(160 30 54);
+	--cu-focus-ring: 2px solid var(--cu-accent-text);
+	--cu-focus-offset: 2px;
+
 	--cu-bg: rgb(12 13 16);
 	--cu-surface: rgb(21 23 28);
 	--cu-surface-2: rgb(27 30 36);
@@ -55,6 +75,8 @@
 	--sl-content-width: 48rem;
 	--sl-sidebar-width: 17.5rem;
 	--sl-nav-height: 4rem;
+	--sl-nav-gap: 0.5rem;
+	--sl-menu-button-size: var(--cu-control-height-compact);
 	--sl-line-height: 1.7;
 	--sl-text-h1: 2.75rem;
 	--sl-text-h2: 1.75rem;
@@ -196,38 +218,92 @@ nav.sidebar .group-label .large {
 	background: var(--cu-accent-3);
 }
 
-.cu-button {
+/* An input, select trigger or button-like action; `--compact` for the small size, `--icon` for a square. */
+.cu-control {
+	--cu-size: var(--cu-control-height);
 	display: inline-flex;
-	gap: 0.5rem;
+	flex: none;
+	gap: var(--cu-control-gap);
 	align-items: center;
-	padding: 0.6875rem 1.25rem;
-	font-size: 0.9375rem;
-	font-weight: 600;
+	justify-content: center;
+	min-width: 0;
+	min-height: var(--cu-size);
+	padding: 0.25rem var(--cu-control-pad-x);
+	font: inherit;
+	font-size: var(--cu-control-font-size);
+	font-weight: 500;
 	line-height: 1.2;
+	color: var(--cu-ink);
+	white-space: nowrap;
 	text-decoration: none;
-	border: 1px solid transparent;
-	border-radius: var(--cu-radius-small);
+	cursor: pointer;
+	background: var(--cu-control-bg);
+	border: 1px solid var(--cu-control-border);
+	border-radius: var(--cu-control-radius);
 }
 
-.cu-button--primary {
+.cu-control[hidden] {
+	display: none;
+}
+
+.cu-control > svg {
+	flex: none;
+	color: var(--cu-control-icon, var(--cu-muted));
+}
+
+.cu-control:hover {
+	color: var(--cu-ink);
+	border-color: var(--cu-control-border-hover);
+}
+
+.cu-control[data-copied] {
+	--cu-control-icon: var(--cu-ok);
+}
+
+.cu-control:is(:focus-visible, :has(:focus-visible)) {
+	outline: var(--cu-focus-ring);
+	outline-offset: var(--cu-focus-offset);
+}
+
+.cu-control--compact {
+	--cu-size: var(--cu-control-height-compact);
+	padding-inline: var(--cu-control-pad-x-compact);
+	font-size: var(--cu-control-font-size-compact);
+}
+
+.cu-control--icon {
+	width: var(--cu-size);
+	padding: 0;
+}
+
+.cu-control--field {
+	justify-content: flex-start;
+	font-size: var(--cu-field-font-size);
+	font-weight: 400;
+}
+
+.cu-control--ghost {
+	background: transparent;
+	border-color: transparent;
+}
+
+.cu-control--ghost:hover {
+	background: var(--cu-control-bg-hover);
+	border-color: transparent;
+}
+
+.cu-control--primary {
+	--cu-control-icon: currentcolor;
+	font-weight: 600;
 	color: var(--cu-accent-ink);
 	background: var(--cu-accent);
+	border-color: var(--cu-accent);
 }
 
-.cu-button--primary:hover {
+.cu-control--primary:hover {
 	color: var(--cu-accent-ink);
-	background: rgb(160 30 54);
-}
-
-.cu-button--secondary {
-	font-weight: 500;
-	color: var(--cu-ink);
-	border-color: var(--cu-line);
-}
-
-.cu-button--secondary:hover {
-	color: var(--cu-ink);
-	border-color: var(--cu-muted);
+	background: var(--cu-control-primary-hover);
+	border-color: var(--cu-control-primary-hover);
 }
 
 .cu-chip {
@@ -252,15 +328,99 @@ nav.sidebar .group-label .large {
 	border-radius: var(--cu-radius);
 }
 
-/* Starlight draws the mobile menu button as a filled circle; the design uses a plain icon. */
-.sl-menu-button {
-	color: var(--cu-ink);
-	background-color: transparent;
-	border-radius: var(--cu-radius-small);
+/* Starlight's search and mobile menu buttons, drawn as compact controls like the rest of the header. */
+.sl-menu-button,
+site-search button[data-open-modal] {
+	height: var(--cu-control-height-compact);
+	color: var(--cu-muted);
+	background-color: var(--cu-control-bg);
+	border: 1px solid var(--cu-control-border);
+	border-radius: var(--cu-control-radius);
 	box-shadow: none;
 }
 
+.sl-menu-button {
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+}
+
 .sl-menu-button:hover,
+.sl-menu-button:has(~ :popover-open),
+site-search button[data-open-modal]:hover {
+	color: var(--cu-ink);
+	border-color: var(--cu-control-border-hover);
+}
+
 .sl-menu-button:has(~ :popover-open) {
-	background-color: var(--cu-surface-2);
+	background-color: var(--cu-control-bg-hover);
+}
+
+:is(.sl-menu-button, site-search button[data-open-modal]):focus-visible {
+	outline: var(--cu-focus-ring);
+	outline-offset: var(--cu-focus-offset);
+}
+
+site-search button[data-open-modal] {
+	justify-content: center;
+	width: var(--cu-control-height-compact);
+	padding: 0;
+	font-size: var(--cu-control-font-size-compact);
+}
+
+site-search button[data-open-modal] > svg {
+	flex: none;
+	font-size: 1rem;
+}
+
+@media (min-width: 50rem) {
+	site-search button[data-open-modal] {
+		justify-content: flex-start;
+		width: 100%;
+		padding-inline: var(--cu-control-pad-x-compact) 0.3125rem;
+	}
+
+	site-search button[data-open-modal] > svg {
+		font-size: 0.875rem;
+	}
+
+	site-search button[data-open-modal] > kbd {
+		background-color: var(--cu-control-bg-hover);
+	}
+}
+
+/* The site footer sits at the bottom of short pages: every box from Starlight's full-height page frame down to the
+   last content panel grows into the free height. */
+.main-frame,
+.main-frame > :has(> .main-pane),
+.main-pane,
+.main-pane > main,
+main > .content-panel:last-child,
+main > .content-panel:last-child > .sl-container {
+	display: flex;
+	flex-direction: column;
+}
+
+.main-frame,
+.main-frame > :has(> .main-pane),
+.main-pane > main,
+main > .content-panel:last-child,
+main > .content-panel:last-child > .sl-container {
+	flex-grow: 1;
+}
+
+main > .content-panel:last-child > .sl-container {
+	width: 100%;
+}
+
+@media (max-width: 71.99rem) {
+	.main-pane {
+		flex-grow: 1;
+	}
+}
+
+@media (min-width: 72rem) {
+	.main-frame > :has(> .main-pane) {
+		flex-direction: row;
+	}
 }

@@ -185,7 +185,7 @@ const features = [
 				>
 				<SelectMenu
 					id="cu-finder-stack"
-					look="pill"
+					look="compact"
 					icon="layers"
 					label={t.stackLabel}
 					prefix={`${t.stackLabel}:`}
@@ -206,11 +206,11 @@ const features = [
 					<code data-selected-command>{first?.command}</code>
 				</p>
 				<div class="cu-keys">
-					<button type="button" class="cu-key-hint" data-copy-command>
+					<button type="button" class="cu-key-hint cu-control cu-control--compact cu-control--ghost" data-copy-command>
 						<kbd aria-hidden="true">↵</kbd>
 						<span data-copy-label>{t.finderCopy}</span>
 					</button>
-					<a class="cu-key-hint" href={first?.href} data-open>
+					<a class="cu-key-hint cu-control cu-control--compact cu-control--ghost" href={first?.href} data-open>
 						<kbd aria-hidden="true">→</kbd>
 						{t.finderOpen}
 					</a>

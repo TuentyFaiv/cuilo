@@ -3,7 +3,9 @@ title: Install
 description: Install cuilo with the install script, npm, Homebrew or Cargo, check what you downloaded, upgrade it and add shell completions.
 ---
 
-import { Aside, Tabs, TabItem } from "@astrojs/starlight/components";
+import { Aside, Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+import { cargoBinstall, cargoInstall } from "../../release";
 
 <Aside type="caution" title="cuilo 2 is in alpha">
 No release is published yet. The channels on this page open with the first release. Until then, [build cuilo from source](#build-from-source).
@@ -62,15 +64,11 @@ brew install tuentyfaiv/tap/cuilo
 </TabItem>
 <TabItem label="Cargo">
 
-```sh
-cargo binstall cuilo
-```
+<Code code={cargoBinstall} lang="sh" />
 
 Or build it from crates.io:
 
-```sh
-cargo install cuilo --locked
-```
+<Code code={cargoInstall} lang="sh" />
 
 </TabItem>
 </Tabs>
@@ -83,7 +81,7 @@ cuilo --version
 
 ### The npm package
 
-`@cuilo/cli` has no dependencies and runs nothing at install time. It needs Node.js 18 or newer. Your package manager picks the one platform package that matches your system, such as `@cuilo/cli-darwin-arm64` or `@cuilo/cli-linux-x64-musl`, and that package holds the binary. Pre-releases are published under the `next` tag:
+`@cuilo/cli` has no dependencies and runs nothing at install time. It needs Node.js 18 or newer. Your package manager picks the one platform package that matches your system, such as `@cuilo/cli-darwin-arm64` or `@cuilo/cli-linux-x64-musl`, and that package holds the binary. Until cuilo 2.0 is stable, each pre-release is published as `latest`, so the commands above install the newest one. From 2.0 on, pre-releases are published under the `next` tag:
 
 ```sh
 npm install --global @cuilo/cli@next
@@ -121,7 +119,7 @@ curl --proto '=https' --tlsv1.2 -fsSL https://dl.cuilo.dev/install.sh | sh -s --
 
 The install scripts say which checks ran on their last line, for example `signature and SHA-256 checked`, or `SHA-256 checked; install minisign to check the signature too`.
 
-`cargo binstall` installs only prebuilt binaries that the release key signed. cuilo's crate turns off its QuickInstall fallback, whose builds the release key never signed. Without a signed binary, it builds cuilo from crates.io, as `cargo install` does.
+`cargo binstall` installs only prebuilt binaries that the release key signed. cuilo's crate turns off its QuickInstall fallback, whose builds the release key never signed, and its build from source. Without a signed binary for your platform, it stops with an error; `cargo install` builds cuilo from crates.io instead.
 
 <Aside type="caution" title="Checksums alone are not proof">
 The `SHA256SUMS` file comes from the same host as the binaries, so a checksum only catches a corrupted download. The signature and the GitHub attestation are what show that a release came from cuilo's release workflow. The first `curl … | sh` trusts the download host over HTTPS.
@@ -169,7 +167,7 @@ For a copy that a package manager installed globally, `cuilo upgrade` runs that 
 | Bun            | `bun add --global @cuilo/cli@<version>`                                                                                          |
 | Yarn           | `yarn global add @cuilo/cli@<version>`                                                                                           |
 | Homebrew       | `brew upgrade tuentyfaiv/tap/cuilo`                                                                                              |
-| Cargo          | `cargo binstall cuilo --version <version> --disable-strategies quick-install --no-confirm` when `cargo-binstall` is installed, else `cargo install cuilo --locked --version <version>` |
+| Cargo          | `cargo binstall cuilo --version <version> --disable-strategies quick-install,compile --no-confirm` when `cargo-binstall` is installed, else `cargo install cuilo --locked --version <version>` |
 
 The package manager runs in your cuilo cache folder, or your home folder when there is no cache folder, never in the folder you run `cuilo upgrade` from. A project's own config, such as `.yarnrc`, `.cargo/config.toml` or `rust-toolchain.toml`, cannot change what it does.
 

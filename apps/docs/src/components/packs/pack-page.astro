@@ -40,7 +40,7 @@ const parent = parentSection(Astro.url.pathname, locale);
 /** The icon in each official pack's tile; any other pack shows `package`. */
 const packIcons: Record<string, LucideName> = { ui: "layout-grid", backend: "server" };
 /** Icon sizes in pixels, from the design. */
-const iconSize = { crumb: 13, tile: 32, tier: 13, copy: 14, chip: 12, folder: 14, note: 14 } as const;
+const iconSize = { crumb: 13, tile: 32, tier: 13, copy: 14, folder: 14, note: 14 } as const;
 const builtIn = isBuiltIn(pack);
 const trust = packTrust(pack);
 const stacks = packStacks(pack);
@@ -156,8 +156,14 @@ const withCode = (text: string | null) => (text ?? "").split(CODE_SPAN);
 			<div class="install">
 				<span class="prompt" aria-hidden="true">$</span>
 				<code title={t.packInstall}>{install}</code>
-				<button type="button" class="install-copy" aria-label={t.copyCommand} data-copy={install} data-needs-js>
-					<LucideIcon name="copy" size={iconSize.copy} />
+				<button
+					type="button"
+					class="install-copy cu-control cu-control--compact cu-control--icon cu-control--ghost"
+					aria-label={t.copyCommand}
+					data-copy={install}
+					data-needs-js
+				>
+					<LucideIcon name="copy" />
 				</button>
 			</div>
 		</div>
@@ -185,12 +191,12 @@ const withCode = (text: string | null) => (text ?? "").split(CODE_SPAN);
 							</p>
 							<button
 								type="button"
-								class="command"
+								class="command cu-control cu-control--compact"
 								aria-label={`${t.copyCommand}: ${piece.command}`}
 								data-copy={piece.command}
 							>
 								<code>{piece.command}</code>
-								<LucideIcon name="copy" size={iconSize.chip} />
+								<LucideIcon name="copy" size={iconSize.copy} />
 							</button>
 						</div>
 						<p class="piece-description">{piece.description}</p>
@@ -561,12 +567,14 @@ const withCode = (text: string | null) => (text ?? "").split(CODE_SPAN);
 		gap: 0.75rem;
 		align-items: center;
 		max-width: 100%;
-		padding: 0.75rem 0.875rem;
+		min-height: var(--cu-control-height);
+		padding: 0.25rem;
+		padding-inline-start: var(--cu-control-pad-x);
 		font-family: var(--cu-font-mono);
 		font-size: 0.8125rem;
 		color: var(--cu-code-ink);
 		background: var(--cu-code-bg);
-		border-radius: 0.625rem;
+		border-radius: var(--cu-control-radius);
 	}
 
 	.install code {
@@ -579,18 +587,20 @@ const withCode = (text: string | null) => (text ?? "").split(CODE_SPAN);
 	}
 
 	.install-copy {
-		display: inline-flex;
-		padding: 0.125rem;
 		color: var(--cu-code-muted);
-		cursor: pointer;
-		background: none;
-		border: 0;
-		border-radius: 0.25rem;
 	}
 
-	.install-copy:hover,
-	.install-copy[data-copied] {
+	.install-copy > :global(svg) {
+		color: inherit;
+	}
+
+	.install-copy:hover {
 		color: var(--cu-code-ink);
+		background: var(--cu-code-line);
+	}
+
+	.install-copy[data-copied] {
+		color: var(--cu-ok);
 	}
 
 	.tablist {
@@ -607,9 +617,10 @@ const withCode = (text: string | null) => (text ?? "").split(CODE_SPAN);
 		flex: none;
 		gap: 0.375rem;
 		align-items: center;
-		padding: 0.75rem 0.875rem;
+		min-height: var(--cu-control-height);
+		padding-inline: var(--cu-control-pad-x);
 		margin-bottom: -1px;
-		font-size: 0.875rem;
+		font-size: var(--cu-control-font-size);
 		font-weight: 500;
 		line-height: 1.2;
 		color: var(--cu-muted);
@@ -737,33 +748,14 @@ const withCode = (text: string | null) => (text ?? "").split(CODE_SPAN);
 	}
 
 	.command {
-		display: inline-flex;
-		gap: 0.5rem;
-		align-items: center;
 		max-width: 100%;
-		padding: 0.375rem 0.625rem;
-		font: inherit;
-		color: var(--cu-muted);
 		text-align: start;
-		cursor: pointer;
-		background: var(--cu-surface-2);
-		border: 1px solid transparent;
-		border-radius: var(--cu-radius-small);
+		white-space: normal;
 	}
 
 	.command code {
 		min-width: 0;
-		font-size: 0.75rem;
-		color: var(--cu-ink);
 		overflow-wrap: anywhere;
-	}
-
-	.command:hover {
-		border-color: var(--cu-line);
-	}
-
-	.command[data-copied] {
-		color: var(--cu-ok);
 	}
 
 	.piece-description {
@@ -1078,7 +1070,7 @@ const withCode = (text: string | null) => (text ?? "").split(CODE_SPAN);
 		}
 
 		.tab {
-			padding-inline: 0.5rem;
+			padding-inline: var(--cu-control-pad-x-compact);
 		}
 
 		.panels {

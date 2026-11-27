@@ -1,11 +1,10 @@
 ---
-import cli from "../../../../npm/cli/package.json" with { type: "json" };
 import { ui } from "../i18n/ui";
+import { prerelease, version as release } from "../release";
 
 const { siteTitle, siteTitleHref, locale } = Astro.locals.starlightRoute;
 const t = ui(locale);
-const [release, prerelease] = cli.version.split("-");
-const [major, minor] = release?.split(".") ?? [];
+const [major, minor] = release.split(".");
 const version = prerelease ? `${major}.${minor} ${t.versionLabel}` : `${major}.${minor}`;
 const markSize = 28;
 ---

@@ -19,7 +19,7 @@ const themes: { value: string; label: string; icon: LucideName }[] = [
 ];
 /** The segmented control's order, from the design: light, dark, then the system's. */
 const segments = ["light", "dark", "auto"].flatMap((value) => themes.filter((theme) => theme.value === value));
-const segmentIconSize = 15;
+const segmentIconSize = 16;
 ---
 
 <div class="cu-theme" data-theme-picker data-choice="auto">
@@ -69,19 +69,21 @@ const segmentIconSize = 15;
 		gap: 2px;
 		padding: 3px;
 		margin: 0;
-		background: var(--cu-surface-2);
-		border: 0;
-		border-radius: 0.5625rem;
+		background: var(--cu-control-bg);
+		border: 1px solid var(--cu-control-border);
+		border-radius: var(--cu-control-radius);
 	}
 
 	.segments label {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		padding: 0.375rem 0.625rem;
+		min-width: var(--cu-control-height);
+		/* Fieldset contents don't stretch: the control height less 3px padding and 1px border a side. */
+		min-height: calc(var(--cu-control-height) - 8px);
 		color: var(--cu-muted);
 		cursor: pointer;
-		border-radius: 0.4375rem;
+		border-radius: calc(var(--cu-control-radius) - 4px);
 	}
 
 	.segments label:hover {
@@ -90,11 +92,11 @@ const segmentIconSize = 15;
 
 	.segments label:has(:checked) {
 		color: var(--cu-ink);
-		background: var(--cu-surface);
+		background: var(--cu-accent-soft);
 	}
 
 	.segments label:has(:focus-visible) {
-		outline: 2px solid var(--cu-accent-text);
+		outline: var(--cu-focus-ring);
 		outline-offset: 1px;
 	}
 </style>

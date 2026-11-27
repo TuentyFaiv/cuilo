@@ -5,7 +5,7 @@ import { unlocalized } from "../sections";
 import SelectMenu from "./select-menu.astro";
 
 interface Props {
-	/** Whether it is the header's compact pill; otherwise it is the mobile menu's fuller one. */
+	/** Whether it is the header's compact control; otherwise it is the mobile menu's default-size field. */
 	compact?: boolean;
 }
 
@@ -26,7 +26,7 @@ const options = Object.entries(LOCALES).map(([key, { label, lang }]) => ({
 {options.length > 1 && (
 	<SelectMenu
 		id={compact ? "cu-language" : "cu-language-menu"}
-		look={compact ? "compact" : "outline"}
+		look={compact ? "compact" : "field"}
 		icon="languages"
 		label={Astro.locals.t("languageSelect.accessibleLabel")}
 		options={compact ? options : options.map(({ short: _, ...option }) => option)}

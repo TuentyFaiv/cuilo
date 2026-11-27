@@ -9,7 +9,7 @@
 	margin: 0;
 }
 
-:root[data-has-hero] .content-panel > .sl-container > * + * {
+:where(:root[data-has-hero] .content-panel > .sl-container) > * + * {
 	margin-top: 0;
 }
 
@@ -149,9 +149,10 @@
 
 .cu-install-tabs [role="tab"] {
 	flex: none;
-	padding: 0.625rem 0.75rem;
+	min-height: var(--cu-control-height-compact);
+	padding: 0 var(--cu-control-pad-x-compact);
 	font-family: var(--cu-font-mono);
-	font-size: 0.8125rem;
+	font-size: var(--cu-control-font-size-compact);
 	line-height: 1.2;
 	color: var(--cu-muted);
 	cursor: pointer;
@@ -169,15 +170,16 @@
 }
 
 .cu-install-tabs [role="tab"]:focus-visible {
-	outline: 2px solid var(--cu-accent-text);
-	outline-offset: -2px;
+	outline: var(--cu-focus-ring);
+	outline-offset: calc(-1 * var(--cu-focus-offset));
 }
 
 .cu-install-panel {
 	display: flex;
 	gap: 0.625rem;
 	align-items: center;
-	padding: 0.9375rem 1.125rem;
+	padding: 0.5rem;
+	padding-inline-start: 1.125rem;
 }
 
 .cu-install-panel[hidden] {
@@ -204,40 +206,22 @@
 	scrollbar-width: none;
 }
 
-.cu-copy-button {
+.cu-install-copy {
 	display: grid;
-	flex: none;
 	place-items: center;
-	padding: 0.25rem;
-	margin: -0.25rem;
-	color: var(--cu-muted);
-	cursor: pointer;
-	background: none;
-	border: 0;
-	border-radius: 0.375rem;
 }
 
-.cu-copy-button:hover {
-	color: var(--cu-ink);
-}
-
-.cu-copy-button:focus-visible {
-	outline: 2px solid var(--cu-accent-text);
-	outline-offset: 1px;
-}
-
-.cu-copy-button > svg {
+.cu-install-copy > svg {
 	grid-area: 1 / 1;
 }
 
-.cu-copy-button .cu-copy-done,
-.cu-copy-button[data-copied] .cu-copy-idle {
+.cu-install-copy .cu-copy-done,
+.cu-install-copy[data-copied] .cu-copy-idle {
 	visibility: hidden;
 }
 
-.cu-copy-button[data-copied] .cu-copy-done {
+.cu-install-copy[data-copied] .cu-copy-done {
 	visibility: visible;
-	color: var(--cu-ok);
 }
 
 .cu-install-note {
@@ -641,12 +625,13 @@
 }
 
 .cu-palette-foot {
+	--cu-control-bg-hover: var(--cu-surface);
 	display: flex;
 	flex-wrap: wrap;
 	gap: 0.5rem 1rem;
 	align-items: center;
 	justify-content: space-between;
-	padding: 0.75rem 1.375rem;
+	padding: 0.375rem 0.75rem 0.375rem 1.375rem;
 	background: var(--cu-surface-2);
 }
 
@@ -670,37 +655,13 @@
 
 .cu-keys {
 	display: flex;
-	gap: 1rem;
+	gap: 0.25rem;
 	align-items: center;
 }
 
 .cu-key-hint {
-	display: inline-flex;
-	gap: 0.375rem;
-	align-items: center;
-	padding: 0;
-	font-size: 0.75rem;
-	line-height: 1.2;
+	font-weight: 400;
 	color: var(--cu-muted);
-	white-space: nowrap;
-	text-decoration: none;
-	cursor: pointer;
-	background: none;
-	border: 0;
-	border-radius: 0.25rem;
-}
-
-.cu-key-hint:hover {
-	color: var(--cu-ink);
-}
-
-.cu-key-hint:focus-visible {
-	outline: 2px solid var(--cu-accent-text);
-	outline-offset: 3px;
-}
-
-.cu-key-hint[hidden] {
-	display: none;
 }
 
 .cu-key-hint kbd {
@@ -1073,12 +1034,6 @@
 		padding-top: 0.25rem;
 	}
 
-	.cu-actions .cu-button {
-		justify-content: center;
-		padding-block: 0.8125rem;
-		border-radius: 0.75rem;
-	}
-
 	.cu-install-wrap {
 		width: 100%;
 	}
@@ -1091,32 +1046,25 @@
 		padding: 0 0.375rem;
 	}
 
-	.cu-install-tabs [role="tab"] {
-		padding: 0.625rem;
-		font-size: 0.75rem;
-	}
-
 	.cu-install-panel {
 		gap: 0.5rem;
 		align-items: flex-start;
-		padding: 0.875rem;
+		padding-inline-start: 0.875rem;
 	}
 
 	.cu-install-prompt {
+		padding-block: 0.4375rem;
 		font-size: 0.75rem;
 		line-height: 1.5;
 		color: var(--cu-accent-2);
 	}
 
 	.cu-install-panel code {
+		padding-block: 0.4375rem;
 		font-size: 0.75rem;
 		line-height: 1.5;
 		overflow-wrap: anywhere;
 		white-space: pre-wrap;
-	}
-
-	.cu-copy-button {
-		padding: 0.125rem;
 	}
 
 	.cu-install-note {
@@ -1238,7 +1186,7 @@
 	}
 
 	.cu-palette-foot {
-		padding: 0.75rem 1rem;
+		padding: 0.375rem 0.375rem 0.375rem 1rem;
 	}
 
 	.cu-stacks,

@@ -38,6 +38,15 @@ their own name (`Hono · Drizzle`) where the site names the variant.
 The site has no native `<select>`: `src/components/select-menu.astro` is the one select the finder, the directory's
 sort and the language and theme pickers share.
 
+## Controls
+
+Inputs, select triggers and button-like actions take their size, radius, border, background and focus ring from the
+`--cu-control-*` tokens and the `.cu-control` classes in `src/styles/theme.css`. There are two sizes: the default
+(2.5rem) for fields, toolbars, the mobile menu and the hero's actions, and `cu-control--compact` (2rem) for the header
+and for actions inside cards and lists. Controls in one row use the same size. Text fields and the selects beside them
+use 1rem type, which keeps iOS Safari from zooming in on focus. Icon-only links and pickers, such as the header's
+GitHub and theme icons, are `cu-control--ghost`: no border or fill until hovered.
+
 ## Deployment
 
 [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) builds and deploys the site from GitHub: a

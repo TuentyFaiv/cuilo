@@ -3,7 +3,9 @@ title: Instalación
 description: Instala cuilo con el script de instalación, npm, Homebrew o Cargo, revisa lo que descargaste, actualízalo y agrega el autocompletado de tu shell.
 ---
 
-import { Aside, Tabs, TabItem } from "@astrojs/starlight/components";
+import { Aside, Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+import { cargoBinstall, cargoInstall } from "../../../release";
 
 <Aside type="caution" title="cuilo 2 está en alfa">
 Todavía no hay ninguna versión publicada. Los canales de esta página abren con la primera versión. Mientras tanto, [compila cuilo desde el código](#compila-desde-el-código).
@@ -62,15 +64,11 @@ brew install tuentyfaiv/tap/cuilo
 </TabItem>
 <TabItem label="Cargo">
 
-```sh
-cargo binstall cuilo
-```
+<Code code={cargoBinstall} lang="sh" />
 
 O compílalo desde crates.io:
 
-```sh
-cargo install cuilo --locked
-```
+<Code code={cargoInstall} lang="sh" />
 
 </TabItem>
 </Tabs>
@@ -83,7 +81,7 @@ cuilo --version
 
 ### El paquete de npm
 
-`@cuilo/cli` no tiene dependencias y no corre nada al instalarse. Necesita Node.js 18 o más reciente. Tu gestor de paquetes elige el único paquete de plataforma que corresponde a tu sistema, como `@cuilo/cli-darwin-arm64` o `@cuilo/cli-linux-x64-musl`, y ese paquete trae el binario. Las versiones preliminares se publican con la etiqueta `next`:
+`@cuilo/cli` no tiene dependencias y no corre nada al instalarse. Necesita Node.js 18 o más reciente. Tu gestor de paquetes elige el único paquete de plataforma que corresponde a tu sistema, como `@cuilo/cli-darwin-arm64` o `@cuilo/cli-linux-x64-musl`, y ese paquete trae el binario. Hasta que cuilo 2.0 sea estable, cada versión preliminar se publica como `latest`, así que los comandos de arriba instalan la más reciente. A partir de 2.0, las versiones preliminares se publican con la etiqueta `next`:
 
 ```sh
 npm install --global @cuilo/cli@next
@@ -121,7 +119,7 @@ curl --proto '=https' --tlsv1.2 -fsSL https://dl.cuilo.dev/install.sh | sh -s --
 
 En su última línea, los scripts de instalación dicen qué revisiones corrieron, por ejemplo `signature and SHA-256 checked` o `SHA-256 checked; install minisign to check the signature too`.
 
-`cargo binstall` solo instala binarios precompilados que firmó la llave de publicación. El crate de cuilo desactiva su alternativa de QuickInstall, cuyos binarios nunca firmó la llave de publicación. Si no hay un binario firmado, compila cuilo desde crates.io, como hace `cargo install`.
+`cargo binstall` solo instala binarios precompilados que firmó la llave de publicación. El crate de cuilo desactiva su alternativa de QuickInstall, cuyos binarios nunca firmó la llave de publicación, y la compilación desde el código. Si no hay un binario firmado para tu plataforma, se detiene con un error; `cargo install` compila cuilo desde crates.io.
 
 <Aside type="caution" title="Un checksum no basta como prueba">
 El archivo `SHA256SUMS` viene del mismo servidor que los binarios, así que un checksum solo detecta una descarga corrupta. La firma y la atestación de GitHub son las que muestran que una versión salió del workflow de publicación de cuilo. El primer `curl … | sh` confía en el servidor de descargas por HTTPS.
@@ -169,7 +167,7 @@ Para una copia que un gestor de paquetes instaló de forma global, `cuilo upgrad
 | Bun           | `bun add --global @cuilo/cli@<versión>`                                                                                                     |
 | Yarn          | `yarn global add @cuilo/cli@<versión>`                                                                                                      |
 | Homebrew      | `brew upgrade tuentyfaiv/tap/cuilo`                                                                                                         |
-| Cargo         | `cargo binstall cuilo --version <versión> --disable-strategies quick-install --no-confirm` cuando `cargo-binstall` está instalado; si no, `cargo install cuilo --locked --version <versión>` |
+| Cargo         | `cargo binstall cuilo --version <versión> --disable-strategies quick-install,compile --no-confirm` cuando `cargo-binstall` está instalado; si no, `cargo install cuilo --locked --version <versión>` |
 
 El gestor de paquetes corre en tu carpeta de caché de cuilo, o en tu carpeta personal si no hay carpeta de caché, nunca en la carpeta desde la que corres `cuilo upgrade`. La configuración propia de un proyecto, como `.yarnrc`, `.cargo/config.toml` o `rust-toolchain.toml`, no puede cambiar lo que hace.
 

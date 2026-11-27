@@ -4,6 +4,7 @@ import { Icon } from "@astrojs/starlight/components";
 import "../styles/landing.css";
 
 import { localized, ui } from "../i18n/ui";
+import { cargoBinstall } from "../release";
 import LucideIcon from "./lucide-icon.astro";
 import restoreInstallTab from "./restore-install-tab.js?raw";
 
@@ -22,7 +23,7 @@ const install = [
 	{ tab: "pnpm", synced: "pnpm", command: "pnpm add --global @cuilo/cli" },
 	{ tab: "bun", synced: "Bun", command: "bun add --global @cuilo/cli" },
 	{ tab: "brew", synced: "Homebrew", command: "brew install tuentyfaiv/tap/cuilo" },
-	{ tab: "cargo", synced: "Cargo", command: "cargo binstall cuilo" },
+	{ tab: "cargo", synced: "Cargo", command: cargoBinstall },
 ];
 ---
 
@@ -44,10 +45,7 @@ const install = [
 		{hero.actions.length > 0 && (
 			<div class="cu-actions">
 				{hero.actions.map((action) => (
-					<a
-						class:list={["cu-button", action.variant === "primary" ? "cu-button--primary" : "cu-button--secondary"]}
-						href={action.link}
-					>
+					<a class:list={["cu-control", { "cu-control--primary": action.variant === "primary" }]} href={action.link}>
 						{action.text}
 						{action.icon?.type === "icon" &&
 							(action.icon.name === "right-arrow" ? (
@@ -88,7 +86,12 @@ const install = [
 							$
 						</span>
 						<code>{method.command}</code>
-						<button type="button" class="cu-copy-button" data-copy={method.command} aria-label={t.copy}>
+						<button
+							type="button"
+							class="cu-install-copy cu-control cu-control--compact cu-control--icon cu-control--ghost"
+							data-copy={method.command}
+							aria-label={t.copy}
+						>
 							<LucideIcon name="copy" class="cu-copy-idle" />
 							<LucideIcon name="check" class="cu-copy-done" />
 						</button>
