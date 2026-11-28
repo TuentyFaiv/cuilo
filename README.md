@@ -52,7 +52,7 @@ made and what protects them.
 | npm, pnpm, bun, yarn | `npm install --global @cuilo/cli`                                             | Lockfile integrity, npm provenance                  |
 | macOS, Linux         | `curl --proto '=https' --tlsv1.2 -fsSL https://dl.cuilo.dev/install.sh \| sh` | SHA-256, and the signature when `minisign` is there |
 | Windows              | `irm https://dl.cuilo.dev/install.ps1 \| iex`                                 | SHA-256, and the signature when `minisign` is there |
-| Homebrew             | `brew install tuentyfaiv/tap/cuilo`                                           | The formula's SHA-256                               |
+| Homebrew             | `brew trust tuentyfaiv/tap/cuilo && brew install tuentyfaiv/tap/cuilo`        | The formula's SHA-256                               |
 | cargo                | `cargo binstall cuilo` or `cargo install cuilo --locked`                      | The signature (binstall), crates.io checksums       |
 
 The npm package has no dependencies and runs

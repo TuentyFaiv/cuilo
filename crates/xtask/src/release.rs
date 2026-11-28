@@ -273,7 +273,11 @@ class Cuilo < Formula
   end
 
   def install
-    bin.install Dir["cuilo-*"].first => "cuilo"
+    # Homebrew names the download after the version folder in its URL, so install the one file it staged; a
+    # downloaded file is not executable.
+    binary = Dir["*"].first
+    chmod 0755, binary
+    bin.install binary => "cuilo"
     generate_completions_from_executable(bin/"cuilo", "completions")
     (man1/"cuilo.1").write Utils.safe_popen_read(bin/"cuilo", "man")
   end
@@ -494,6 +498,10 @@ mod tests {
 			download_url()?
 		)));
 		assert!(formula.contains(&format!("sha256 \"{:064}\"", 5)), "{formula}");
+		assert!(
+			formula.contains("binary = Dir[\"*\"].first\n    chmod 0755, binary\n    bin.install binary => \"cuilo\""),
+			"{formula}"
+		);
 		assert!(super::formula("").is_err());
 		Ok(())
 	}

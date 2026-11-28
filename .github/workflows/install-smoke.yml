@@ -192,6 +192,7 @@ jobs:
       - name: Check that the tap has this version
         run: |
           brew tap tuentyfaiv/tap
+          brew trust tuentyfaiv/tap/cuilo
           formula="$(brew info --json=v2 tuentyfaiv/tap/cuilo | jq -r '.formulae[0].versions.stable')"
           if [ "$formula" != "$VERSION" ]; then
             echo "::error::tuentyfaiv/tap has cuilo $formula, not $VERSION; merge the tap pull request first"
