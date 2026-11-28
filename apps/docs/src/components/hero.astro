@@ -22,7 +22,7 @@ const install = [
 	{ tab: "npm", synced: "npm", command: "npm install --global @cuilo/cli" },
 	{ tab: "pnpm", synced: "pnpm", command: "pnpm add --global @cuilo/cli" },
 	{ tab: "bun", synced: "Bun", command: "bun add --global @cuilo/cli" },
-	{ tab: "brew", synced: "Homebrew", command: "brew install tuentyfaiv/tap/cuilo" },
+	{ tab: "brew", synced: "Homebrew", command: "brew trust tuentyfaiv/tap/cuilo && brew install tuentyfaiv/tap/cuilo" },
 	{ tab: "cargo", synced: "Cargo", command: cargoBinstall },
 ];
 ---
