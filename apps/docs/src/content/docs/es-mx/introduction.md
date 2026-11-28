@@ -7,7 +7,7 @@ description: Qué hace cuilo, las ideas detrás (packs, piezas, variantes, plane
 cuilo genera código en tu proyecto a partir de **packs** versionados: componentes, recursos REST, middleware y otras piezas de una app. Ves cada cambio como un plan antes de que se escriba nada. El código que agrega es tuyo y puedes editarlo. Cuando el pack publica una versión nueva, `cuilo update` fusiona los cambios con los archivos que editaste.
 
 :::note
-cuilo 2 está en alfa. Todavía no hay ninguna versión publicada, así que [compílalo desde el código](/es-mx/install/#compila-desde-el-código) para probarlo.
+cuilo 2 está en alfa: [instálalo](/es-mx/install/) para probarlo, y espera cambios incompatibles hasta la beta.
 :::
 
 ## Packs y piezas

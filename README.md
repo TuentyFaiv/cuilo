@@ -44,8 +44,7 @@ codes: `0` done, `1` failed, `2` usage or confirmation needed, `3` plan rejected
 
 ### Installing a release
 
-Releases are not published yet. Once they are, every channel installs the same binaries, built and attested by
-GitHub Actions and served from Cloudflare under `/v<version>/`; [RELEASING.md](RELEASING.md) describes how they are
+Every channel installs the same binaries, built and attested by GitHub Actions and served from Cloudflare under `/v<version>/`; [RELEASING.md](RELEASING.md) describes how they are
 made and what protects them.
 
 | Channel              | Command                                                                       | What checks it                                      |

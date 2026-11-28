@@ -7,7 +7,7 @@ description: Qué era tfverse (v1), qué cambió en cuilo (v2), cómo cambiar un
 cuilo 2 reemplaza a tfverse, la CLI de v1. Es un programa nuevo, con otro nombre, otro paquete y otra forma de generar código. La mayoría de las opciones de v1 no tienen un equivalente directo, y esta página lo indica en cada caso.
 
 :::caution[cuilo 2 está en alfa]
-Todavía no se publica nada de v2. Hasta la primera versión, [compila cuilo desde el código](/es-mx/install/). Mientras tanto, tu instalación de v1 sigue funcionando, y puedes tener las dos instaladas al mismo tiempo porque los comandos se llaman distinto.
+v2 se publica como versiones preliminares hasta la beta. Tu instalación de v1 sigue funcionando, y puedes tener las dos instaladas al mismo tiempo porque los comandos se llaman distinto.
 :::
 
 ## Qué era v1
@@ -60,14 +60,12 @@ rm -rf ~/.tfverse
 
 ## Instala v2
 
-Hasta la primera versión, compila cuilo desde un clon del repositorio:
+Instala la versión preliminar más reciente con npm, o con cualquier otro canal de [Instalación](/es-mx/install/):
 
 ```sh
-cargo install --path crates/cuilo --locked   # puts `cuilo` in ~/.cargo/bin
+npm install --global @cuilo/cli
 cuilo --version
 ```
-
-Cuando haya versiones publicadas, también funcionarán `npm install --global @cuilo/cli` y los demás canales de [Instalación](/es-mx/install/).
 
 ## Comandos viejos y nuevos
 

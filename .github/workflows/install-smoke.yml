@@ -51,18 +51,31 @@ jobs:
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
-      # npm may not serve a version for a short while after accepting it.
-      - name: Wait until npm serves it
+      # npm and Yarn's mirror serve each package of a release minutes apart, platform packages sometimes after the wrapper.
+      - name: Wait until npm and Yarn serve every package
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          for _ in $(seq 20); do
-            if curl --proto '=https' --tlsv1.2 -fs -o /dev/null "https://registry.npmjs.org/@cuilo%2Fcli/$VERSION"; then
-              exit 0
+          served() {
+            curl --proto '=https' --tlsv1.2 -fs -o /dev/null "$1/$2/$VERSION"
+          }
+          for _ in $(seq 40); do
+            if manifest="$(curl --proto '=https' --tlsv1.2 -fs "https://registry.npmjs.org/@cuilo%2Fcli/$VERSION")" \
+              && packages="$(printf '%s' "$manifest" | jq -r '"@cuilo%2Fcli", (.optionalDependencies | keys[] | sub("/"; "%2F"))')" \
+              && [ "$(printf '%s\n' "$packages" | wc -l)" -gt 1 ]; then
+              missing=0
+              for registry in https://registry.npmjs.org https://registry.yarnpkg.com; do
+                for package in $packages; do
+                  served "$registry" "$package" || missing=$((missing + 1))
+                done
+              done
+              if [ "$missing" -eq 0 ]; then
+                exit 0
+              fi
             fi
             sleep 15
           done
-          echo "::error::npm does not serve @cuilo/cli@$VERSION"
+          echo "::error::npm or Yarn's mirror does not serve every @cuilo package at $VERSION"
           exit 1
 
   install:

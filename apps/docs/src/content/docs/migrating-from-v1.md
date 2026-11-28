@@ -7,7 +7,7 @@ description: What tfverse (v1) was, what changed in cuilo (v2), how to swap one 
 cuilo 2 replaces tfverse, the v1 CLI. It is a new program with a new name, a new package and a new way of generating code. Most v1 options have no direct equivalent, and this page says so where that is the case.
 
 :::caution[cuilo 2 is in alpha]
-Nothing from v2 is published yet. Until the first release, [build cuilo from source](/install/). Your v1 install keeps working in the meantime, and the two can be installed side by side because the commands have different names.
+v2 is published as pre-releases until the beta. Your v1 install keeps working, and the two can be installed side by side because the commands have different names.
 :::
 
 ## What v1 was
@@ -60,14 +60,12 @@ rm -rf ~/.tfverse
 
 ## Install v2
 
-Until the first release, build cuilo from a clone of the repository:
+Install the newest pre-release with npm, or with any other channel on [Install](/install/):
 
 ```sh
-cargo install --path crates/cuilo --locked   # puts `cuilo` in ~/.cargo/bin
+npm install --global @cuilo/cli
 cuilo --version
 ```
-
-Once releases are published, `npm install --global @cuilo/cli` and the other channels on [Install](/install/) work too.
 
 ## Old commands and new ones
 

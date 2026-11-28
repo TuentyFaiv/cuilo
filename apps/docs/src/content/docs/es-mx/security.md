@@ -150,7 +150,7 @@ El texto de packs, proyectos y otros programas se escapa antes de que cuilo lo i
 
 ## Integridad de la instalación
 
-Todavía no hay versiones publicadas. Cuando las haya, todos los canales instalarán los mismos binarios, compilados por GitHub Actions con su atestación:
+Todos los canales instalan los mismos binarios, compilados por GitHub Actions con su atestación:
 
 | Canal                                | Qué lo verifica                                                     |
 | ------------------------------------ | ------------------------------------------------------------------- |

@@ -7,7 +7,7 @@ description: What cuilo does, the ideas behind it (packs, pieces, variants, plan
 cuilo generates code into your project from versioned **packs**: components, REST resources, middleware and other pieces of an app. You see every change as a plan before anything is written. The code it adds is yours to edit, and when the pack releases a new version, `cuilo update` merges the changes into your edited files.
 
 :::note
-cuilo 2 is in alpha. No release is published yet, so [build it from source](/install/#build-from-source) to try it.
+cuilo 2 is in alpha: [install it](/install/) to try it, and expect breaking changes until the beta.
 :::
 
 ## Packs and pieces

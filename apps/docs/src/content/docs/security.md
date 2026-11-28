@@ -150,7 +150,7 @@ Text from packs, projects and other programs is escaped before cuilo prints it. 
 
 ## Install integrity
 
-Releases are not published yet. Once they are, every channel installs the same binaries, built and attested by GitHub Actions:
+Every channel installs the same binaries, built and attested by GitHub Actions:
 
 | Channel                       | What checks it                                          |
 | ----------------------------- | ------------------------------------------------------- |
