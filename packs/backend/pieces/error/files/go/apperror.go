@@ -8,7 +8,8 @@ import (
 	"net/http"
 // @cuilo if stack.echo
 
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4" // @cuilo if !stack.echo-v5
+	"github.com/labstack/echo/v5" // @cuilo if stack.echo-v5
 // @cuilo end
 )
 
@@ -75,7 +76,20 @@ func Write(w http.ResponseWriter, r *http.Request, err error) {
 	w.WriteHeader(problem.Status)
 	_ = json.NewEncoder(w).Encode(problem)
 }
-// @cuilo if stack.echo
+// @cuilo if stack.echo-v5
+
+// Handler is an echo.HTTPErrorHandler that sends every error as problem details.
+func Handler(c *echo.Context, err error) {
+	if response, _ := echo.UnwrapResponse(c.Response()); response != nil && response.Committed {
+		return
+	}
+	if status := echo.StatusCode(err); status != 0 {
+		err = &Error{Status: status, Detail: http.StatusText(status), Err: err}
+	}
+	Write(c.Response(), c.Request(), err)
+}
+// @cuilo end
+// @cuilo if stack.echo && !stack.echo-v5
 
 // Handler is an echo.HTTPErrorHandler that sends every error as problem details.
 func Handler(err error, c echo.Context) {

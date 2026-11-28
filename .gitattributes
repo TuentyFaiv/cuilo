@@ -4,3 +4,6 @@
 *.png binary
 *.webp binary
 *.ico binary
+
+# The fixture projects stay out of GitHub's language stats and collapse in diffs.
+fixtures/** linguist-vendored linguist-generated

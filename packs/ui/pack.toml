@@ -1,7 +1,8 @@
 schema_version = 1
 name = "ui"
 version = "0.2.0"
-description = "Atomic design UI pieces (atoms, molecules, organisms) for web, Rust and native apps."
+description = "Atomic design UI pieces (atoms, molecules, organisms) for Svelte, Astro, Leptos, Dioxus, Yew, SwiftUI and other web and native stacks."
+kinds = ["ui", "mobile", "desktop"]
 license = "MIT"
 
 [permissions]
@@ -10,8 +11,16 @@ write = [
 	"lib/ui/**",
 	"test/ui/**",
 	"app/src/main/java/**",
+	"app/src/test/java/**",
+	"shared/src/commonMain/kotlin/**",
+	"shared/src/jvmTest/kotlin/**",
 	"composeApp/src/commonMain/kotlin/**",
+	"composeApp/src/jvmTest/kotlin/**",
 	"Sources/**",
+	"Tests/*/UI/**",
 	"*/UI/**",
 ]
 dependencies = true
+
+[translations.es-mx]
+description = "Piezas de UI de diseño atómico (átomos, moléculas y organismos) para Svelte, Astro, Leptos, Dioxus, Yew, SwiftUI y otros stacks web y nativos."

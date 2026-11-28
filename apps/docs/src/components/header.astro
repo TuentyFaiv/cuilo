@@ -1,0 +1,121 @@
+---
+import Search from "@astrojs/starlight/components/Search.astro";
+import SocialIcons from "@astrojs/starlight/components/SocialIcons.astro";
+
+import { ui } from "../i18n/ui";
+import { sectionTabs } from "../sections";
+import LanguageSelect from "./language-select.astro";
+import MobileMenu from "./mobile-menu.astro";
+import SiteTitle from "./site-title.astro";
+import ThemeSelect from "./theme-select.astro";
+
+const { locale, hasSidebar } = Astro.locals.starlightRoute;
+const t = ui(locale);
+const tabs = sectionTabs(Astro.url.pathname, locale);
+---
+
+<div class:list={["header", { "with-menu": !hasSidebar }]}>
+	<div class="brand">
+		<SiteTitle />
+		<nav class="links" aria-label={t.navSections}>
+			{tabs.map((tab) => (
+				<a href={tab.href} aria-current={tab.current ? "true" : undefined}>
+					{tab.label}
+				</a>
+			))}
+		</nav>
+	</div>
+	<div class="tools">
+		<div class="search print:hidden"><Search /></div>
+		<div class="right sl-hidden md:sl-flex print:hidden">
+			<LanguageSelect compact />
+			<SocialIcons />
+			<ThemeSelect compact />
+		</div>
+	</div>
+</div>
+{!hasSidebar && <MobileMenu />}
+
+<style>
+	.header {
+		display: flex;
+		gap: 1.5rem;
+		align-items: center;
+		justify-content: space-between;
+		height: 100%;
+	}
+
+	.brand {
+		display: flex;
+		gap: 1.25rem;
+		align-items: center;
+		min-width: 0;
+	}
+
+	.tools {
+		display: flex;
+	}
+
+	.tools,
+	.right {
+		gap: var(--cu-control-gap);
+		align-items: center;
+		min-width: 0;
+	}
+
+	.right :global(a[rel="me"]) {
+		align-items: center;
+		justify-content: center;
+		width: var(--cu-control-height-compact);
+		height: var(--cu-control-height-compact);
+		padding: 0;
+		margin: 0;
+		color: var(--sl-color-text-accent);
+		background: transparent;
+		border-radius: var(--cu-control-radius);
+	}
+
+	.right :global(a[rel="me"]:hover) {
+		background: var(--cu-control-bg-hover);
+	}
+
+	.right :global(a[rel="me"]:focus-visible) {
+		outline: var(--cu-focus-ring);
+		outline-offset: var(--cu-focus-offset);
+	}
+
+	.links {
+		display: none;
+		gap: 1.5rem;
+	}
+
+	.links a {
+		font-size: 0.9rem;
+		font-weight: 500;
+		color: var(--cu-muted);
+		text-decoration: none;
+	}
+
+	.links a:hover,
+	.links a[aria-current="true"] {
+		color: var(--cu-ink);
+	}
+
+	.with-menu {
+		margin-inline-end: calc(var(--sl-nav-gap) + var(--sl-menu-button-size));
+	}
+
+	@media (min-width: 72rem) {
+		.links {
+			display: flex;
+		}
+
+		.with-menu {
+			margin-inline-end: 0;
+		}
+
+		.search {
+			min-width: 16rem;
+		}
+	}
+</style>

@@ -5,7 +5,7 @@ members = ["crates/*"]
 default-members = ["crates/cuilo", "crates/cuilo-core", "crates/cuilo-mcp", "crates/cuilo-packs", "crates/cuilo-rpc"]
 
 [workspace.package]
-version = "2.0.0-alpha.0"
+version = "2.0.0-alpha.1"
 edition = "2024"
 rust-version = "1.99"
 license = "MIT"
@@ -14,10 +14,10 @@ repository = "https://github.com/TuentyFaiv/cuilo"
 homepage = "https://cuilo.dev"
 
 [workspace.dependencies]
-cuilo-core = { path = "crates/cuilo-core", version = "=2.0.0-alpha.0" }
-cuilo-packs = { path = "crates/cuilo-packs", version = "=2.0.0-alpha.0" }
-cuilo-mcp = { path = "crates/cuilo-mcp", version = "=2.0.0-alpha.0" }
-cuilo-rpc = { path = "crates/cuilo-rpc", version = "=2.0.0-alpha.0" }
+cuilo-core = { path = "crates/cuilo-core", version = "=2.0.0-alpha.1" }
+cuilo-packs = { path = "crates/cuilo-packs", version = "=2.0.0-alpha.1" }
+cuilo-mcp = { path = "crates/cuilo-mcp", version = "=2.0.0-alpha.1" }
+cuilo-rpc = { path = "crates/cuilo-rpc", version = "=2.0.0-alpha.1" }
 
 anyhow = "1.0.104"
 clap = { version = "4.6.7", features = ["derive"] }

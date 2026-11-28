@@ -3,6 +3,7 @@
 mod config;
 mod detect;
 mod fs;
+mod imports;
 mod lock;
 mod store;
 mod trust;
@@ -13,11 +14,12 @@ use std::sync::Arc;
 
 pub use config::{
 	ConfigError, ExternalPatcher, HostAuth, ProjectConfig, RegistryAliases, RegistryConfig, SigningConfig, ToolTrust,
-	ToolsConfig, UserConfig, user_cache_dir,
+	ToolsConfig, UpdatePolicy, UserConfig, user_cache_dir,
 };
 pub use detect::{ProjectModel, parse_jsonc};
 pub(crate) use detect::{declared_packages, detect, normalized_python_name};
 pub use fs::{DiskFs, EntryKind, Fs, MemoryFs};
+pub(crate) use imports::{import_style, is_commonjs};
 pub(crate) use lock::instance_id;
 pub use lock::{FileRecord, Instance, LockError, Lockfile, PackRecord, PatchRecord};
 pub(crate) use store::ObjectStore;
@@ -29,7 +31,9 @@ use crate::model::RelPath;
 
 const STATE_GITIGNORE: &str = "# cuilo local state: cache and history. Safe to delete.\n*\n";
 
-/// A project confined to its root: cuilo never goes through symlinks or files in the way.
+/// A project confined to its root: reads and writes never go through symlinks or files in the way, and touch
+/// only regular files. Import detection alone may read a tsconfig or `package.json` through links, when every
+/// link on the way stays inside the root.
 #[derive(Clone, Debug)]
 pub(crate) struct Workspace {
 	fs: Arc<dyn Fs>,
@@ -47,8 +51,8 @@ pub enum WorkspaceError {
 		/// The cause.
 		source: io::Error,
 	},
-	/// cuilo never reads or writes through symlinks.
-	#[error("`{0}` is a symlink; cuilo never reads or writes through symlinks")]
+	/// cuilo never writes through symlinks or reads project files through them.
+	#[error("`{0}` is a symlink; cuilo never writes through symlinks or reads project files through them")]
 	Symlink(RelPath),
 	/// A folder where a file is expected.
 	#[error("`{0}` is a folder, not a file")]
@@ -56,6 +60,9 @@ pub enum WorkspaceError {
 	/// A file where a folder is expected.
 	#[error("`{0}` is a file, but a folder is needed there")]
 	NotADir(RelPath),
+	/// A FIFO, socket or device where a file is expected.
+	#[error("`{0}` is a FIFO, socket or device; cuilo only reads and writes regular files")]
+	Special(RelPath),
 }
 
 impl Workspace {
@@ -89,12 +96,36 @@ impl Workspace {
 			Some(EntryKind::File) => self.fs.read(path).map(Some).map_err(io_error(path)),
 			Some(EntryKind::Dir) => Err(WorkspaceError::NotAFile(path.clone())),
 			Some(EntryKind::Symlink) => Err(WorkspaceError::Symlink(path.clone())),
+			Some(EntryKind::Special) => Err(WorkspaceError::Special(path.clone())),
 		}
+	}
+
+	/// Reads a file of at most `limit` bytes, or `None` when it does not exist, is larger or is not a regular
+	/// file.
+	pub(crate) fn read_limited(&self, path: &RelPath, limit: u64) -> Result<Option<Vec<u8>>, WorkspaceError> {
+		if !self.exists(path)? {
+			return Ok(None);
+		}
+		self.fs.read_limited(path, limit).map_err(io_error(path))
 	}
 
 	/// Whether a file exists at `path`.
 	pub(crate) fn exists(&self, path: &RelPath) -> Result<bool, WorkspaceError> {
 		Ok(self.entry(path)? == Some(EntryKind::File))
+	}
+
+	/// Whether a folder exists at `path`; one reached through a symlink, or a symlink to one, does not count.
+	pub(crate) fn is_dir(&self, path: &RelPath) -> Result<bool, WorkspaceError> {
+		match self.entry(path) {
+			Ok(kind) => Ok(kind == Some(EntryKind::Dir)),
+			Err(WorkspaceError::NotADir(_) | WorkspaceError::Symlink(_)) => Ok(false),
+			Err(error) => Err(error),
+		}
+	}
+
+	/// Whether anything is at `path`: a file, a folder or a symlink.
+	pub(crate) fn occupied(&self, path: &RelPath) -> Result<bool, WorkspaceError> {
+		Ok(self.entry(path)?.is_some())
 	}
 
 	/// Writes a file atomically, creating parent folders; returns the folders it created.
@@ -121,6 +152,7 @@ impl Workspace {
 			Some(EntryKind::File) => self.fs.remove_file(path).map(|()| true).map_err(io_error(path)),
 			Some(EntryKind::Dir) => Err(WorkspaceError::NotAFile(path.clone())),
 			Some(EntryKind::Symlink) => Err(WorkspaceError::Symlink(path.clone())),
+			Some(EntryKind::Special) => Err(WorkspaceError::Special(path.clone())),
 		}
 	}
 
@@ -139,6 +171,7 @@ impl Workspace {
 			None => return Err(io_error(from)(ErrorKind::NotFound.into())),
 			Some(EntryKind::Dir) => return Err(WorkspaceError::NotAFile(from.clone())),
 			Some(EntryKind::Symlink) => return Err(WorkspaceError::Symlink(from.clone())),
+			Some(EntryKind::Special) => return Err(WorkspaceError::Special(from.clone())),
 		}
 		self.prepare_file(to)?;
 		self.fs.rename(from, to).map_err(io_error(from))
@@ -186,7 +219,7 @@ impl Workspace {
 			match self.entry(dir)? {
 				None => return Ok(Vec::new()),
 				Some(EntryKind::Dir) => {}
-				Some(EntryKind::File) => return Err(WorkspaceError::NotADir(dir.clone())),
+				Some(EntryKind::File | EntryKind::Special) => return Err(WorkspaceError::NotADir(dir.clone())),
 				Some(EntryKind::Symlink) => return Err(WorkspaceError::Symlink(dir.clone())),
 			}
 		}
@@ -210,7 +243,7 @@ impl Workspace {
 			match self.fs.entry(&ancestor).map_err(io_error(&ancestor))? {
 				None => return Ok(None),
 				Some(EntryKind::Dir) => {}
-				Some(EntryKind::File) => return Err(WorkspaceError::NotADir(ancestor)),
+				Some(EntryKind::File | EntryKind::Special) => return Err(WorkspaceError::NotADir(ancestor)),
 				Some(EntryKind::Symlink) => return Err(WorkspaceError::Symlink(ancestor)),
 			}
 		}
@@ -221,6 +254,7 @@ impl Workspace {
 		match self.entry(path)? {
 			Some(EntryKind::Dir) => return Err(WorkspaceError::NotAFile(path.clone())),
 			Some(EntryKind::Symlink) => return Err(WorkspaceError::Symlink(path.clone())),
+			Some(EntryKind::Special) => return Err(WorkspaceError::Special(path.clone())),
 			Some(EntryKind::File) | None => {}
 		}
 		let mut created = Vec::new();
@@ -316,6 +350,83 @@ mod tests {
 			workspace.write(&rel("link/evil.txt"), b"x"),
 			Err(WorkspaceError::Symlink(_))
 		));
+	}
+
+	#[test]
+	fn reads_and_writes_should_refuse_a_link_even_when_it_stays_inside_the_root() {
+		let (fs, workspace) = workspace();
+		fs.insert(&rel("real/pkg/package.json"), "{}");
+		fs.insert_symlink_to(&rel("node_modules/pkg"), "../real/pkg");
+
+		assert_eq!(
+			fs.resolve_links_inside_root(&rel("node_modules/pkg/package.json"))
+				.unwrap(),
+			Some(rel("real/pkg/package.json"))
+		);
+		assert!(matches!(
+			workspace.read(&rel("node_modules/pkg/package.json")),
+			Err(WorkspaceError::Symlink(_))
+		));
+		assert!(matches!(
+			workspace.read_limited(&rel("node_modules/pkg/package.json"), 1024),
+			Err(WorkspaceError::Symlink(_))
+		));
+		assert!(matches!(
+			workspace.write(&rel("node_modules/pkg/package.json"), b"x"),
+			Err(WorkspaceError::Symlink(_))
+		));
+		assert_eq!(fs.files()[&rel("real/pkg/package.json")], b"{}");
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn disk_workspace_should_refuse_reading_through_a_link_inside_the_root() {
+		let dir = tempfile::tempdir().unwrap();
+		std::fs::create_dir_all(dir.path().join("real/pkg")).unwrap();
+		std::fs::write(dir.path().join("real/pkg/package.json"), "{}").unwrap();
+		std::fs::create_dir(dir.path().join("node_modules")).unwrap();
+		std::os::unix::fs::symlink("../real/pkg", dir.path().join("node_modules/pkg")).unwrap();
+		let workspace = Workspace::open(dir.path()).unwrap();
+
+		assert!(matches!(
+			workspace.read(&rel("node_modules/pkg/package.json")),
+			Err(WorkspaceError::Symlink(_))
+		));
+		assert!(matches!(
+			workspace.write(&rel("node_modules/pkg/package.json"), b"x"),
+			Err(WorkspaceError::Symlink(_))
+		));
+		assert_eq!(
+			std::fs::read_to_string(dir.path().join("real/pkg/package.json")).unwrap(),
+			"{}"
+		);
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn disk_workspace_should_refuse_fifos_without_blocking() {
+		let dir = tempfile::tempdir().unwrap();
+		if !fs::make_fifo(&dir.path().join("pipe")) {
+			eprintln!("skipped: mkfifo is not available");
+			return;
+		}
+		let workspace = Workspace::open(dir.path()).unwrap();
+		let pipe = rel("pipe");
+		let (exists, read, limited, write, walk) = fs::within_seconds(move || {
+			(
+				workspace.exists(&pipe),
+				workspace.read(&pipe),
+				workspace.read_limited(&pipe, 1024),
+				workspace.write(&pipe, b"x"),
+				workspace.walk(10),
+			)
+		});
+
+		assert!(!exists.unwrap());
+		assert!(matches!(read, Err(WorkspaceError::Special(_))));
+		assert_eq!(limited.unwrap(), None);
+		assert!(matches!(write, Err(WorkspaceError::Special(_))));
+		assert_eq!(walk.unwrap(), Vec::<RelPath>::new());
 	}
 
 	#[test]

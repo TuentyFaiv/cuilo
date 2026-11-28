@@ -38,6 +38,9 @@ pub enum PathError {
 }
 
 impl RelPath {
+	/// The longest path accepted, in bytes.
+	pub(crate) const MAX_LEN: usize = MAX_LEN;
+
 	/// Validates `path`.
 	pub fn new(path: &str) -> Result<Self, PathError> {
 		if path.len() > MAX_LEN {
@@ -93,6 +96,26 @@ impl RelPath {
 	/// Every ancestor from the top down, excluding the path itself.
 	pub fn ancestors(&self) -> impl Iterator<Item = Self> + '_ {
 		self.0.match_indices('/').map(|(end, _)| Self(self.0[..end].to_owned()))
+	}
+
+	/// `relative`, a `/`-separated path that may hold `.` and `..` segments, below `base` (the root when
+	/// `None`); `None` when it leaves the root, names the root itself or is not a valid path.
+	#[must_use]
+	pub fn resolve(base: Option<&Self>, relative: &str) -> Option<Self> {
+		if relative.starts_with('/') {
+			return None;
+		}
+		let mut segments: Vec<&str> = base.map(|base| base.0.split('/').collect()).unwrap_or_default();
+		for segment in relative.split('/') {
+			match segment {
+				"" | "." => {}
+				".." => {
+					segments.pop()?;
+				}
+				segment => segments.push(segment),
+			}
+		}
+		Self::new(&segments.join("/")).ok()
 	}
 
 	/// The native path below `root`.
@@ -249,6 +272,25 @@ mod tests {
 			path.ancestors().map(|a| a.to_string()).collect::<Vec<_>>(),
 			["a", "a/b"]
 		);
+	}
+
+	#[test]
+	fn resolve_should_follow_dot_segments_without_leaving_the_root() {
+		let base = RelPath::new("src/modules/items").unwrap();
+		let resolve = |relative| RelPath::resolve(Some(&base), relative).map(|path| path.to_string());
+
+		assert_eq!(resolve("./item.ts").as_deref(), Some("src/modules/items/item.ts"));
+		assert_eq!(resolve("../../shared/errors").as_deref(), Some("src/shared/errors"));
+		assert_eq!(resolve("../../.."), None);
+		assert_eq!(resolve("../../../../etc/passwd"), None);
+		assert_eq!(resolve("/etc/passwd"), None);
+		assert_eq!(
+			RelPath::resolve(None, "./tsconfig.base.json")
+				.map(|path| path.to_string())
+				.as_deref(),
+			Some("tsconfig.base.json")
+		);
+		assert_eq!(RelPath::resolve(None, "../outside.json"), None);
 	}
 
 	#[test]

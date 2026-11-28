@@ -1,5 +1,22 @@
 {
   "$defs": {
+    "Anchors": {
+      "anyOf": [
+        {
+          "description": "Text that exactly one line of the file must contain.",
+          "type": "string"
+        },
+        {
+          "description": "Alternatives tried in order: the first one in the file is used, and one on more than one line fails the patch without trying the rest.",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      ],
+      "description": "The text an anchor line contains, or alternatives in order of preference."
+    },
     "Dependency": {
       "additionalProperties": false,
       "description": "A package the generated code imports.",
@@ -10,7 +27,7 @@
         },
         "ecosystem": {
           "$ref": "#/$defs/Ecosystem",
-          "description": "Package registry."
+          "description": "Registry, which also decides the project file the package is added to."
         },
         "features": {
           "description": "Cargo features or Python extras, e.g. `[\"derive\"]`.",
@@ -54,37 +71,37 @@
       "oneOf": [
         {
           "const": "npm",
-          "description": "npm, also used by Bun, pnpm, Yarn and Deno.",
+          "description": "npm (`package.json`), also used by Bun, pnpm, Yarn and Deno.",
           "type": "string"
         },
         {
           "const": "cargo",
-          "description": "crates.io.",
+          "description": "crates.io (`Cargo.toml`).",
           "type": "string"
         },
         {
           "const": "pypi",
-          "description": "The Python Package Index.",
+          "description": "The Python Package Index (`pyproject.toml`).",
           "type": "string"
         },
         {
           "const": "go",
-          "description": "Go modules.",
+          "description": "Go modules (`go.mod`).",
           "type": "string"
         },
         {
           "const": "pub",
-          "description": "pub.dev.",
+          "description": "pub.dev (`pubspec.yaml`).",
           "type": "string"
         },
         {
           "const": "rubygems",
-          "description": "The Ruby gem registry.",
+          "description": "The Ruby gem registry (`Gemfile`).",
           "type": "string"
         },
         {
           "const": "packagist",
-          "description": "Packagist.",
+          "description": "Packagist (`composer.json`).",
           "type": "string"
         }
       ]
@@ -107,6 +124,23 @@
         "when"
       ],
       "type": "object"
+    },
+    "Files": {
+      "anyOf": [
+        {
+          "description": "Path from the project root of a file the project must have.",
+          "type": "string"
+        },
+        {
+          "description": "Alternatives in order of preference: the first one the project has is used, and on `cuilo update` the one the piece already patched. A step's patches, or the piece's own, that share an alternative must list the same alternatives in the same order, so they all edit the same file.",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      ],
+      "description": "The project file a patch edits, or alternatives in order of preference."
     },
     "Input": {
       "description": "One input of a piece.",
@@ -137,7 +171,7 @@
               ]
             },
             "prompt": {
-              "description": "Interactive prompt.",
+              "description": "Question asked when no value is given.",
               "type": [
                 "string",
                 "null"
@@ -179,7 +213,7 @@
               ]
             },
             "prompt": {
-              "description": "Interactive prompt.",
+              "description": "Question asked when no value is given.",
               "type": [
                 "string",
                 "null"
@@ -221,7 +255,7 @@
               ]
             },
             "prompt": {
-              "description": "Interactive prompt.",
+              "description": "Question asked when no value is given.",
               "type": [
                 "string",
                 "null"
@@ -282,7 +316,7 @@
               ]
             },
             "prompt": {
-              "description": "Interactive prompt.",
+              "description": "Question asked when no value is given.",
               "type": [
                 "string",
                 "null"
@@ -312,12 +346,12 @@
           "description": "Inserts text next to an anchor line; works in every language.",
           "properties": {
             "anchor": {
-              "description": "Text identifying the anchor line.",
-              "type": "string"
+              "$ref": "#/$defs/Anchors",
+              "description": "Text the anchor line contains, or a list of alternatives tried in order: the first one in the file\nis used, and one on more than one line fails the patch without trying the rest."
             },
             "file": {
-              "description": "Project file to edit; may contain examples.",
-              "type": "string"
+              "$ref": "#/$defs/Files",
+              "description": "Project file to edit, or a list of alternatives in order of preference: the first one the project has\nis used. A step's patches, or the piece's own, that share a file must list the same alternatives in the\nsame order. May contain examples."
             },
             "insert": {
               "description": "Text to insert; may contain examples.",
@@ -353,8 +387,8 @@
           "description": "Adds a JavaScript or TypeScript import after the existing imports.",
           "properties": {
             "file": {
-              "description": "Project file to edit; may contain examples.",
-              "type": "string"
+              "$ref": "#/$defs/Files",
+              "description": "Project file to edit, or a list of alternatives in order of preference: the first one the project has\nis used. A step's patches, or the piece's own, that share a file must list the same alternatives in the\nsame order. May contain examples."
             },
             "import": {
               "description": "The import statement; may contain examples.",
@@ -384,8 +418,8 @@
           "description": "Adds CSS custom properties to a block such as `:root`, keeping values the project already set.",
           "properties": {
             "file": {
-              "description": "Project CSS file to edit; may contain examples.",
-              "type": "string"
+              "$ref": "#/$defs/Files",
+              "description": "Project CSS file to edit, or a list of alternatives in order of preference: the first one the project\nhas is used. A step's patches, or the piece's own, that share a file must list the same alternatives in\nthe same order. May contain examples."
             },
             "kind": {
               "const": "css_vars",
@@ -440,6 +474,27 @@
         }
       ]
     },
+    "PieceTranslation": {
+      "additionalProperties": false,
+      "description": "A piece's text in one locale.",
+      "properties": {
+        "description": {
+          "description": "The piece's `description` in this locale; the piece must have a `description`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "inputs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Input descriptions in this locale, by input name, e.g. ``name = \"Nombre del componente, p. ej.\n`status-badge`.\"``. Each must name an input of the piece that has a `description`.",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "Position": {
       "description": "Where an anchor patch inserts its text.",
       "oneOf": [
@@ -455,6 +510,58 @@
         }
       ]
     },
+    "Step": {
+      "additionalProperties": false,
+      "description": "Setup the user does after adding a piece; with `patches`, a wiring step cuilo applies when wiring is on.",
+      "properties": {
+        "patches": {
+          "description": "Edits that do the step, applied all or none, and only with `cuilo add --wire` or `wire = true` in the\nuser config; the same kinds and fields as `patches`.",
+          "items": {
+            "$ref": "#/$defs/PatchSpec"
+          },
+          "type": "array"
+        },
+        "text": {
+          "description": "The next step shown after `cuilo add`, e.g. ``Mount the routes with `app.route(\"/example-items\", routes)`.``;\nmay contain examples.",
+          "type": "string"
+        },
+        "variants": {
+          "description": "Variants it applies to; empty for every variant.",
+          "items": {
+            "$ref": "#/$defs/Name"
+          },
+          "type": "array"
+        },
+        "when": {
+          "description": "Condition on inputs or stack facts, e.g. `stack.vitest`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "Targets": {
+      "anyOf": [
+        {
+          "description": "Path from the project root; may contain examples, and `\"\"` is the root itself.",
+          "type": "string"
+        },
+        {
+          "description": "Alternatives in order of preference, none of them the root: the first folder the project has is used, and the first alternative when it has none, e.g. `[\"shared\", \"composeApp\"]` for the two layouts of Compose Multiplatform. `cuilo.lock` records the folder used, so updates keep it.",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      ],
+      "description": "The folder the variant writes into, or alternatives in order of preference."
+    },
     "Variant": {
       "additionalProperties": false,
       "description": "A set of templates for one stack.",
@@ -468,14 +575,18 @@
         },
         "name": {
           "$ref": "#/$defs/Name",
-          "description": "Variant name."
+          "description": "Recorded in the lockfile; lowercase letters, digits and `-`."
         },
         "target": {
-          "description": "Output folder instead of the piece's `target`, e.g. `lib/ui` for Flutter.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Targets"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Output folder instead of the piece's `target`, e.g. `lib/ui` for Flutter. A list gives alternatives in order\nof preference, none of them the root: the first folder the project has is used, or the first alternative when\nit has none, e.g. `[\"shared\", \"composeApp\"]`."
         },
         "when": {
           "additionalProperties": {
@@ -493,7 +604,7 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "`piece.toml`.",
+  "description": "`piece.toml`: one piece's inputs, templates and patches.",
   "properties": {
     "dependencies": {
       "description": "Packages the generated code imports.",
@@ -531,7 +642,7 @@
     },
     "name": {
       "$ref": "#/$defs/Name",
-      "description": "Piece name; must match its folder."
+      "description": "Must match its folder; lowercase letters, digits and `-`."
     },
     "patches": {
       "description": "Edits to existing project files.",
@@ -553,9 +664,26 @@
       "minimum": 0,
       "type": "integer"
     },
+    "steps": {
+      "description": "Setup the user does after `cuilo add`, such as mounting new routes; listed as next steps unless\ncuilo applies the step's own patches.",
+      "items": {
+        "$ref": "#/$defs/Step"
+      },
+      "type": "array"
+    },
     "target": {
       "description": "Default output folder, relative to the project root; may contain examples. Empty for the root.",
       "type": "string"
+    },
+    "translations": {
+      "additionalProperties": false,
+      "description": "The piece's description and input descriptions in other languages, by locale, e.g.\n`[translations.es-mx]`. Readers in that locale see them, and the English text where they give none.",
+      "patternProperties": {
+        "^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$": {
+          "$ref": "#/$defs/PieceTranslation"
+        }
+      },
+      "type": "object"
     },
     "variants": {
       "description": "Stack-specific template sets, tried in order.",

@@ -1,0 +1,148 @@
+---
+title: Connect an agent over MCP
+description: Serve cuilo to AI agents over MCP, the tools it offers, and when an agent must ask you before it writes files or runs code.
+---
+
+import { Steps, Tabs, TabItem } from "@astrojs/starlight/components";
+
+`cuilo mcp` gives AI agents the same plan, review and apply flow you get at the terminal. It speaks the Model Context Protocol over stdio: one JSON-RPC message per line on stdin and stdout. Each tool is one engine call. Nothing is written to the project until the agent calls `apply_plan`.
+
+## Before you start
+
+- Put `cuilo` on your `PATH`; see [Install](/install/).
+- Pick the project. cuilo works on the folder the client starts it in. To choose another folder, add `--root /path/to/project` after `mcp`.
+
+## Connect a client
+
+<Tabs>
+<TabItem label="Claude Code">
+
+```sh
+claude mcp add cuilo -- cuilo mcp
+```
+
+Everything after `--` is the command Claude Code runs. To pin the server to one project:
+
+```sh
+claude mcp add cuilo -- cuilo mcp --root /path/to/project
+```
+
+</TabItem>
+<TabItem label="Other clients">
+
+Any MCP client that starts stdio servers can run cuilo. Give it this command and these arguments:
+
+- command: `cuilo`
+- arguments: `["mcp"]`, or `["mcp", "--root", "/path/to/project"]`
+
+Many clients describe a stdio server with an object like this one. Your client's documentation says where it goes and what surrounds it.
+
+```json
+{ "command": "cuilo", "args": ["mcp"] }
+```
+
+</TabItem>
+</Tabs>
+
+### What the server offers
+
+- Protocol versions `2025-11-25`, `2025-06-18`, `2025-03-26` and `2024-11-05`. When a client asks for another version, the server answers with `2025-11-25`.
+- Tools only. The tool list does not change during a session.
+- Instructions on `initialize`, which tell the agent the flow and the consent rules below.
+- Each result as pretty-printed JSON text, plus `structuredContent` when the result is an object.
+- Engine failures, such as a rejected plan or a missing input, as tool results with `isError: true`. A rejected plan also lists each problem. An unknown tool name is a protocol error.
+
+The server reads your [user config](/reference/user-config/) once, when it starts, so restart it after you change that file. A change you make with `cuilo trust` takes effect on the next call that uses the project, without a restart.
+
+### Plans and packs in a session
+
+Pending plans live in the server's memory. Plan ids start at `1` in each session. A plan leaves the list when it is applied or discarded, and every pending plan is gone when the session ends.
+
+`list_packs` shows the official packs plus the packs this session loaded, such as with `add_pack`. A pack from any other source needs `add_pack` again in each new session. When the lockfile pins that source, `add_pack` loads the pinned files.
+
+## How an agent should work
+
+<Steps>
+
+1. **Find a piece.** `detect_project` shows the stack. `list_packs` shows packs and pieces. `add_pack` loads a pack from a source. `describe_piece` shows a piece's inputs, variants, files, patches and steps.
+
+2. **Plan it.** Call `plan_add`, or `plan_adopt`, `plan_update` or `plan_capture`. The result holds a plan id and a report: a `summary`, the `changes` (each with `path` and `action`, plus `risk` and `diff` when they apply), the `instances`, the `dependencies`, any `notes` and any `next_steps`. Nothing is written yet.
+
+3. **Show the user the plan.** Show every change, every `risk` reason and every note. `plan_hunks` returns the lines of each change. To keep only part of a plan, call `select_hunks` with `all`, `none` or a list of hunk indexes per path, for example `{"plan": 1, "keep": {"src/a.ts": [0, 2], "src/b.ts": "none"}}`. Paths you leave out keep their whole change. `discard_plan` drops the plan.
+
+4. **Verify, only if the user agrees.** `verify_plan` runs the project's own checks on a throwaway copy with the plan's files in place. Code from the pack can run there as the user, so the agent asks first. It needs a project the user trusts. The [verify guide](/guides/verify/) explains the copy and the checks.
+
+5. **Apply.** If the plan lists dependencies, call `install_commands` before applying: a plan stops being pending once it is applied. Then call `apply_plan`. It writes the plan as one transaction and refuses when a file changed after planning. Show the install commands to the user and run them only if they agree. Then tell the user the plan's `next_steps`, which `apply_plan` returns too: setup left for them, such as mounting new routes.
+
+6. **Undo if needed.** `history` lists the transactions. `undo` reverts the last one and refuses when its files changed since. `status` and `why` explain what is in the project now.
+
+</Steps>
+
+## Tools
+
+Each tool's annotations tell the client what it does: `readOnlyHint` is true only for read-only tools, and `destructiveHint` is true for the others. `idempotentHint` is false for every tool. `openWorldHint` is true for `add_pack` and `plan_update`, the two tools that can download packs.
+
+### Read-only
+
+These change nothing in the project. `add_pack` and `plan_update` may download a pack into your cuilo cache.
+
+| Tool | Arguments | What it does |
+| --- | --- | --- |
+| `detect_project` | none | Detect the project's stack: language, framework, styling, package manager and more. |
+| `list_packs` | none | List the loaded packs and their pieces. |
+| `add_pack` | `source` | Load a pack from a source: `./folder`, `gh:owner/repo@tag`, an HTTPS `.tar.gz`, `git:` over SSH, `registry:` items or `@namespace/pack`. |
+| `describe_piece` | `pack`, `piece` | Describe a piece: its inputs, variants, files, patches and steps. |
+| `plan_add` | `pack`, `piece`; optional `inputs`, `variant`, `target`, `force`, `wire` | Plan generating a piece (and the pieces it requires). Returns a plan id and its changes, notes and next steps; nothing is written. `wire` applies the piece's wiring steps, such as mounting its routes in the app's entry file, as patches in the plan; it defaults to `wire` in your user config. |
+| `plan_adopt` | `pack`, `piece`; optional `inputs`, `variant`, `target`, `force` | Plan taking over existing code as a piece, so later updates merge into it. Existing files are not changed. |
+| `plan_update` | `pack`; optional `source`, `on_conflict` (`refuse`, `markers`, `ours`, `theirs`), `force`, `migrate` (default `true`) | Plan updating everything generated from a pack to its newest loaded version, or to `source`, merging the user's edits. |
+| `plan_capture` | `pack_dir`, `pack`, `piece`, `files`; optional `example`, `force` | Plan turning project files into a new piece of a local pack. |
+| `plan_hunks` | `plan` | List each change of a pending plan as hunks that can be kept or skipped. |
+| `select_hunks` | `plan`, `keep` | Keep only some changes of a pending plan: per path, `all`, `none` or a list of hunk indexes. |
+| `install_commands` | `plan` | The package-manager commands that add the packages a pending plan lists, skipping ones the project already has. Nothing runs; show them to the user before running any. |
+| `discard_plan` | `plan` | Drop a pending plan. |
+| `status` | none | Show every generated file and whether it is clean, modified or missing. |
+| `why` | `path`, `line` | Explain where a line of a generated file comes from: the pack, or the user. |
+| `history` | none | List applied transactions that can be undone. |
+
+### Writes the project
+
+| Tool | Arguments | What it does |
+| --- | --- | --- |
+| `apply_plan` | `plan` | Apply a pending plan as one transaction. Show the user the plan first. |
+| `undo` | optional `force` | Undo the last transaction; refuses when its files changed since, unless `force`. |
+
+### Runs code
+
+| Tool | Arguments | What it does |
+| --- | --- | --- |
+| `verify_plan` | `plan` | Apply a pending plan to a throwaway copy of the project and run the project's own checks (type check, lint, tests) there; the project is not changed. Code from the pack runs as the user, so show the user the plan and ask first. Needs a project the user trusts. |
+
+## Consent rules
+
+The server's instructions and tool descriptions give the agent these rules. Clients that honor annotations can also ask you before any tool that is not read-only.
+
+- **`apply_plan`**: the agent shows you the plan first.
+- **`verify_plan`**: the checks run with the plan's files in place, so code from the pack, such as a build script or a test, runs as you. The agent shows you the plan and calls `verify_plan` only after you agree.
+- **`install_commands`**: this tool runs nothing. The agent shows you the commands and runs them only with your consent. Packages a package manager adds are outside cuilo's history, so `undo` does not remove them.
+- **Wiring**: the agent leaves `wire` unset unless you ask, so your own `wire` setting applies, and relays the plan's next steps after applying it.
+- **Trust**: when a plan notes that files were not formatted because the project is not trusted, the agent tells you. Trusting a project lets its own tools run, so only you should run `cuilo trust`. The [formatters and trust guide](/guides/formatters-and-trust/) explains what trust allows.
+
+`undo` with `force` discards edits made after the transaction. The server sets no rule for it, so tell your agent to check with you before it passes `force`.
+
+:::caution
+Annotations and instructions guide the agent and the client. They do not stop an agent that ignores them. Keep your client's approval prompts on for tools that are not read-only.
+:::
+
+## Revoking trust
+
+`cuilo trust --revoke` also reaches sessions that are already running. On its next call, a running `cuilo mcp` session stops running the project's formatters and linters, and `verify_plan` refuses until you trust the project again. You do not need to restart the server.
+
+```sh
+cuilo trust --revoke --root /path/to/project
+```
+
+## Related
+
+- [`cuilo mcp`](/reference/cli/mcp/) reference
+- [Security](/security/)
+- [llms.txt](/agents/llms-txt/), to give an agent the docs

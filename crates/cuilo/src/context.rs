@@ -24,10 +24,8 @@ pub struct Context {
 }
 
 impl Context {
-	/// Opens the project at `root`, loading the official packs and, from the cache or their source,
-	/// the pack versions its lockfile pins. With `ask`, it asks once whether to trust the project
-	/// when the user has not decided yet and it matters: the project uses formatters that come from
-	/// it, or the command `verifies` with the project's own checks.
+	/// Opens the project at `root` with the official packs and the versions its lockfile pins; with
+	/// `ask`, asks whether to trust an undecided project whose formatters or checks would run.
 	pub fn open(root: &Path, ask: bool, verifies: bool) -> anyhow::Result<Self> {
 		let user = UserConfig::load()?;
 		let mut trusted_projects = TrustedProjects::load()?;
@@ -131,8 +129,7 @@ fn open_engine(user: &UserConfig, root: &Path, trusted: bool) -> anyhow::Result<
 		.with_context(|| format!("cannot open the project at {}", root.display()))
 }
 
-/// The names of the formatters the project uses, all of which run only once it is trusted; only names
-/// cuilo knows, so the trust question holds no text the project wrote.
+/// The formatters the project uses, by names cuilo knows, so the trust question shows no project text.
 pub fn project_tools(engine: &Engine) -> anyhow::Result<Vec<String>> {
 	Ok(
 		engine

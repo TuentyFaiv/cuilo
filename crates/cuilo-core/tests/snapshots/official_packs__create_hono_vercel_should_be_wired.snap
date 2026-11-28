@@ -1,0 +1,29 @@
+---
+source: crates/cuilo-core/tests/official_packs.rs
+expression: "create_hono(\"vercel\", \"src/index.ts\", true)?"
+---
+vercel: src/index.ts
+---
+import { Hono } from 'hono'
+import { errorHandler } from "./shared/error-handler.js";
+import { statusBadgeRoutes } from "./modules/status-badges/status-badge.routes.js";
+import { StatusBadgeService } from "./modules/status-badges/status-badge.service.js";
+import { InMemoryStatusBadgeRepository } from "./modules/status-badges/status-badge.repository.js";
+import { statusBadge } from "./shared/middleware/status-badge.js";
+
+const app = new Hono()
+app.use(statusBadge);
+app.onError(errorHandler);
+
+const welcomeStrings = [
+  'Hello Hono!',
+  'To learn more about Hono on Vercel, visit https://vercel.com/docs/frameworks/backend/hono'
+]
+
+app.get('/', (c) => {
+  return c.text(welcomeStrings.join('\n\n'))
+})
+
+app.route("/status-badges", statusBadgeRoutes(new StatusBadgeService(new InMemoryStatusBadgeRepository())));
+
+export default app

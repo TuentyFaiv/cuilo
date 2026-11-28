@@ -1,4 +1,5 @@
-import { type ComponentProps, splitProps } from "solid-js";
+import type { ComponentProps } from "@solidjs/web";
+import { omit } from "solid-js";
 // @cuilo if !stack.tailwind
 
 import styles from "./example-atom.module.css";
@@ -21,9 +22,7 @@ const classes = styles;
 
 /** The smallest UI building block: an inline, label-sized element. */
 export function ExampleAtom(props: ExampleAtomProps) {
-	const [local, rest] = splitProps(props, ["tone", "class"]);
+	const rest = omit(props, "tone", "class");
 
-	return (
-		<span {...rest} data-tone={local.tone ?? "neutral"} class={[classes.root, local.class].filter(Boolean).join(" ")} />
-	);
+	return <span {...rest} data-tone={props.tone ?? "neutral"} class={[classes.root, props.class]} />;
 }

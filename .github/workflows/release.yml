@@ -1,8 +1,7 @@
 name: Release
 
-# Runs when a `v<version>` tag is pushed. Every job that publishes waits for approval of the
-# `release` environment, which holds the signing key and the Cloudflare R2 credentials. Every job
-# checks out the commit the run started for, so moving the tag before approval changes nothing.
+# Publishing jobs wait for approval of the `release` environment (signing key, R2 credentials) and
+# check out the run's commit, so moving the tag before approval changes nothing.
 on:
   push:
     tags: ["v*"]
@@ -48,6 +47,13 @@ jobs:
             *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
           esac
       - run: cargo xtask release-check
+      - name: Take the release notes from the changelog
+        run: cargo xtask release-notes > release-notes.md
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-notes
+          path: release-notes.md
+          if-no-files-found: error
 
   build:
     name: Build ${{ matrix.target }}
@@ -117,9 +123,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: release
     permissions:
-      contents: write
-      id-token: write
-      attestations: write
+      contents: write # to publish the GitHub Release
+      id-token: write # to sign the attestations
+      attestations: write # to store the attestations
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -130,6 +136,10 @@ jobs:
           pattern: bin-*
           path: dist
           merge-multiple: true
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/notes
       - name: Checksums
         working-directory: dist
         run: sha256sum cuilo-* > SHA256SUMS && cat SHA256SUMS
@@ -169,7 +179,7 @@ jobs:
           flags=""
           if [ "$PRERELEASE" = "true" ]; then flags="--prerelease"; fi
           # shellcheck disable=SC2086
-          gh release create "$TAG" dist/* --verify-tag --title "cuilo $TAG" --generate-notes $flags
+          gh release create "$TAG" dist/* --verify-tag --title "cuilo $TAG" --notes-file "$RUNNER_TEMP/notes/release-notes.md" $flags
 
   cloudflare:
     name: Cloudflare R2
@@ -263,7 +273,7 @@ jobs:
     environment: release
     permissions:
       contents: read
-      id-token: write
+      id-token: write # for trusted publishing and provenance
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -281,18 +291,37 @@ jobs:
           pattern: bin-*
           path: dist
           merge-multiple: true
+      - name: Choose the dist-tag for every package
+        id: dist-tag
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          # A pre-release is `latest` until npm has a stable release; the 0.0.0 name placeholders don't count.
+          dist_tag() {
+            case "$1" in *-*) ;; *) echo latest; return ;; esac
+            case "$2" in "" | 0.0.0 | *-*) echo latest ;; *) echo next ;; esac
+          }
+          if ! current="$(npm view @cuilo/cli dist-tags.latest 2> "$RUNNER_TEMP/npm-view.log")"; then
+            if ! grep -q 'code E404' "$RUNNER_TEMP/npm-view.log"; then
+              cat "$RUNNER_TEMP/npm-view.log"
+              echo "::error::could not read the dist-tags of @cuilo/cli"
+              exit 1
+            fi
+            current=""
+          fi
+          tag="$(dist_tag "$VERSION" "$current")"
+          echo "latest is ${current:-missing}, so $VERSION is published as $tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
       - name: Publish with provenance (trusted publishing)
         env:
-          PRERELEASE: ${{ needs.check.outputs.prerelease }}
+          TAG: ${{ steps.dist-tag.outputs.tag }}
         run: |
-          tag="latest"
-          if [ "$PRERELEASE" = "true" ]; then tag="next"; fi
           cargo xtask npm dist npm-out > packages.txt
           # Platform packages first, so the wrapper never points at a missing one.
           grep -v '/cli$' packages.txt | while read -r dir; do
-            npm publish "$dir" --provenance --access public --tag "$tag"
+            npm publish "./$dir" --provenance --access public --tag "$TAG"
           done
-          npm publish npm-out/cli --provenance --access public --tag "$tag"
+          npm publish ./npm-out/cli --provenance --access public --tag "$TAG"
 
   crates:
     name: crates.io
@@ -301,7 +330,7 @@ jobs:
     environment: release
     permissions:
       contents: read
-      id-token: write
+      id-token: write # for trusted publishing
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -356,3 +385,11 @@ jobs:
           git push origin "$branch"
           gh pr create --repo tuentyfaiv/homebrew-tap --head "$branch" --title "cuilo $VERSION" \
             --body "Formula for cuilo $VERSION, generated by the release workflow."
+
+  smoke:
+    name: Install smoke test
+    needs: [check, cloudflare, npm, crates]
+    permissions: {}
+    uses: ./.github/workflows/install-smoke.yml # zizmor: ignore[self-repository] actionlint can't parse `$/` yet
+    with:
+      version: ${{ needs.check.outputs.version }}

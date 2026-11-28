@@ -44,10 +44,8 @@ struct Rule {
 }
 
 impl Replacer {
-	/// Builds the replacement rules.
-	///
-	/// An example of two or more words is replaced in every [`Case`] and as written, e.g.
-	/// `com.example.app`; any other example is replaced literally.
+	/// Builds the replacement rules: an example of two or more words is replaced in every [`Case`] and as
+	/// written, any other literally.
 	pub fn new(examples: &[Example<'_>]) -> Result<Self, ReplaceError> {
 		let mut rules: Vec<Rule> = Vec::new();
 		for example in examples {

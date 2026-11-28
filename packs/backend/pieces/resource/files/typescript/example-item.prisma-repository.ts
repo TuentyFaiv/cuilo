@@ -1,9 +1,8 @@
-import type { PrismaClient } from "@prisma/client";
-
+import type { PrismaClient } from "../../shared/database";
 import type { CreateExampleItem, ExampleItem, UpdateExampleItem } from "./example-item.model";
 import type { ExampleItemRepository, Page } from "./example-item.repository";
 
-/** Stores example items with Prisma; needs an `ExampleItem` model in `schema.prisma`. */
+/** Stores example items with Prisma. */
 export class PrismaExampleItemRepository implements ExampleItemRepository {
 	readonly #prisma: PrismaClient;
 

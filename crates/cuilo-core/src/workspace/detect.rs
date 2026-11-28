@@ -48,6 +48,11 @@ pub(crate) fn detect(workspace: &Workspace, config: &ProjectConfig) -> Result<Pr
 	for (fact, values) in &config.stack {
 		stack.set(*fact, values.iter().cloned());
 	}
+	if !config.stack.contains_key(&Fact::ImportStyle)
+		&& let Some(style) = super::import_style(workspace, None, &stack)
+	{
+		stack.set_import_style(style);
+	}
 	Ok(ProjectModel {
 		stack,
 		env: env_keys(workspace)?,
@@ -311,6 +316,10 @@ const PACKAGE_SECTIONS: [&str; 4] = [
 	"optionalDependencies",
 ];
 
+/// Packages whose major version, read from the range `package.json` declares, adds `<framework>-v<major>`, since
+/// their majors need different code.
+const JS_MAJORS: [(&str, &str); 1] = [("solid-js", "solid")];
+
 impl Detector for JavaScript {
 	fn detect(&self, workspace: &Workspace, stack: &mut Stack) -> Result<(), WorkspaceError> {
 		let package_text = read_text(workspace, "package.json")?;
@@ -336,6 +345,11 @@ impl Detector for JavaScript {
 		}
 
 		insert_named(stack, Fact::Framework, &names, &JS_FRAMEWORKS);
+		for (name, framework) in JS_MAJORS {
+			for major in declared_majors(&package, name) {
+				stack.insert(Fact::Framework, &format!("{framework}-v{major}"));
+			}
+		}
 		insert_named(stack, Fact::Styling, &names, &JS_STYLING);
 		insert_named(stack, Fact::Database, &names, &JS_DATABASES);
 		insert_named(stack, Fact::Testing, &names, &JS_TESTING);
@@ -377,6 +391,27 @@ impl Detector for JavaScript {
 		stack.insert(Fact::PackageManager, &manager);
 		Ok(())
 	}
+}
+
+/// The majors of `name` that the sections of `package.json` declare.
+fn declared_majors(package: &Json, name: &str) -> BTreeSet<String> {
+	PACKAGE_SECTIONS
+		.iter()
+		.filter_map(|section| package.get(section)?.get(name)?.as_str())
+		.filter_map(range_major)
+		.map(str::to_owned)
+		.collect()
+}
+
+/// The one major an npm range allows, e.g. `1` for `^1.9.5`, `~1.8`, `1.x` or `1.9.20`; a range that spans majors,
+/// a tag such as `latest` and a protocol such as `catalog:` or `workspace:` give none.
+fn range_major(range: &str) -> Option<&str> {
+	let version = range.trim().trim_start_matches(['^', '~', '=', 'v']);
+	let one_version = version
+		.bytes()
+		.all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'+' | b'*'));
+	let (major, rest) = version.split_at(version.bytes().take_while(u8::is_ascii_digit).count());
+	(one_version && !major.is_empty() && (rest.is_empty() || rest.starts_with('.'))).then_some(major)
 }
 
 /// The package name in an `npm:` or `jsr:` specifier, e.g. `jsr:@hono/hono@^4` → `@hono/hono`.
@@ -623,6 +658,10 @@ const GO_FRAMEWORKS: [(&str, &str); 8] = [
 
 const GO_DATABASES: [(&str, &str); 2] = [("gorm.io/gorm", "gorm"), ("entgo.io/ent", "ent")];
 
+/// Modules whose major version, the `/v<major>` their path ends in, adds `<framework>-v<major>`, since their majors
+/// need different code.
+const GO_MAJORS: [(&str, &str); 1] = [("github.com/labstack/echo", "echo")];
+
 impl Detector for Go {
 	fn detect(&self, workspace: &Workspace, stack: &mut Stack) -> Result<(), WorkspaceError> {
 		let Some(text) = read_text(workspace, "go.mod")? else {
@@ -645,6 +684,15 @@ impl Detector for Go {
 				if required {
 					stack.insert(fact, value);
 				}
+			}
+		}
+		for (prefix, framework) in GO_MAJORS {
+			let majors = modules.iter().filter_map(|module| {
+				let major = module.strip_prefix(prefix)?.strip_prefix("/v")?;
+				(!major.is_empty() && major.bytes().all(|byte| byte.is_ascii_digit())).then_some(major)
+			});
+			for major in majors {
+				stack.insert(Fact::Framework, &format!("{framework}-v{major}"));
 			}
 		}
 		Ok(())
@@ -1131,6 +1179,61 @@ mod tests {
 	}
 
 	#[test]
+	fn go_should_add_the_echo_major_its_module_path_ends_in() {
+		let frameworks = |require: &str| {
+			let model = detect_in(&[("go.mod", &format!("module x\n\nrequire {require}\n"))]);
+			model
+				.stack
+				.values(Fact::Framework)
+				.map(str::to_owned)
+				.collect::<Vec<_>>()
+		};
+
+		assert_eq!(frameworks("github.com/labstack/echo/v4 v4.16.6"), ["echo", "echo-v4"]);
+		assert_eq!(frameworks("github.com/labstack/echo/v5 v5.4.7"), ["echo", "echo-v5"]);
+		assert_eq!(frameworks("github.com/labstack/echo v3.3.10+incompatible"), ["echo"]);
+		assert_eq!(
+			frameworks("github.com/labstack/echo-contrib v0.17.4"),
+			Vec::<String>::new()
+		);
+	}
+
+	#[test]
+	fn js_should_add_the_solid_major_its_range_names() {
+		let majors = |range: &str| {
+			let model = detect_in(&[(
+				"package.json",
+				&format!(r#"{{"dependencies": {{"solid-js": "{range}"}}}}"#),
+			)]);
+			assert!(model.stack.has(Fact::Framework, "solid"), "{range}");
+			model
+				.stack
+				.values(Fact::Framework)
+				.filter(|value| *value != "solid")
+				.map(str::to_owned)
+				.collect::<Vec<_>>()
+		};
+
+		for range in ["^1.9.5", "~1.8", "1.x", "1.9.20", "=1.9.0"] {
+			assert_eq!(majors(range), ["solid-v1"], "{range}");
+		}
+		for range in ["^2.0.0", "2.0.0-rc.23", "v2"] {
+			assert_eq!(majors(range), ["solid-v2"], "{range}");
+		}
+		for range in [
+			"catalog:",
+			"workspace:*",
+			"latest",
+			"*",
+			">=1.7",
+			"^1.9 || ^2.0",
+			"1.9 - 2.0",
+		] {
+			assert_eq!(majors(range), Vec::<String>::new(), "{range}");
+		}
+	}
+
+	#[test]
 	fn dart_should_detect_flutter() {
 		let model = detect_in(&[("pubspec.yaml", "dependencies:\n  flutter:\n    sdk: flutter\n")]);
 
@@ -1272,6 +1375,143 @@ mod tests {
 		let model = detect_in(&[(".env.example", "# comment\nAPI_URL=https://x\nexport SECRET=\n")]);
 
 		assert_eq!(model.env.into_iter().collect::<Vec<_>>(), ["API_URL", "SECRET"]);
+	}
+
+	#[test]
+	fn import_style_should_come_from_the_root_tsconfig_or_deno_in_js_projects_only() {
+		let node = detect_in(&[
+			("package.json", r#"{"devDependencies": {"typescript": "6"}}"#),
+			("tsconfig.json", r#"{"compilerOptions": {"module": "NodeNext"}}"#),
+		]);
+		let bundler = detect_in(&[("package.json", r#"{"dependencies": {"vite": "8"}}"#)]);
+		let deno = detect_in(&[("deno.json", "{}")]);
+		let rust = detect_in(&[("Cargo.toml", "[package]\nname = \"x\"\n")]);
+
+		assert!(has(&node, Fact::ImportStyle, &["imports-js"]));
+		assert!(has(&bundler, Fact::ImportStyle, &["imports-extensionless"]));
+		assert!(has(&deno, Fact::ImportStyle, &["imports-ts"]));
+		assert_eq!(rust.stack.values(Fact::ImportStyle).count(), 0);
+	}
+
+	#[test]
+	fn import_style_should_follow_a_configured_deno_runtime_and_yield_to_a_configured_style() {
+		let files = [
+			("package.json", "{}"),
+			("tsconfig.json", r#"{"compilerOptions": {"module": "nodenext"}}"#),
+		];
+		let mut deno = ProjectConfig::default();
+		deno.stack.insert(Fact::Runtime, vec!["deno".to_owned()]);
+		let mut set = ProjectConfig::default();
+		set
+			.stack
+			.insert(Fact::ImportStyle, vec!["imports-extensionless".to_owned()]);
+		let mut cleared = ProjectConfig::default();
+		cleared.stack.insert(Fact::ImportStyle, Vec::new());
+
+		let detect_with = |config: &ProjectConfig| detect(&workspace(&files), config).unwrap();
+
+		assert!(has(&detect_with(&deno), Fact::ImportStyle, &["imports-js"]));
+		assert!(has(&detect_with(&set), Fact::ImportStyle, &["imports-extensionless"]));
+		assert_eq!(detect_with(&cleared).stack.values(Fact::ImportStyle).count(), 0);
+		let deno_only = detect(&workspace(&[("package.json", "{}")]), &deno).unwrap();
+		assert!(has(&deno_only, Fact::ImportStyle, &["imports-ts"]));
+	}
+
+	#[test]
+	fn no_detected_value_should_look_like_an_import_style_or_a_framework_major() {
+		let tables: [&[(&str, &str)]; 22] = [
+			&JS_FRAMEWORKS,
+			&JS_STYLING,
+			&JS_TESTING,
+			&PYTHON_TESTING,
+			&JS_FORMATTERS,
+			&PYTHON_FORMATTERS,
+			&JS_DATABASES,
+			&RUST_FRAMEWORKS,
+			&RUST_RUNTIMES,
+			&RUST_DATABASES,
+			&PYTHON_FRAMEWORKS,
+			&PYTHON_DATABASES,
+			&GO_FRAMEWORKS,
+			&GO_DATABASES,
+			&DART_DATABASES,
+			&RUBY_DATABASES,
+			&RUBY_FRAMEWORKS,
+			&PHP_FRAMEWORKS,
+			&PHP_DATABASES,
+			&JVM_FRAMEWORKS,
+			&JVM_DATABASES,
+			&SWIFT_FRAMEWORKS,
+		];
+		let fixed = [
+			"typescript",
+			"javascript",
+			"deno",
+			"bun",
+			"node",
+			"npm",
+			"pnpm",
+			"yarn",
+			"rust",
+			"cargo",
+			"rustfmt",
+			"python",
+			"uv",
+			"poetry",
+			"pdm",
+			"pipenv",
+			"pip",
+			"django-orm",
+			"go",
+			"gofmt",
+			"dart",
+			"pub",
+			"flutter",
+			"ruby",
+			"bundler",
+			"activerecord",
+			"php",
+			"composer",
+			"eloquent",
+			"gradle",
+			"maven",
+			"kotlin",
+			"java",
+			"swift",
+			"cocoapods",
+			"swiftpm",
+			"gpui",
+		];
+		let values = tables
+			.iter()
+			.flat_map(|table| table.iter().map(|(_, value)| *value))
+			.chain(FORMATTER_CONFIGS.iter().map(|(tool, _)| *tool))
+			.chain(fixed);
+
+		let frameworks: BTreeSet<&str> = [&JS_FRAMEWORKS[..], &GO_FRAMEWORKS]
+			.iter()
+			.flat_map(|table| table.iter().map(|(_, value)| *value))
+			.collect();
+
+		for value in values {
+			assert!(
+				!value.starts_with("imports-"),
+				"`{value}` would collide with an import style"
+			);
+			let major = value
+				.rsplit_once("-v")
+				.is_some_and(|(_, major)| !major.is_empty() && major.bytes().all(|byte| byte.is_ascii_digit()));
+			assert!(
+				!major,
+				"`{value}` would collide with a framework major such as `echo-v5`"
+			);
+		}
+		for (_, framework) in JS_MAJORS.iter().chain(&GO_MAJORS) {
+			assert!(
+				frameworks.contains(framework),
+				"`{framework}` has majors but is never detected"
+			);
+		}
 	}
 
 	#[test]

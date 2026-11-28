@@ -9,6 +9,12 @@ description = "Add tests; on by default when the project can run them."
 prompt = "Add tests?"
 default_when = "stack.vitest || stack.pytest || stack.go || stack.rust"
 
+[translations.es-mx]
+description = "Errores de la aplicación con formato problem details de RFC 9457, con el manejador de errores del framework."
+
+[translations.es-mx.inputs]
+tests = "Agrega pruebas; se activa por defecto cuando el proyecto puede correrlas."
+
 [[variants]]
 name = "hono"
 when = { framework = "hono", language = "typescript" }
@@ -37,7 +43,13 @@ target = "internal/apperror"
 
 [[variants]]
 name = "echo"
-when = { framework = "echo" }
+when = { framework = "echo-v4" }
+files = "files/go"
+target = "internal/apperror"
+
+[[variants]]
+name = "echo-v5"
+when = { framework = "echo-v5" }
 files = "files/go"
 target = "internal/apperror"
 
@@ -50,8 +62,63 @@ path = "tests/test_errors.py"
 when = "tests"
 
 [[files]]
+path = "tests/__init__.py"
+when = "tests"
+
+[[files]]
 path = "apperror_test.go"
 when = "tests"
+
+[[steps]]
+text = "Register the error handler in the file that creates your Hono app, with `app.onError(errorHandler)`."
+variants = ["hono"]
+
+[[steps.patches]]
+kind = "import"
+file = ["src/index.ts", "src/index.tsx"]
+import = 'import { errorHandler } from "./shared/error-handler";'
+
+[[steps.patches]]
+kind = "anchor"
+file = ["src/index.ts", "src/index.tsx"]
+anchor = "const app = new Hono()"
+insert = "app.onError(errorHandler);"
+
+[[steps]]
+text = "Register the error handler after all your routes with `app.use(errorHandler)`."
+variants = ["express"]
+
+[[steps]]
+text = "Declare the module with `mod error;` in `src/main.rs`."
+variants = ["axum"]
+
+[[steps.patches]]
+kind = "anchor"
+file = "src/main.rs"
+anchor = "#[tokio::main]"
+position = "before"
+insert = "mod error;\n\n"
+
+[[steps]]
+text = "Register the error handlers in `app/main.py` with `register_error_handlers(app)`, imported from `app.errors`."
+variants = ["fastapi"]
+
+[[steps.patches]]
+kind = "anchor"
+file = "app/main.py"
+anchor = "app = FastAPI()"
+position = "before"
+insert = "from app.errors import register_error_handlers\n\n"
+
+[[steps.patches]]
+kind = "anchor"
+file = "app/main.py"
+anchor = "app = FastAPI()"
+insert = "register_error_handlers(app)"
+
+[[steps]]
+text = "Send errors as problem details with `e.HTTPErrorHandler = apperror.Handler`."
+variants = ["echo", "echo-v5"]
 
 [[dependencies]]
 ecosystem = "npm"

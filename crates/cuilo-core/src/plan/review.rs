@@ -122,10 +122,8 @@ impl Change {
 }
 
 impl Plan<Validated> {
-	/// Keeps only the parts of the plan that `selection` picks; skipped files are not touched.
-	///
-	/// A skipped new file is also left out of the lockfile, so the next update offers it again. The
-	/// whole selection is checked first, so on error the plan is unchanged.
+	/// Keeps only the parts of the plan that `selection` picks; skipped new files stay out of the
+	/// lockfile, and on error the plan is unchanged.
 	pub fn select(&mut self, selection: &Selection) -> Result<(), SelectError> {
 		let mut decisions = Vec::new();
 		for (path, pick) in selection {
@@ -160,10 +158,30 @@ impl Plan<Validated> {
 							Action::Overwrite | Action::Delete | Action::Unchanged => {}
 						}
 					}
+					if action == Action::Modify {
+						self.unwire(&path);
+					}
 				}
 			}
 		}
 		Ok(())
+	}
+
+	/// Lists again the steps whose patches edit `path`, which the user chose to leave as it is.
+	fn unwire(&mut self, path: &RelPath) {
+		let (skipped, wired): (Vec<_>, Vec<_>) = std::mem::take(&mut self.record.wired)
+			.into_iter()
+			.partition(|step| step.files.contains(path));
+		self.record.wired = wired;
+		for step in skipped {
+			let still_wired = self.record.wired.iter().any(|other| other.instance == step.instance);
+			for instance in &mut self.record.instances {
+				if instance.id == step.instance {
+					instance.wired = still_wired;
+				}
+			}
+			self.list_next_step(step.text);
+		}
 	}
 }
 

@@ -1,0 +1,64 @@
+---
+import type { LucideName } from "./lucide-icons";
+
+import LucideIcon from "./lucide-icon.astro";
+
+interface Props {
+	/** The option's element id, which the search box points at with `aria-activedescendant`. */
+	id: string;
+	/** Whether the option starts selected. */
+	selected: boolean;
+	/** The piece, e.g. `resource`. */
+	name: string;
+	/** `<pack>/<piece>`, e.g. `backend/resource`. */
+	path: string;
+	/** One line about the piece. */
+	description: string;
+	/** Display names of the stacks the piece supports. */
+	stacks: string[];
+	/** The `cuilo add` command the footer shows and Enter copies. */
+	command: string;
+	/** The piece on its pack's directory page. */
+	href: string;
+	/** The icon in the row's tile. */
+	icon: LucideName;
+	/** Lowercase text the query is matched against. */
+	search: string;
+	/** The "official" badge's text. */
+	official: string;
+}
+
+/** How many stack chips a row shows before "+N". */
+const chipLimit = 4;
+/** The icon's size in pixels, from the design. */
+const iconSize = 18;
+const { id, selected, name, path, description, stacks, command, href, icon, search, official } = Astro.props;
+const hiddenStacks = stacks.length - chipLimit;
+---
+
+<div
+	role="option"
+	tabindex="-1"
+	id={id}
+	aria-selected={selected ? "true" : "false"}
+	data-option
+	data-search={search}
+	data-stacks={stacks.join("|")}
+	data-command={command}
+	data-href={href}
+>
+	<span class="cu-piece-icon"><LucideIcon name={icon} size={iconSize} /></span>
+	<span class="cu-result-text">
+		<span class="cu-result-title">
+			<span class="cu-result-name">{name}</span>
+			<span class="cu-result-path">{path}</span>
+			<span class="cu-official">{official}</span>
+		</span>
+		<span class="cu-result-desc">{description}</span>
+	</span>
+	<span class="cu-result-chips">
+		{stacks.slice(0, chipLimit).map((stack) => <span class="cu-result-chip">{stack}</span>)}
+		{hiddenStacks > 0 && <span class="cu-result-chip">+{hiddenStacks}</span>}
+		<span class="cu-result-chip cu-result-note" data-note hidden></span>
+	</span>
+</div>

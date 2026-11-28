@@ -6,6 +6,11 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+// @cuilo if stack.echo
+
+	"github.com/labstack/echo/v4" // @cuilo if !stack.echo-v5
+	"github.com/labstack/echo/v5" // @cuilo if stack.echo-v5
+// @cuilo end
 )
 
 func TestProblemForKeepsApplicationErrors(t *testing.T) {
@@ -31,3 +36,20 @@ func TestWriteHidesUnexpectedErrors(t *testing.T) {
 		t.Fatalf("content type = %q", got)
 	}
 }
+// @cuilo if stack.echo
+
+func TestHandlerSendsAnUnknownRouteAsA404Problem(t *testing.T) {
+	app := echo.New()
+	app.HTTPErrorHandler = Handler
+	recorder := httptest.NewRecorder()
+
+	app.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/missing", nil))
+
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("status = %d", recorder.Code)
+	}
+	if got := recorder.Header().Get("Content-Type"); got != "application/problem+json" {
+		t.Fatalf("content type = %q", got)
+	}
+}
+// @cuilo end

@@ -10,11 +10,14 @@ use std::path::{Path, PathBuf};
 
 pub use inputs::InputError;
 pub(crate) use inputs::resolve as resolve_inputs;
-pub use render::RenderError;
-pub(crate) use render::{RenderRequest, Rendered, RenderedFile, render};
+pub use render::{MajorMismatch, RenderError};
+pub(crate) use render::{
+	RenderRequest, Rendered, RenderedFile, RenderedPatch, RenderedStep, own_targets, render, target,
+};
 
 use crate::model::{
-	Dependency, Digest, Input, Name, PackManifest, PieceManifest, RelPath, SCHEMA_VERSION, Value, Variant, words,
+	Dependency, Digest, Input, Locale, Name, PackManifest, PatchSpec, PieceManifest, RelPath, SCHEMA_VERSION, Targets,
+	Value, Variant, shared_alternative, words,
 };
 use crate::template::{self, Example, Expr, Replacer};
 
@@ -124,6 +127,7 @@ impl Pack {
 			files.get(PACK_MANIFEST).ok_or(PackError::MissingManifest)?,
 		)?;
 		check_schema(PACK_MANIFEST, manifest.schema_version)?;
+		validate_pack_manifest(&manifest)?;
 		let signature = files
 			.remove(SIGNATURE_FILE)
 			.map(|bytes| {
@@ -364,13 +368,10 @@ impl Piece {
 			.collect()
 	}
 
-	fn validate(&self, file: &str) -> Result<(), PackError> {
-		let manifest = &self.manifest;
-		for (name, input) in &manifest.inputs {
-			validate_input(file, name, input)?;
-		}
-
-		let self_values: BTreeMap<String, Value> = manifest
+	/// Checks that the inputs' examples can be replaced together.
+	fn check_examples(&self, file: &str) -> Result<(), PackError> {
+		let self_values: BTreeMap<String, Value> = self
+			.manifest
 			.inputs
 			.iter()
 			.filter_map(|(name, input)| match input {
@@ -384,11 +385,19 @@ impl Piece {
 			})
 			.collect();
 		Replacer::new(&self.examples(&self_values)).map_err(|error| invalid(file, &error.to_string()))?;
+		Ok(())
+	}
 
-		let targets = std::iter::once(&manifest.target).chain(manifest.variants.iter().filter_map(|v| v.target.as_ref()));
-		for target in targets.filter(|target| !target.is_empty()) {
-			RelPath::new(target).map_err(|error| invalid(file, &format!("target: {error}")))?;
+	fn validate(&self, file: &str) -> Result<(), PackError> {
+		let manifest = &self.manifest;
+		for (name, input) in &manifest.inputs {
+			validate_input(file, name, input)?;
 		}
+		validate_piece_translations(file, manifest)?;
+
+		self.check_examples(file)?;
+
+		validate_targets(file, manifest)?;
 
 		let known: BTreeSet<&str> = manifest.inputs.keys().map(String::as_str).collect();
 		let check_names = |where_: &str, expr: &Expr| -> Result<(), PackError> {
@@ -400,6 +409,10 @@ impl Piece {
 				Some(name) => Err(invalid(where_, &format!("condition uses unknown input `{name}`"))),
 				None => Ok(()),
 			}
+		};
+		let check_when = |when: &str| {
+			let condition = Expr::parse(when).map_err(|error| invalid(file, &error.to_string()))?;
+			check_names(file, &condition)
 		};
 
 		let mut variant_names = BTreeSet::new();
@@ -424,8 +437,7 @@ impl Piece {
 		}
 
 		for rule in &manifest.files {
-			let condition = Expr::parse(&rule.when).map_err(|error| invalid(file, &error.to_string()))?;
-			check_names(file, &condition)?;
+			check_when(&rule.when)?;
 			let exists = dirs
 				.iter()
 				.any(|dir| self.templates_in(dir).any(|(path, _)| path == rule.path));
@@ -434,26 +446,26 @@ impl Piece {
 			}
 		}
 
-		for patch in &manifest.patches {
-			RelPath::new(patch.file()).map_err(|error| invalid(file, &format!("patch file: {error}")))?;
-			if let Some(when) = patch.when() {
-				let condition = Expr::parse(when).map_err(|error| invalid(file, &error.to_string()))?;
-				check_names(file, &condition)?;
-			}
+		for patches in std::iter::once(&manifest.patches).chain(manifest.steps.iter().map(|step| &step.patches)) {
+			validate_patch_files(file, patches)?;
+			patches.iter().filter_map(PatchSpec::when).try_for_each(check_when)?;
 		}
-
+		let check_limits = |what: &str, variants: &[Name], when: Option<&str>| {
+			if let Some(unknown) = variants.iter().find(|name| !variant_names.contains(name)) {
+				return Err(invalid(file, &format!("{what} names unknown variant `{unknown}`")));
+			}
+			when.map_or(Ok(()), check_when)
+		};
+		for step in &manifest.steps {
+			if step.text.trim().is_empty() {
+				return Err(invalid(file, "a step has no text"));
+			}
+			check_limits("a step", &step.variants, step.when.as_deref())?;
+		}
 		for dependency in &manifest.dependencies {
 			validate_dependency(file, dependency)?;
-			if let Some(unknown) = dependency.variants.iter().find(|name| !variant_names.contains(name)) {
-				return Err(invalid(
-					file,
-					&format!("dependency `{}` names unknown variant `{unknown}`", dependency.name),
-				));
-			}
-			if let Some(when) = &dependency.when {
-				let condition = Expr::parse(when).map_err(|error| invalid(file, &error.to_string()))?;
-				check_names(file, &condition)?;
-			}
+			let what = format!("dependency `{}`", dependency.name);
+			check_limits(&what, &dependency.variants, dependency.when.as_deref())?;
 		}
 
 		for (path, bytes) in &self.templates {
@@ -472,7 +484,119 @@ impl Piece {
 	}
 }
 
-/// Names and versions end up as package-manager arguments, so only plain characters are allowed.
+/// Checks the output folders of a piece and its variants: project paths, and alternatives that are listed once and
+/// leave out the root, which every project has.
+fn validate_targets(file: &str, manifest: &PieceManifest) -> Result<(), PackError> {
+	let folder = |target: &str| {
+		RelPath::new(target)
+			.map(|_| ())
+			.map_err(|error| invalid(file, &format!("target: {error}")))
+	};
+	if !manifest.target.is_empty() {
+		folder(&manifest.target)?;
+	}
+	for variant in &manifest.variants {
+		let alternatives = variant.target.as_ref().map(Targets::as_slice).unwrap_or_default();
+		for (i, target) in alternatives.iter().enumerate() {
+			if target.is_empty() && alternatives.len() > 1 {
+				return Err(invalid(
+					file,
+					&format!(
+						"variant `{}` lists the project root `\"\"` among its targets, which only a single target can be",
+						variant.name
+					),
+				));
+			}
+			if alternatives[..i].contains(target) {
+				return Err(invalid(
+					file,
+					&format!("variant `{}` lists the target `{target}` twice", variant.name),
+				));
+			}
+			if !target.is_empty() {
+				folder(target)?;
+			}
+		}
+	}
+	Ok(())
+}
+
+/// Checks what `pack.toml` says about itself: each kind once, and translations of text it has.
+fn validate_pack_manifest(manifest: &PackManifest) -> Result<(), PackError> {
+	let kinds = &manifest.kinds;
+	if let Some((_, kind)) = kinds.iter().enumerate().find(|(i, kind)| kinds[..*i].contains(kind)) {
+		return Err(invalid(
+			PACK_MANIFEST,
+			&format!("`kinds` lists `{}` twice", kind.as_str()),
+		));
+	}
+	for (locale, translation) in &manifest.translations {
+		check_translated(
+			PACK_MANIFEST,
+			locale,
+			"the pack",
+			manifest.description.as_deref(),
+			translation.description.as_deref(),
+		)?;
+	}
+	Ok(())
+}
+
+/// Checks a piece's translations: each translates text the piece has, and names inputs it declares.
+fn validate_piece_translations(file: &str, manifest: &PieceManifest) -> Result<(), PackError> {
+	for (locale, translation) in &manifest.translations {
+		check_translated(
+			file,
+			locale,
+			"the piece",
+			manifest.description.as_deref(),
+			translation.description.as_deref(),
+		)?;
+		for (name, text) in &translation.inputs {
+			let input = manifest.inputs.get(name).ok_or_else(|| {
+				invalid(
+					file,
+					&format!("translation `{locale}` describes unknown input `{name}`"),
+				)
+			})?;
+			check_translated(
+				file,
+				locale,
+				&format!("input `{name}`"),
+				input.description(),
+				Some(text),
+			)?;
+		}
+	}
+	Ok(())
+}
+
+/// Checks one translated description of `owner`: not blank, and of a description `owner` has.
+fn check_translated(
+	file: &str,
+	locale: &Locale,
+	owner: &str,
+	original: Option<&str>,
+	translated: Option<&str>,
+) -> Result<(), PackError> {
+	let Some(translated) = translated else {
+		return Ok(());
+	};
+	if translated.trim().is_empty() {
+		return Err(invalid(
+			file,
+			&format!("translation `{locale}` gives {owner} an empty description"),
+		));
+	}
+	if original.is_none() {
+		return Err(invalid(
+			file,
+			&format!("translation `{locale}` describes {owner}, which has no `description` to translate"),
+		));
+	}
+	Ok(())
+}
+
 /// Checks every migration and returns the ast-grep rules they use, by path.
 fn migration_rules(
 	manifest: &PackManifest,
@@ -514,6 +638,31 @@ fn migration_rules(
 	Ok(rules)
 }
 
+/// Checks the files of `patches`, the piece's own or one step's: every alternative is a project path listed once,
+/// and patches that share an alternative list the same ones in the same order.
+fn validate_patch_files(file: &str, patches: &[PatchSpec]) -> Result<(), PackError> {
+	for patch in patches {
+		let alternatives = patch.file().as_slice();
+		for (i, alternative) in alternatives.iter().enumerate() {
+			RelPath::new(alternative).map_err(|error| invalid(file, &format!("patch file: {error}")))?;
+			if alternatives[..i].contains(alternative) {
+				return Err(invalid(file, &format!("patch file lists `{alternative}` twice")));
+			}
+		}
+	}
+	let lists: Vec<&[String]> = patches.iter().map(|patch| patch.file().as_slice()).collect();
+	match shared_alternative(&lists) {
+		Some(shared) => Err(invalid(
+			file,
+			&format!(
+				"two patches list `{shared}` among different file alternatives; give them the same list, in the same order"
+			),
+		)),
+		None => Ok(()),
+	}
+}
+
+/// Names and versions end up as package-manager arguments, so only plain characters are allowed.
 fn validate_dependency(file: &str, dependency: &Dependency) -> Result<(), PackError> {
 	let plain = |text: &str, max: usize, extra: &str| {
 		(1..=max).contains(&text.len())
@@ -840,6 +989,186 @@ mod tests {
 		let files = files(&[("pieces/thing/piece.toml", &piece)]);
 
 		assert!(error(files).contains("matches no template"));
+	}
+
+	#[test]
+	fn from_files_should_check_target_alternatives() {
+		let variant = |target: &str| format!("{PIECE}[[variants]]\nname = \"kmp\"\ntarget = {target}\n");
+		let with = |target: &str| {
+			let piece = variant(target);
+			files(&[
+				("pieces/thing/piece.toml", &piece),
+				("pieces/thing/files/kmp/x.kt", "x"),
+			])
+		};
+		let invalid = [
+			("[\"shared\", \"shared\"]", "lists the target `shared` twice"),
+			("[\"shared\", \"\"]", "lists the project root"),
+			("[\"shared\", \"../app\"]", "target:"),
+			("[]", "non-empty list"),
+		];
+
+		for (target, expected) in invalid {
+			let message = error(with(target));
+			assert!(message.contains(expected), "{target}: {message}");
+		}
+		assert!(Pack::from_files(with("[\"shared\", \"composeApp\"]")).is_ok());
+		assert!(Pack::from_files(with("\"\"")).is_ok());
+	}
+
+	#[test]
+	fn from_files_should_check_steps() {
+		let invalid = [
+			("[[steps]]\ntext = \" \"\n", "a step has no text"),
+			(
+				"[[steps]]\ntext = \"x\"\nvariants = [\"vue\"]\n",
+				"a step names unknown variant `vue`",
+			),
+			("[[steps]]\ntext = \"x\"\nwhen = \"typo\"\n", "unknown input `typo`"),
+			(
+				"[[steps]]\ntext = \"x\"\n[[steps.patches]]\nkind = \"import\"\nfile = \"../index.ts\"\nimport = \"import a from 'a';\"\n",
+				"patch file",
+			),
+			(
+				"[[steps]]\ntext = \"x\"\n[[steps.patches]]\nkind = \"import\"\nfile = \"src/index.ts\"\nimport = \"import a from 'a';\"\nwhen = \"typo\"\n",
+				"unknown input `typo`",
+			),
+		];
+
+		for (steps, expected) in invalid {
+			let piece = format!("{PIECE}{steps}");
+			let message = error(files(&[("pieces/thing/piece.toml", &piece)]));
+			assert!(message.contains(expected), "{steps}: {message}");
+		}
+	}
+
+	fn import(file: &str) -> String {
+		format!("[[steps.patches]]\nkind = \"import\"\nfile = {file}\nimport = \"import a from 'a';\"\n")
+	}
+
+	const ENTRIES: &str = "[\"src/index.ts\", \"src/index.tsx\"]";
+
+	#[test]
+	fn from_files_should_check_file_alternatives() {
+		let step = "[[steps]]\ntext = \"x\"\n";
+		let invalid = [
+			(import("[\"src/index.ts\", \"../index.ts\"]"), "patch file"),
+			(
+				import("[\"src/index.ts\", \"src/index.ts\"]"),
+				"lists `src/index.ts` twice",
+			),
+			(
+				format!("{}{}", import(ENTRIES), import("\"src/index.tsx\"")),
+				"two patches list `src/index.tsx` among different file alternatives",
+			),
+			(
+				format!("{}{}", import(ENTRIES), import("[\"src/index.tsx\", \"src/index.ts\"]")),
+				"two patches list `src/index.ts` among different file alternatives",
+			),
+		];
+
+		for (patches, expected) in invalid {
+			let piece = format!("{PIECE}{step}{patches}");
+			let message = error(files(&[("pieces/thing/piece.toml", &piece)]));
+			assert!(message.contains(expected), "{patches}: {message}");
+		}
+		let own = format!(
+			"{PIECE}{}{}",
+			import(ENTRIES).replace("steps.patches", "patches"),
+			import("\"src/index.tsx\"").replace("steps.patches", "patches")
+		);
+		assert!(error(files(&[("pieces/thing/piece.toml", &own)])).contains("among different file alternatives"));
+	}
+
+	#[test]
+	fn from_files_should_allow_the_same_alternatives_in_one_step_and_others_in_another() {
+		let piece = format!(
+			"{PIECE}[[steps]]\ntext = \"x\"\n{}{}{}[[steps]]\ntext = \"y\"\n{}",
+			import(ENTRIES),
+			import(ENTRIES),
+			import("\"src/main.ts\""),
+			import("\"src/index.tsx\"")
+		);
+
+		assert!(Pack::from_files(files(&[("pieces/thing/piece.toml", &piece)])).is_ok());
+	}
+
+	#[test]
+	fn from_files_should_read_kinds_and_translations() {
+		let pack = format!(
+			"{PACK}description = \"Cards.\"\nkinds = [\"ui\", \"mobile\"]\n[translations.es-mx]\ndescription = \"Tarjetas.\"\n"
+		);
+		let piece = PIECE.replace("example =", "description = \"Name.\"\nexample =");
+		let piece = format!(
+			"description = \"A thing.\"\n{piece}[translations.es-mx]\ndescription = \"Una cosa.\"\n[translations.es-mx.inputs]\nname = \"Nombre.\"\n"
+		);
+		let loaded = Pack::from_files(files(&[("pack.toml", &pack), ("pieces/thing/piece.toml", &piece)])).unwrap();
+		let locale = Locale::new("es-mx").unwrap();
+
+		assert_eq!(
+			loaded.manifest().kinds,
+			[crate::model::PackKind::Ui, crate::model::PackKind::Mobile]
+		);
+		assert_eq!(
+			loaded.manifest().translations[&locale].description.as_deref(),
+			Some("Tarjetas.")
+		);
+		let translation = &loaded.piece("thing").unwrap().manifest().translations[&locale];
+		assert_eq!(translation.description.as_deref(), Some("Una cosa."));
+		assert_eq!(translation.inputs["name"], "Nombre.");
+	}
+
+	#[test]
+	fn from_files_should_check_kinds_and_pack_translations() {
+		let invalid = [
+			("kinds = [\"ui\", \"ui\"]\n", "`kinds` lists `ui` twice"),
+			("kinds = [\"web\"]\n", "unknown variant `web`"),
+			(
+				"[translations.es-MX]\ndescription = \"x\"\n",
+				"`es-MX` must be a lowercase language tag",
+			),
+			(
+				"[translations.es-mx]\ndescription = \"Tarjetas.\"\n",
+				"translation `es-mx` describes the pack, which has no `description` to translate",
+			),
+			(
+				"description = \"Cards.\"\n[translations.es-mx]\ndescription = \" \"\n",
+				"translation `es-mx` gives the pack an empty description",
+			),
+			("[translations.es-mx]\nsummary = \"x\"\n", "unknown field `summary`"),
+		];
+
+		for (extra, expected) in invalid {
+			let message = error(files(&[("pack.toml", &format!("{PACK}{extra}"))]));
+			assert!(message.contains(expected), "{extra}: {message}");
+		}
+	}
+
+	#[test]
+	fn from_files_should_check_piece_translations() {
+		let invalid = [
+			(
+				"[translations.es-mx.inputs]\nsize = \"Tamaño.\"\n",
+				"translation `es-mx` describes unknown input `size`",
+			),
+			(
+				"[translations.es-mx.inputs]\nname = \"Nombre.\"\n",
+				"translation `es-mx` describes input `name`, which has no `description` to translate",
+			),
+			(
+				"[translations.es-mx]\ndescription = \"Una cosa.\"\n",
+				"translation `es-mx` describes the piece, which has no `description` to translate",
+			),
+			(
+				"[translations.pt-br-]\ndescription = \"x\"\n",
+				"`pt-br-` must be a lowercase language tag",
+			),
+		];
+
+		for (extra, expected) in invalid {
+			let message = error(files(&[("pieces/thing/piece.toml", &format!("{PIECE}{extra}"))]));
+			assert!(message.contains(expected), "{extra}: {message}");
+		}
 	}
 
 	#[test]

@@ -1,0 +1,484 @@
+---
+import type { LucideName } from "./lucide-icons";
+
+import "../styles/landing.css";
+
+import { localized, ui } from "../i18n/ui";
+import { comparePieces, describe, PACKS, packNamed, packStacks, pieceStacks } from "../packs";
+import { addCommand } from "../pieces";
+import { compareStacks } from "../stack-priority";
+import FinderOption from "./finder-option.astro";
+import LucideIcon from "./lucide-icon.astro";
+import SelectMenu from "./select-menu.astro";
+
+/** A command-line flag in running text, e.g. `--review`. */
+const FLAG = /(--[a-z-]+)/;
+const { locale } = Astro.locals.starlightRoute;
+const t = ui(locale);
+
+/** The icon each official piece shows in the finder; any other piece shows `package`. */
+const pieceIcons: Record<string, LucideName> = {
+	"backend/database": "database",
+	"backend/error": "shield-alert",
+	"backend/middleware": "route",
+	"backend/resource": "boxes",
+	"ui/atom": "atom",
+	"ui/molecule": "component",
+	"ui/organism": "layout-template",
+};
+/** Every official piece, those for the stacks with first support first, so the finder starts on one of them. */
+const pieces = PACKS.flatMap((pack) => pack.pieces.map((piece) => ({ pack, piece })))
+	.sort((a, b) => comparePieces(a.piece, b.piece))
+	.map(({ pack, piece }) => {
+		const path = `${pack.name}/${piece.name}`;
+		const description = describe(piece, locale).replaceAll("`", "");
+		return {
+			path,
+			name: piece.name,
+			description,
+			stacks: pieceStacks(piece),
+			command: addCommand(pack.name, piece),
+			href: localized(locale, `/directory/${pack.name}/#${piece.name}`),
+			icon: pieceIcons[path] ?? "package",
+			search: [path, description, piece.description].join(" ").toLowerCase(),
+		};
+	});
+const stacks = [...new Set(pieces.flatMap((piece) => piece.stacks))].sort(compareStacks);
+/** The stacks the `ui` pieces support, by display name: two variants can share one stack. */
+const uiStacks = packStacks(packNamed("ui"));
+const [first] = pieces;
+/** Icon sizes in pixels, from the design. */
+const iconSize = { search: 20, feature: 20 } as const;
+/** What `cuilo add ui/atom status-badge --dry-run` plans in a minimal project of each stack. */
+const outputs = [
+	{ stack: "Svelte", dir: "src/ui/atoms/status-badge/", files: ["status-badge.svelte", "index.ts"] },
+	{ stack: "Astro", dir: "src/ui/atoms/status-badge/", files: ["status-badge.astro", "index.ts"] },
+	{ stack: "Leptos", dir: "src/ui/atoms/", files: ["status_badge.rs"] },
+	{ stack: "SwiftUI", dir: "App/UI/Atoms/", files: ["StatusBadge.swift"] },
+];
+const merged = [
+	{ code: "export function Button(props) {" },
+	{ code: "  return <button {...props} />;", tone: "pack" },
+	{ code: "}" },
+	{ code: " " },
+	{ code: "export const Save = () => <Button />;", tone: "yours" },
+];
+const panes = [
+	{
+		key: "generated",
+		title: t.layersGenerated,
+		meta: "ui 0.2.0",
+		lines: [{ code: "export function Button(props) {" }, { code: "  return <span {...props} />;" }, { code: "}" }],
+	},
+	{
+		key: "pack",
+		title: t.layersPack,
+		meta: "ui 0.3.0",
+		lines: [
+			{ code: "export function Button(props) {" },
+			{ code: "  return <button {...props} />;", tone: "pack" },
+			{ code: "}" },
+		],
+	},
+	{ key: "yours", title: t.layersYours, meta: t.layersMerged, lines: merged },
+];
+const legend = [
+	{ key: "generated", text: t.layersLegendGenerated },
+	{ key: "pack", text: t.layersLegendPack },
+	{ key: "yours", text: t.layersLegendYours },
+];
+const review = [
+	[["$ ", "prompt"], ["cuilo status"]],
+	[["clean     ", "muted"], ["src/ui/atoms/button/button.module.css"]],
+	[["modified  ", "warn"], ["src/ui/atoms/button/button.tsx"]],
+	[],
+	[["$ ", "prompt"], ["cuilo update ui --review"]],
+	[["modify ", "muted"], ["src/ui/atoms/button/button.tsx"]],
+	[["@@ -12,7 +12,8 @@", "muted"]],
+	[["   export function Button({ tone, busy, ...props }) {"]],
+	[["-    return <span {...props} data-tone={tone} />;", "del"]],
+	[["+    return <span {...props} data-tone={tone}", "ok"]],
+	[["+      aria-busy={busy} />;", "ok"]],
+	[["   }"]],
+	[
+		["   // my tweak", "muted"],
+		[`    ${t.updatesKept}`, "warn"],
+	],
+	[],
+	[["Keep this hunk? [y]es, [n]o, [a]ll in file, [d]rop rest of file, [q]uit: ", "muted"], ["y"]],
+];
+const points = [
+	["cuilo why src/a.ts:12", t.updatesWhy],
+	["cuilo undo", t.updatesUndo],
+	["--json", t.updatesJson],
+];
+const features = [
+	{ icon: "package", title: t.featurePacksTitle, body: t.featurePacksBody },
+	{ icon: "shield-check", title: t.featureSignedTitle, body: t.featureSignedBody },
+	{ icon: "flask-conical", title: t.featureChecksTitle, body: t.featureChecksBody },
+	{ icon: "bot", title: t.featureAgentsTitle, body: t.featureAgentsBody },
+] as const;
+---
+
+<div class="cu-landing not-content">
+	<section class="cu-layers" aria-label={t.layersLabel}>
+		<div class="cu-panes">
+			{panes.map((pane) => (
+				<figure class:list={["cu-pane", `cu-pane--${pane.key}`]}>
+					<figcaption>
+						<span class:list={["cu-tone", `cu-tone--${pane.key}`]} />
+						<strong>{pane.title}</strong>
+						<span class="cu-pane-meta">{pane.meta}</span>
+					</figcaption>
+					<ol class="cu-code">
+						{pane.lines.map((line, index) => (
+							<li class:list={[line.tone && `cu-code-line--${line.tone}`]}>
+								<span class="cu-line-number" aria-hidden="true">
+									{index + 1}
+								</span>
+								<code>{line.code}</code>
+							</li>
+						))}
+					</ol>
+				</figure>
+			))}
+		</div>
+		<ul class="cu-legend">
+			{legend.map((item) => (
+				<li class={`cu-legend--${item.key}`}>
+					<span class:list={["cu-tone", `cu-tone--${item.key}`]} />
+					{item.text}
+				</li>
+			))}
+		</ul>
+	</section>
+
+	<div class="cu-strata cu-rule" aria-hidden="true"><span></span><span></span><span></span></div>
+
+	<section class="cu-find" aria-labelledby="cu-find-title">
+		<div class="cu-find-head">
+			<h2 id="cu-find-title">{t.searchTitle}</h2>
+			<p>{t.searchLead}</p>
+		</div>
+		<div
+			class="cu-palette"
+			data-finder
+			data-only={t.stackOnly}
+			data-not-for={t.notForStack}
+			data-copied={t.copied}
+			data-pieces={t.pieces}
+		>
+			<div class="cu-query">
+				<LucideIcon name="search" size={iconSize.search} />
+				<input
+					type="search"
+					role="combobox"
+					aria-label={t.searchLabel}
+					aria-controls="cu-finder-list"
+					aria-expanded="true"
+					aria-autocomplete="list"
+					aria-activedescendant={first && "cu-piece-0"}
+					placeholder={t.searchPlaceholder}
+					autocomplete="off"
+					spellcheck="false"
+					data-query
+				>
+				<SelectMenu
+					id="cu-finder-stack"
+					look="compact"
+					icon="layers"
+					label={t.stackLabel}
+					prefix={`${t.stackLabel}:`}
+					options={[{ value: "", label: t.stackAny }, ...stacks.map((stack) => ({ value: stack, label: stack }))]}
+					align="end"
+					data-stack
+				/>
+			</div>
+			<div class="cu-results" id="cu-finder-list" role="listbox" aria-label={t.packPieces} data-results>
+				{pieces.map((piece, index) => (
+					<FinderOption {...piece} id={`cu-piece-${index}`} selected={index === 0} official={t.official} />
+				))}
+			</div>
+			<p class="cu-empty" data-empty hidden>{t.searchEmpty}</p>
+			<div class="cu-palette-foot">
+				<p class="cu-selected-command">
+					<span aria-hidden="true">$</span>
+					<code data-selected-command>{first?.command}</code>
+				</p>
+				<div class="cu-keys">
+					<button type="button" class="cu-key-hint cu-control cu-control--compact cu-control--ghost" data-copy-command>
+						<kbd aria-hidden="true">↵</kbd>
+						<span data-copy-label>{t.finderCopy}</span>
+					</button>
+					<a class="cu-key-hint cu-control cu-control--compact cu-control--ghost" href={first?.href} data-open>
+						<kbd aria-hidden="true">→</kbd>
+						{t.finderOpen}
+					</a>
+				</div>
+			</div>
+			<p class="sr-only" role="status" data-status></p>
+		</div>
+	</section>
+
+	<div class="cu-strata cu-rule" aria-hidden="true"><span></span><span></span><span></span></div>
+
+	<section class="cu-split cu-stacks">
+		<div class="cu-copy">
+			<p class="cu-eyebrow-mono">{t.stacksEyebrow}</p>
+			<h2>{t.stacksTitle.replace("{count}", String(uiStacks.length))}</h2>
+			<p class="cu-lead">{t.stacksLead}</p>
+			<ul class="cu-stack-chips">
+				{uiStacks.map((stack) => <li>{stack}</li>)}
+			</ul>
+		</div>
+		<div class="cu-outputs">
+			{outputs.map((output) => (
+				<div class="cu-output">
+					<p class="cu-output-head">
+						<strong>{output.stack}</strong>
+						<span class="cu-output-count">
+							{output.files.length} {output.files.length === 1 ? t.file : t.files}
+						</span>
+					</p>
+					<p class="cu-output-dir">{output.dir}</p>
+					<ul>
+						{output.files.map((file) => (
+							<li>
+								<span class="cu-plus" aria-hidden="true">
+									+
+								</span>
+								<span>{file}</span>
+							</li>
+						))}
+					</ul>
+				</div>
+			))}
+		</div>
+	</section>
+
+	<div class="cu-strata cu-rule" aria-hidden="true"><span></span><span></span><span></span></div>
+
+	<section class="cu-split cu-updates">
+		<div class="cu-copy">
+			<p class="cu-eyebrow-mono">cuilo update</p>
+			<h2>{t.updatesTitle}</h2>
+			<p class="cu-lead">
+				{t.updatesLead.split(FLAG).map((part) => (FLAG.test(part) ? <span class="cu-nowrap">{part}</span> : part))}
+			</p>
+			<ul class="cu-points">
+				{points.map(([command, text]) => (
+					<li>
+						<LucideIcon name="check" />
+						<span>
+							<code>{command}</code> {text}
+						</span>
+					</li>
+				))}
+			</ul>
+		</div>
+		<div class="cu-terminal" role="img" aria-label={t.updatesTerminal}>
+			<p class="cu-terminal-bar">
+				<span class="cu-dots"><span></span><span></span><span></span></span>
+				~/web — zsh
+			</p>
+			<div class="cu-terminal-body">
+				{review.map((line) => (
+					<div class="cu-terminal-line">
+						{line.map(([text, tone]) => (
+							<span class:list={[tone && `cu-t-${tone}`]}>{text}</span>
+						))}
+					</div>
+				))}
+			</div>
+		</div>
+	</section>
+
+	<div class="cu-strata cu-rule" aria-hidden="true"><span></span><span></span><span></span></div>
+
+	<section class="cu-features-section" aria-labelledby="cu-features-title">
+		<h2 id="cu-features-title">{t.featuresTitle}</h2>
+		<div class="cu-features">
+			{features.map((feature) => (
+				<div class="cu-feature">
+					<span class="cu-feature-icon">
+						<LucideIcon name={feature.icon} size={iconSize.feature} />
+					</span>
+					<h3>{feature.title}</h3>
+					<p>{feature.body}</p>
+				</div>
+			))}
+		</div>
+	</section>
+</div>
+
+<script>
+	const WHITESPACE = /\s+/;
+	/** How long the finder's copy hint says "Copied". */
+	const COPIED_FOR_MS = 1500;
+
+	const finder = document.querySelector<HTMLElement>("[data-finder]");
+	const query = finder?.querySelector<HTMLInputElement>("[data-query]");
+	const stack = finder?.querySelector<HTMLElement>("[data-stack]");
+	const list = finder?.querySelector<HTMLElement>("[data-results]");
+	const options = [...(list?.querySelectorAll<HTMLElement>("[data-option]") ?? [])];
+	const empty = finder?.querySelector<HTMLElement>("[data-empty]");
+	const command = finder?.querySelector<HTMLElement>("[data-selected-command]");
+	const open = finder?.querySelector<HTMLAnchorElement>("[data-open]");
+	const copyButton = finder?.querySelector<HTMLButtonElement>("[data-copy-command]");
+	const copyLabel = finder?.querySelector<HTMLElement>("[data-copy-label]");
+	const status = finder?.querySelector<HTMLElement>("[data-status]");
+	let selected: HTMLElement | undefined = options.at(0);
+
+	/** The rows the query matches, in the order the list shows them. */
+	function shown(): HTMLElement[] {
+		return [...(list?.children ?? [])].filter(
+			(row): row is HTMLElement => row instanceof HTMLElement && row.hasAttribute("data-option") && !row.hidden
+		);
+	}
+
+	/** The row an event happened in, if any. */
+	function rowOf(event: Event): HTMLElement | undefined {
+		return event.target instanceof Element
+			? (event.target.closest<HTMLElement>("[data-option]") ?? undefined)
+			: undefined;
+	}
+
+	/** Marks `row` as the selected option and shows its command in the footer. */
+	function select(row: HTMLElement | undefined) {
+		selected?.setAttribute("aria-selected", "false");
+		selected = row;
+		row?.setAttribute("aria-selected", "true");
+		if (row) {
+			query?.setAttribute("aria-activedescendant", row.id);
+		} else {
+			query?.removeAttribute("aria-activedescendant");
+		}
+		if (command) {
+			command.textContent = row?.dataset.command ?? "";
+		}
+		if (open) {
+			open.href = row?.dataset.href ?? "";
+			open.hidden = !row;
+		}
+		if (copyButton) {
+			copyButton.hidden = !row;
+		}
+	}
+
+	/** The note a row shows when it doesn't support `chosen`, e.g. "FastAPI only". */
+	function noteFor(row: HTMLElement, chosen: string): string {
+		const supported = (row.dataset.stacks ?? "").split("|");
+		const [only] = supported;
+		if (supported.length === 1 && only) {
+			return (finder?.dataset.only ?? "").replace("{stack}", only);
+		}
+		return (finder?.dataset.notFor ?? "").replace("{stack}", chosen);
+	}
+
+	/** Shows `row` only if it matches every word, dims it if it doesn't support `chosen`, and returns whether it does. */
+	function place(row: HTMLElement, words: string[], chosen: string): boolean {
+		const text = row.dataset.search ?? "";
+		const fits = !chosen || (row.dataset.stacks ?? "").split("|").includes(chosen);
+		row.hidden = !words.every((word) => text.includes(word));
+		row.classList.toggle("cu-dim", !fits);
+		const note = row.querySelector<HTMLElement>("[data-note]");
+		if (note) {
+			note.textContent = fits ? "" : noteFor(row, chosen);
+			note.hidden = fits;
+		}
+		return fits;
+	}
+
+	/** Applies the query and the stack, lists rows that support the stack first, and selects the first row. */
+	function filter() {
+		const words = (query?.value ?? "").toLowerCase().split(WHITESPACE).filter(Boolean);
+		const chosen = stack?.getAttribute("value") ?? "";
+		const fitting = options.filter((row) => place(row, words, chosen));
+		list?.append(...fitting, ...options.filter((row) => !fitting.includes(row)));
+		const rows = shown();
+		if (empty) {
+			empty.hidden = rows.length > 0;
+		}
+		if (status) {
+			status.textContent =
+				rows.length > 0 ? `${rows.length} ${finder?.dataset.pieces ?? ""}` : (empty?.textContent ?? "");
+		}
+		list?.scrollTo({ top: 0 });
+		select(rows[0]);
+	}
+
+	function move(step: number) {
+		const rows = shown();
+		const index = selected ? rows.indexOf(selected) : -1;
+		const next = rows[Math.min(Math.max(index + step, 0), rows.length - 1)];
+		if (next) {
+			select(next);
+			next.scrollIntoView({ block: "nearest" });
+		}
+	}
+
+	/** Shows `text` in the copy hint and announces it, then puts the hint back. */
+	function confirm(text: string) {
+		const idle = copyLabel?.textContent ?? "";
+		if (copyLabel) {
+			copyLabel.textContent = text;
+		}
+		if (status) {
+			status.textContent = text;
+		}
+		setTimeout(() => {
+			if (copyLabel) {
+				copyLabel.textContent = idle;
+			}
+		}, COPIED_FOR_MS);
+	}
+
+	async function copy() {
+		const text = selected?.dataset.command;
+		if (text) {
+			await navigator.clipboard.writeText(text);
+			confirm(finder?.dataset.copied ?? "");
+		}
+	}
+
+	function openSelected() {
+		const href = selected?.dataset.href;
+		if (href) {
+			globalThis.location.assign(href);
+		}
+	}
+
+	/** Whether the caret sits at the end of the query, so → can open the piece instead of moving the caret. */
+	function caretAtEnd(input: HTMLInputElement): boolean {
+		return input.selectionStart === input.value.length && input.selectionEnd === input.value.length;
+	}
+
+	query?.addEventListener("keydown", (event) => {
+		if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+			event.preventDefault();
+			move(event.key === "ArrowDown" ? 1 : -1);
+		} else if (event.key === "Enter") {
+			event.preventDefault();
+			copy();
+		} else if (event.key === "ArrowRight" && caretAtEnd(query)) {
+			event.preventDefault();
+			openSelected();
+		}
+	});
+	query?.addEventListener("input", filter);
+	stack?.addEventListener("change", filter);
+	list?.addEventListener("pointermove", (event) => {
+		const row = rowOf(event);
+		if (row && row !== selected) {
+			select(row);
+		}
+	});
+	list?.addEventListener("click", (event) => {
+		const row = rowOf(event);
+		if (row) {
+			select(row);
+			openSelected();
+		}
+	});
+	copyButton?.addEventListener("click", copy);
+</script>

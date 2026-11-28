@@ -1,0 +1,834 @@
+---
+import type { Kind, Trust } from "../../packs";
+
+import "../../styles/directory.css";
+
+import { localized, ui } from "../../i18n/ui";
+import {
+	describe,
+	installCommand,
+	isBuiltIn,
+	KINDS,
+	PACKS,
+	packKinds,
+	packStacks,
+	packTrust,
+	pieceStacks,
+	stackKey,
+	TRUST_ICONS,
+	TRUSTS,
+} from "../../packs";
+import { compareStacks } from "../../stack-priority";
+import LucideIcon from "../lucide-icon.astro";
+import SelectMenu from "../select-menu.astro";
+
+const { locale, entry } = Astro.locals.starlightRoute;
+const t = ui(locale);
+/** How many stacks the Stack filter lists before "Show all". */
+const topStacks = 4;
+/** Icon sizes in pixels, from the design. */
+const iconSize = { search: 16, tick: 12, tier: 12, copy: 14, filters: 16, note: 16 } as const;
+const trustLabels: Record<Trust, string> = {
+	builtIn: t.directoryBuiltIn,
+	reviewed: t.directoryReviewed,
+	signed: t.directorySigned,
+};
+/** A row's badge text for each trust. */
+const tierLabels: Record<Trust, string> = {
+	builtIn: t.directoryBuiltIn,
+	reviewed: t.directoryReviewed,
+	signed: t.directorySignedShort,
+};
+const kindLabels: Record<Kind, string> = {
+	ui: t.kindUi,
+	backend: t.kindBackend,
+	mobile: t.kindMobile,
+	desktop: t.kindDesktop,
+};
+const rows = PACKS.map((pack) => {
+	const stacks = packStacks(pack);
+	const trust = packTrust(pack);
+	const description = describe(pack, locale);
+	return {
+		pack,
+		description,
+		stacks,
+		trust,
+		kinds: packKinds(pack),
+		href: localized(locale, `/directory/${pack.name}/`),
+		command: installCommand(pack),
+		copyLabel: isBuiltIn(pack) ? t.directoryCopyAdd : t.directoryCopyPackAdd,
+		search: [pack.name, description, pack.description, ...pack.pieces.map((piece) => piece.name), ...stacks]
+			.join(" ")
+			.toLowerCase(),
+	};
+});
+/** Every stack with how many packs support it and how many pieces in all, in priority order, then most packs and pieces. */
+const stacks = [...new Set(rows.flatMap((row) => row.stacks))]
+	.map((name) => ({
+		name,
+		key: stackKey(name),
+		count: rows.filter((row) => row.stacks.includes(name)).length,
+		pieces: rows.flatMap((row) => row.pack.pieces).filter((piece) => pieceStacks(piece).includes(name)).length,
+	}))
+	.sort(
+		(a, b) => compareStacks(a.name, b.name) || b.count - a.count || b.pieces - a.pieces || a.name.localeCompare(b.name)
+	);
+const groups = [
+	{
+		key: "trust",
+		title: t.directoryTrust,
+		options: TRUSTS.map((trust) => ({
+			value: trust,
+			label: trustLabels[trust],
+			count: rows.filter((row) => row.trust === trust).length,
+			checked: true,
+			extra: false,
+		})),
+	},
+	{
+		key: "kind",
+		title: t.directoryKind,
+		options: KINDS.map((kind) => ({
+			value: kind,
+			label: kindLabels[kind],
+			count: rows.filter((row) => row.kinds.includes(kind)).length,
+			checked: false,
+			extra: false,
+		})),
+	},
+	{
+		key: "stack",
+		title: t.stackLabel,
+		options: stacks.map((stack, index) => ({
+			value: stack.key,
+			label: stack.name,
+			count: stack.count,
+			checked: false,
+			extra: index >= topStacks,
+		})),
+	},
+];
+const sorts = [
+	{ value: "name", label: t.directorySortName },
+	{ value: "pieces", label: t.directorySortPieces },
+	{ value: "stacks", label: t.directorySortStacks },
+];
+---
+
+<div
+	class="cu-bleed cu-dir not-content"
+	data-directory
+	data-count-one={t.directoryCountOne}
+	data-count-many={t.directoryCount}
+	data-show-all={t.directoryShowAllStacks.replace("{count}", String(stacks.length))}
+	data-show-fewer={t.directoryShowFewerStacks}
+	data-copied={t.copied}
+>
+	<noscript
+		><style is:inline>
+			.cu-dir [data-needs-js] {
+				display: none;
+			}
+		</style></noscript
+	>
+	<header class="cu-bleed-head head">
+		<h1 id="_top">{entry.data.title}</h1>
+		<div class="lead"><slot /></div>
+		<div class="search-row" data-needs-js>
+			<label class="search cu-control cu-control--field">
+				<LucideIcon name="search" size={iconSize.search} />
+				<span class="sr-only">{t.directorySearchLabel}</span>
+				<input
+					type="search"
+					placeholder={t.directorySearchPlaceholder}
+					autocomplete="off"
+					spellcheck="false"
+					data-query
+				>
+			</label>
+			<SelectMenu
+				id="cu-directory-sort"
+				look="field"
+				label={t.directorySort}
+				prefix={`${t.directorySort}:`}
+				options={sorts}
+				value="name"
+				align="end"
+				data-sort
+			/>
+		</div>
+	</header>
+	<div class="cu-bleed-body body">
+		<div class="filters" data-needs-js data-filters>
+			<button
+				type="button"
+				class="filters-toggle cu-control"
+				aria-expanded="false"
+				aria-controls="cu-directory-filters"
+				data-filters-toggle
+			>
+				<LucideIcon name="sliders-horizontal" size={iconSize.filters} />
+				{t.directoryFilters}
+				<span class="badge" data-active-count hidden></span>
+				<LucideIcon name="chevron-down" size={iconSize.filters} class="toggle-chevron" />
+			</button>
+			<div class="groups" id="cu-directory-filters">
+				{groups.map((group) => (
+					<fieldset class="group" data-group={group.key}>
+						<legend>{group.title}</legend>
+						{group.options.map((option) => (
+							<label class="option" data-extra={option.extra ? "" : undefined} hidden={option.extra}>
+								<input type="checkbox" class="sr-only" name={group.key} value={option.value} checked={option.checked}>
+								<span class="box" aria-hidden="true">
+									<LucideIcon name="check" size={iconSize.tick} />
+								</span>
+								<span class="option-label">{option.label}</span>
+								<span class="count" data-facet>
+									{option.count}
+								</span>
+							</label>
+						))}
+						{group.options.some((option) => option.extra) && (
+							<button
+								type="button"
+								class="more cu-control cu-control--compact cu-control--ghost"
+								aria-expanded="false"
+								data-more-stacks
+							>
+								{t.directoryShowAllStacks.replace("{count}", String(group.options.length))}
+							</button>
+						)}
+					</fieldset>
+				))}
+				<p class="hint">
+					{t.directoryDetect}
+					<code>cuilo detect</code>
+				</p>
+			</div>
+		</div>
+		<section class="results" aria-label={t.directoryResults}>
+			<p class="result-count" role="status" data-count>
+				{`${rows.length} ${rows.length === 1 ? t.directoryCountOne : t.directoryCount}`}
+			</p>
+			<ul class="list" data-list>
+				{rows.map((row) => (
+					<li
+						class="row"
+						data-pack
+						data-name={row.pack.name}
+						data-trust={row.trust}
+						data-kind={row.kinds.join(" ")}
+						data-stack={row.stacks.map(stackKey).join(" ")}
+						data-pieces={row.pack.pieces.length}
+						data-stacks={row.stacks.length}
+						data-search={row.search}
+					>
+						<div class="info">
+							<p class="title">
+								<a href={row.href} class="name">
+									{row.pack.name}
+								</a>
+								<span class:list={["cu-tier", `cu-tier--${row.trust}`]}>
+									<LucideIcon name={TRUST_ICONS[row.trust]} size={iconSize.tier} />
+									{tierLabels[row.trust]}
+								</span>
+								<span class="version">{row.pack.version}</span>
+							</p>
+							<p class="description">{row.description}</p>
+							<p class="meta">
+								{row.pack.pieces.length} {t.pieces} · {row.stacks.length} {t.stacks}
+							</p>
+						</div>
+						<div class="source">
+							<code>{row.pack.source}</code>
+							<button
+								type="button"
+								class="copy cu-control cu-control--compact"
+								aria-label={`${row.copyLabel}: ${row.command}`}
+								title={row.command}
+								data-copy={row.command}
+								data-needs-js
+							>
+								<LucideIcon name="copy" size={iconSize.copy} />
+								<span data-copy-label>{row.copyLabel}</span>
+							</button>
+						</div>
+					</li>
+				))}
+			</ul>
+			<div class="empty" data-empty hidden>
+				<p>{t.directoryEmpty}</p>
+				<button type="button" class="cu-control cu-control--compact" data-clear>
+					{t.directoryClear}
+				</button>
+			</div>
+			<p class="community">
+				<LucideIcon name="info" size={iconSize.note} />
+				{t.directoryCommunity}
+			</p>
+			<p class="sr-only" role="status" data-copy-status></p>
+		</section>
+	</div>
+</div>
+
+<script>
+	import type { SelectMenu } from "../select-menu";
+
+	import { wireCopyButtons } from "../copy";
+
+	const WHITESPACE = /\s+/;
+	/** The filter groups, as they are named in checkboxes, row data attributes and the URL's query. */
+	const GROUPS = ["trust", "kind", "stack"] as const;
+	type Group = (typeof GROUPS)[number];
+	/** The query parameter that keeps the search words. */
+	const QUERY_PARAM = "q";
+	/** The query parameter that keeps the sort order, which is by name when it is missing. */
+	const SORT_PARAM = "sort";
+	const DEFAULT_SORT = "name";
+
+	/** What the search box and checkboxes ask for. */
+	interface Filters {
+		words: string[];
+		chosen: Record<Group, Set<string>>;
+	}
+
+	const root = document.querySelector<HTMLElement>("[data-directory]");
+	const query = root?.querySelector<HTMLInputElement>("[data-query]");
+	const sort = root?.querySelector<SelectMenu>("[data-sort]");
+	const list = root?.querySelector<HTMLElement>("[data-list]");
+	const rows = [...(root?.querySelectorAll<HTMLElement>("[data-pack]") ?? [])];
+	const boxes = [...(root?.querySelectorAll<HTMLInputElement>("fieldset input") ?? [])];
+	const empty = root?.querySelector<HTMLElement>("[data-empty]");
+	const count = root?.querySelector<HTMLElement>("[data-count]");
+	const badge = root?.querySelector<HTMLElement>("[data-active-count]");
+	const more = root?.querySelector<HTMLButtonElement>("[data-more-stacks]");
+	const filters = root?.querySelector<HTMLElement>("[data-filters]");
+	const toggle = root?.querySelector<HTMLButtonElement>("[data-filters-toggle]");
+
+	const groupOf = (box: HTMLInputElement) => box.name as Group;
+	/** Trust starts with every box checked; the other groups start with none, which means any. */
+	const startsChecked = (box: HTMLInputElement) => groupOf(box) === "trust";
+
+	function readFilters(): Filters {
+		const chosen = { trust: new Set<string>(), kind: new Set<string>(), stack: new Set<string>() };
+		for (const box of boxes) {
+			if (box.checked) {
+				chosen[groupOf(box)].add(box.value);
+			}
+		}
+		const words = (query?.value ?? "").toLowerCase().split(WHITESPACE).filter(Boolean);
+		return { words, chosen };
+	}
+
+	function valuesOf(row: HTMLElement, group: Group): string[] {
+		return (row.dataset[group] ?? "").split(" ").filter(Boolean);
+	}
+
+	/** Whether `row` passes one group: trust lists what to keep; an empty kind or stack group keeps everything. */
+	function passes(row: HTMLElement, group: Group, chosen: Set<string>): boolean {
+		if (group !== "trust" && chosen.size === 0) {
+			return true;
+		}
+		return valuesOf(row, group).some((value) => chosen.has(value));
+	}
+
+	/** Whether `row` matches the search and every group but `skip`, which facet counts leave out. */
+	function matches(row: HTMLElement, filters: Filters, skip?: Group): boolean {
+		const text = row.dataset.search ?? "";
+		return (
+			filters.words.every((word) => text.includes(word)) &&
+			GROUPS.every((group) => group === skip || passes(row, group, filters.chosen[group]))
+		);
+	}
+
+	/** Sets each checkbox's count to the packs it would show, given the search and the other groups. */
+	function updateFacets(filters: Filters) {
+		for (const box of boxes) {
+			const group = groupOf(box);
+			const facet = box.closest("label")?.querySelector("[data-facet]");
+			if (facet) {
+				const hits = rows.filter((row) => matches(row, filters, group) && valuesOf(row, group).includes(box.value));
+				facet.textContent = String(hits.length);
+			}
+		}
+	}
+
+	const byName = (a: HTMLElement, b: HTMLElement) => (a.dataset.name ?? "").localeCompare(b.dataset.name ?? "");
+	const byNumber = (key: "pieces" | "stacks") => (a: HTMLElement, b: HTMLElement) =>
+		Number(b.dataset[key]) - Number(a.dataset[key]) || byName(a, b);
+	const orders: Record<string, (a: HTMLElement, b: HTMLElement) => number> = {
+		name: byName,
+		pieces: byNumber("pieces"),
+		stacks: byNumber("stacks"),
+	};
+
+	function sortValue(): string {
+		const value = sort?.getAttribute("value") ?? DEFAULT_SORT;
+		return value in orders ? value : DEFAULT_SORT;
+	}
+
+	/** How many boxes differ from where they start, for the mobile Filters button. */
+	function activeCount(): number {
+		return boxes.filter((box) => box.checked !== startsChecked(box)).length;
+	}
+
+	/** Keeps the search, the boxes that differ from the start and the sort in the URL, so a link opens this view. */
+	function writeUrl(filters: Filters) {
+		const params = new URLSearchParams();
+		if (query?.value.trim()) {
+			params.set(QUERY_PARAM, query.value.trim());
+		}
+		for (const group of GROUPS) {
+			const inGroup = boxes.filter((box) => groupOf(box) === group);
+			if (inGroup.some((box) => box.checked !== startsChecked(box))) {
+				params.set(group, [...filters.chosen[group]].join(","));
+			}
+		}
+		if (sortValue() !== DEFAULT_SORT) {
+			params.set(SORT_PARAM, sortValue());
+		}
+		const search = params.size > 0 ? `?${params}` : "";
+		history.replaceState(history.state, "", `${location.pathname}${search}${location.hash}`);
+	}
+
+	function readUrl() {
+		const params = new URLSearchParams(location.search);
+		if (query) {
+			query.value = params.get(QUERY_PARAM) ?? "";
+		}
+		for (const group of GROUPS) {
+			const raw = params.get(group);
+			if (raw !== null) {
+				const values = new Set(raw.split(",").filter(Boolean));
+				for (const box of boxes.filter((candidate) => groupOf(candidate) === group)) {
+					box.checked = values.has(box.value);
+				}
+			}
+		}
+		const wanted = params.get(SORT_PARAM);
+		if (sort && wanted && wanted in orders) {
+			sort.setAttribute("value", wanted);
+		}
+	}
+
+	function showAllStacks(shown: boolean) {
+		for (const option of root?.querySelectorAll<HTMLElement>("[data-extra]") ?? []) {
+			option.hidden = !shown;
+		}
+		if (more) {
+			more.setAttribute("aria-expanded", String(shown));
+			more.textContent = (shown ? root?.dataset.showFewer : root?.dataset.showAll) ?? "";
+		}
+	}
+
+	/** Shows the rows that match, in the chosen order, and updates the counts, the empty state and the URL. */
+	function apply() {
+		const current = readFilters();
+		const shown = rows.filter((row) => matches(row, current));
+		for (const row of rows) {
+			row.hidden = !shown.includes(row);
+		}
+		list?.append(...[...rows].sort(orders[sortValue()]));
+		if (count) {
+			const noun = shown.length === 1 ? root?.dataset.countOne : root?.dataset.countMany;
+			count.textContent = `${shown.length} ${noun ?? ""}`;
+		}
+		if (empty) {
+			empty.hidden = shown.length > 0;
+		}
+		const active = activeCount();
+		if (badge) {
+			badge.textContent = String(active);
+			badge.hidden = active === 0;
+		}
+		updateFacets(current);
+		writeUrl(current);
+	}
+
+	function clear() {
+		if (query) {
+			query.value = "";
+		}
+		for (const box of boxes) {
+			box.checked = startsChecked(box);
+		}
+		apply();
+		query?.focus();
+	}
+
+	if (root) {
+		readUrl();
+		showAllStacks(boxes.some((box) => box.checked && box.closest("[data-extra]")));
+		apply();
+		query?.addEventListener("input", apply);
+		sort?.addEventListener("change", apply);
+		for (const box of boxes) {
+			box.addEventListener("change", apply);
+		}
+		root.querySelector("[data-clear]")?.addEventListener("click", clear);
+		more?.addEventListener("click", () => showAllStacks(more.getAttribute("aria-expanded") !== "true"));
+		toggle?.addEventListener("click", () => {
+			const open = toggle.getAttribute("aria-expanded") !== "true";
+			toggle.setAttribute("aria-expanded", String(open));
+			filters?.toggleAttribute("data-open", open);
+		});
+		wireCopyButtons(root, root.dataset.copied ?? "", root.querySelector<HTMLElement>("[data-copy-status]"));
+	}
+</script>
+
+<style>
+	.head h1 {
+		font-family: var(--cu-font-display);
+		font-size: 3rem;
+		font-weight: 700;
+		line-height: 1.2;
+		letter-spacing: -0.0333em;
+	}
+
+	.lead {
+		max-width: 56rem;
+		font-size: 1.125rem;
+		line-height: 1.5;
+		color: var(--cu-muted);
+	}
+
+	.search-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--cu-control-gap);
+		align-items: center;
+		padding-top: 0.5rem;
+	}
+
+	.search {
+		flex: 1 1 16rem;
+		cursor: text;
+	}
+
+	.search input {
+		flex: 1;
+		min-width: 0;
+		padding: 0;
+		font: inherit;
+		color: var(--cu-ink);
+		outline: none;
+		background: none;
+		border: 0;
+	}
+
+	.search input::placeholder {
+		color: var(--cu-muted);
+	}
+
+	.body {
+		grid-template-columns: 15.75rem minmax(0, 1fr);
+		gap: 2.25rem;
+	}
+
+	.filters-toggle {
+		display: none;
+	}
+
+	.groups {
+		display: grid;
+		gap: 1.75rem;
+	}
+
+	.group {
+		display: grid;
+		min-width: 0;
+		padding: 0;
+		margin: 0;
+		border: 0;
+	}
+
+	.group legend {
+		padding: 0;
+		margin-bottom: 0.25rem;
+		font-size: 0.75rem;
+		font-weight: 600;
+		line-height: 1.25;
+		color: var(--cu-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+
+	.option {
+		display: flex;
+		gap: var(--cu-control-gap);
+		align-items: center;
+		min-height: 1.75rem;
+		font-size: 0.875rem;
+		line-height: 1.2;
+		cursor: pointer;
+	}
+
+	.option[hidden] {
+		display: none;
+	}
+
+	.box {
+		display: inline-flex;
+		flex: none;
+		align-items: center;
+		justify-content: center;
+		width: 1rem;
+		height: 1rem;
+		color: transparent;
+		border: 1.5px solid var(--cu-line);
+		border-radius: 0.25rem;
+	}
+
+	.option:hover .box {
+		border-color: var(--cu-muted);
+	}
+
+	.option input:checked + .box {
+		color: var(--cu-accent-ink);
+		background: var(--cu-accent);
+		border-color: var(--cu-accent);
+	}
+
+	.option input:focus-visible + .box {
+		outline: 2px solid var(--cu-accent-text);
+		outline-offset: 2px;
+	}
+
+	.option-label {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.count {
+		font-family: var(--cu-font-mono);
+		font-size: 0.75rem;
+		color: var(--cu-muted);
+	}
+
+	.more {
+		justify-self: start;
+		margin-inline-start: calc(-1 * var(--cu-control-pad-x-compact));
+		color: var(--cu-accent-text);
+	}
+
+	.more:hover {
+		color: var(--cu-accent-text);
+	}
+
+	.hint {
+		display: grid;
+		gap: 0.375rem;
+		padding: 0.875rem;
+		font-size: 0.75rem;
+		line-height: 1.3;
+		color: var(--cu-muted);
+		background: var(--cu-surface-2);
+		border-radius: 0.625rem;
+	}
+
+	.hint code {
+		font-size: 0.75rem;
+		color: var(--cu-ink);
+	}
+
+	.results {
+		display: grid;
+		gap: 0.875rem;
+		min-width: 0;
+	}
+
+	.result-count {
+		font-size: 0.875rem;
+		color: var(--cu-muted);
+	}
+
+	.list {
+		overflow: hidden;
+		background: var(--cu-surface);
+		border: 1px solid var(--cu-line);
+		border-radius: var(--cu-radius);
+	}
+
+	.row {
+		position: relative;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.75rem 1.5rem;
+		align-items: center;
+		padding: 1.25rem 1.375rem;
+	}
+
+	.row[hidden] {
+		display: none;
+	}
+
+	.row:not([hidden]) ~ .row:not([hidden]) {
+		border-top: 1px solid var(--cu-line);
+	}
+
+	.info {
+		display: grid;
+		flex: 1 1 24rem;
+		gap: 0.375rem;
+		min-width: 0;
+	}
+
+	.title {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.625rem;
+		align-items: center;
+	}
+
+	.name {
+		font-family: var(--cu-font-mono);
+		font-size: 1rem;
+		font-weight: 600;
+		line-height: 1.2;
+		color: var(--cu-ink);
+		text-decoration: none;
+	}
+
+	.name::after {
+		position: absolute;
+		inset: 0;
+		content: "";
+	}
+
+	.name:hover {
+		color: var(--cu-accent-text);
+	}
+
+	.version {
+		font-family: var(--cu-font-mono);
+		font-size: 0.75rem;
+		color: var(--cu-muted);
+	}
+
+	.description {
+		font-size: 0.9375rem;
+		line-height: 1.45;
+	}
+
+	.meta {
+		font-size: 0.8125rem;
+		color: var(--cu-muted);
+	}
+
+	.source {
+		display: grid;
+		flex: 0 1 auto;
+		gap: 0.5rem;
+		justify-items: end;
+		min-width: 0;
+	}
+
+	.source code {
+		font-size: 0.75rem;
+		color: var(--cu-muted);
+		overflow-wrap: anywhere;
+	}
+
+	.copy {
+		position: relative;
+		z-index: 1;
+	}
+
+	.empty {
+		display: grid;
+		gap: 0.75rem;
+		justify-items: start;
+		padding: 1.5rem 1.375rem;
+		font-size: 0.9375rem;
+		background: var(--cu-surface);
+		border: 1px dashed var(--cu-line);
+		border-radius: var(--cu-radius);
+	}
+
+	.empty[hidden] {
+		display: none;
+	}
+
+	.community {
+		display: flex;
+		gap: 0.5rem;
+		align-items: flex-start;
+		font-size: 0.8125rem;
+		line-height: 1.45;
+		color: var(--cu-muted);
+	}
+
+	.community > :global(svg) {
+		flex: none;
+		margin-top: 0.0625rem;
+	}
+
+	@media (max-width: 63.99rem) {
+		.body {
+			grid-template-columns: minmax(0, 1fr);
+		}
+
+		.filters-toggle {
+			display: inline-flex;
+		}
+
+		.filters-toggle[aria-expanded="true"] :global(.toggle-chevron) {
+			transform: rotate(180deg);
+		}
+
+		.badge {
+			min-width: 1.25rem;
+			padding: 0 0.375rem;
+			font-size: 0.75rem;
+			color: var(--cu-accent-ink);
+			text-align: center;
+			background: var(--cu-accent);
+			border-radius: 999px;
+		}
+
+		.groups {
+			grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+			gap: 1.5rem;
+			padding: 1.25rem;
+			margin-top: 0.75rem;
+			background: var(--cu-surface);
+			border: 1px solid var(--cu-line);
+			border-radius: var(--cu-radius);
+		}
+
+		.filters:not([data-open]) .groups {
+			display: none;
+		}
+
+		.hint {
+			grid-column: 1 / -1;
+		}
+	}
+
+	@media (max-width: 40rem) {
+		.head h1 {
+			font-size: 2.25rem;
+		}
+
+		.lead {
+			font-size: 1rem;
+		}
+
+		.search-row :global(.cu-select) {
+			flex: 1 1 100%;
+		}
+
+		.search-row :global(.cu-select .trigger) {
+			flex: 1;
+		}
+
+		.row {
+			padding: 1rem;
+		}
+
+		.source {
+			justify-items: start;
+		}
+	}
+</style>

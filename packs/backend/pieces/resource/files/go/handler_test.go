@@ -9,7 +9,8 @@ import (
 
 	"github.com/google/uuid"
 // @cuilo if stack.echo
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4" // @cuilo if !stack.echo-v5
+	"github.com/labstack/echo/v5" // @cuilo if stack.echo-v5
 
 	"example.com/app/internal/apperror"
 // @cuilo end

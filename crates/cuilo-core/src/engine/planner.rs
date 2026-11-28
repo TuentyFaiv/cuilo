@@ -1,11 +1,15 @@
 //! Planning a piece and the pieces it requires: inputs → render → patches → lock records → validation.
 
 use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 
 use super::{Engine, EngineError, PieceRequest};
-use crate::model::{Digest, Input, Name, Permissions, RelPath, Stack, Values};
-use crate::pack::{Pack, Piece, RenderRequest, Rendered, RenderedFile, render, resolve_inputs};
-use crate::patch::{Patch, Patched};
+use crate::model::{Digest, Input, Name, Permissions, RelPath, Stack, Values, or_list};
+use crate::pack::{
+	Pack, Piece, RenderRequest, Rendered, RenderedFile, RenderedPatch, RenderedStep, own_targets, render, resolve_inputs,
+	target as render_target,
+};
+use crate::patch::{Patch, PatchError, Patched};
 use crate::plan::{Draft, OnConflict, Plan, Rules, Validated};
 use crate::workspace::{FileRecord, Instance, Lockfile, PackRecord, PatchRecord, instance_id};
 
@@ -15,9 +19,8 @@ impl Engine {
 		self.plan_pieces(request, false)
 	}
 
-	/// Plans taking over code that already exists: files the piece would write that the project has
-	/// are recorded as generated, with what the pack would have written as their original, so later
-	/// updates merge into them; missing files are created. Existing files are never changed.
+	/// Plans taking over existing code: files the project already has are recorded as generated, unchanged,
+	/// so later updates merge into them; missing files are created.
 	pub fn plan_adopt(&self, request: &PieceRequest<'_>) -> Result<Plan<Validated>, EngineError> {
 		self.plan_pieces(request, true)
 	}
@@ -41,6 +44,7 @@ impl Engine {
 		let mut plan = Plan::new(summary(verb, manifest.name.as_str(), &pieces));
 		let mut added = Added {
 			adopt,
+			wire: request.wire && !adopt,
 			..Added::default()
 		};
 		for piece in &pieces {
@@ -58,9 +62,7 @@ impl Engine {
 			let target = if is_main { request.target } else { None };
 			self.add_piece(&mut plan, &mut added, pack, piece, &values, variant, target, &stack)?;
 		}
-		for (index, record) in self.add_patches(&mut plan, &added.patches)? {
-			added.instances[index].patches.push(record);
-		}
+		self.add_patches(&mut plan, &mut added)?;
 		for instance in added.instances {
 			plan.record(instance);
 		}
@@ -74,7 +76,7 @@ impl Engine {
 		)
 	}
 
-	/// Renders a new `piece` into `plan`; its patches wait in `added` until every piece is rendered.
+	/// Renders a new `piece` into `plan`; its patches and steps wait in `added` until every piece is rendered.
 	#[allow(clippy::too_many_arguments)]
 	pub(super) fn add_piece(
 		&self,
@@ -87,20 +89,33 @@ impl Engine {
 		target: Option<&RelPath>,
 		stack: &Stack,
 	) -> Result<(), EngineError> {
-		let rendered = render(&RenderRequest {
+		let mut request = RenderRequest {
 			piece,
 			values,
 			stack,
 			variant,
 			target: target.or_else(|| self.config.paths.get(piece.manifest().name.as_str())),
-		})?;
+		};
+		let found = if request.target.is_none() {
+			self.found_target(&request)?
+		} else {
+			None
+		};
+		if found.is_some() {
+			request.target = found.as_ref();
+		}
+		let stack = &self.piece_stack(stack, render_target(&request)?.as_ref());
+		let rendered = render(&RenderRequest { stack, ..request })?;
 		let Rendered {
 			variant,
 			target,
 			mut files,
 			patches,
 			dependencies,
+			steps,
+			at_default_target,
 		} = rendered;
+		self.adapt_files(stack, &mut files, Some(plan));
 		self.format_files(stack, &mut files, Some(plan));
 		for dependency in dependencies {
 			plan.depend(dependency);
@@ -111,10 +126,38 @@ impl Engine {
 		} else {
 			add_files(plan, files)?
 		};
+		let aimed = self.aim(&patches, &[])?;
+		if !aimed.missing.is_empty() {
+			return Err(EngineError::PatchTarget(aimed.missing));
+		}
 		let index = added.instances.len();
-		added.patches.extend(patches.into_iter().map(|patch| (index, patch)));
+		added
+			.patches
+			.extend(aimed.patches.into_iter().map(|patch| (index, patch)));
+		if !added.adopt {
+			added.steps.extend(steps.into_iter().map(|step| PendingStep {
+				instance: index,
+				step,
+				at_default_target,
+			}));
+		}
 		added.instances.push(instance);
 		Ok(())
+	}
+
+	/// The first of the piece's own folders for `request` that the project has, when it lists alternatives;
+	/// `None` leaves the choice to the render, which takes the first.
+	fn found_target(&self, request: &RenderRequest<'_>) -> Result<Option<RelPath>, EngineError> {
+		let alternatives = own_targets(request)?;
+		if alternatives.len() < 2 {
+			return Ok(None);
+		}
+		for folder in alternatives.into_iter().flatten() {
+			if self.workspace.is_dir(&folder)? {
+				return Ok(Some(folder));
+			}
+		}
+		Ok(None)
 	}
 
 	pub(super) fn values(
@@ -134,29 +177,143 @@ impl Engine {
 		Ok(resolve_inputs(&piece.manifest().inputs, &values, stack)?)
 	}
 
-	/// Applies every patch, grouped by file, and returns each patch's record with its instance index.
-	pub(super) fn add_patches(
-		&self,
-		plan: &mut Plan<Draft>,
-		patches: &[(usize, Patch)],
-	) -> Result<Vec<(usize, PatchRecord)>, EngineError> {
-		let mut by_file: BTreeMap<&RelPath, Vec<&(usize, Patch)>> = BTreeMap::new();
-		for entry in patches {
-			by_file.entry(entry.1.file()).or_default().push(entry);
+	/// Applies every patch, grouped by file, then the patches of each wiring step all or none when `added.wire`,
+	/// recording the regions on their instances; the other steps become next steps.
+	pub(super) fn add_patches(&self, plan: &mut Plan<Draft>, added: &mut Added) -> Result<(), EngineError> {
+		let patches = std::mem::take(&mut added.patches);
+		let mut by_file: BTreeMap<&RelPath, Vec<(usize, &Patch)>> = BTreeMap::new();
+		for (index, patch) in &patches {
+			by_file.entry(patch.file()).or_default().push((*index, patch));
 		}
-		let mut records = Vec::new();
+		let mut texts = Texts::new();
 		for (file, file_patches) in by_file {
 			let before = self
 				.workspace
 				.read(file)?
-				.ok_or_else(|| EngineError::PatchTarget(file.clone()))?;
-			let mut text = String::from_utf8_lossy(&before).into_owned();
+				.ok_or_else(|| EngineError::PatchTarget(vec![file.clone()]))?;
+			let mut edited = Edited::new(before);
 			for (index, patch) in file_patches {
-				records.push((*index, self.patch(plan, &mut text, patch)?));
+				let mut patch = patch.clone();
+				self.adapt_patch(&added.instances[index].stack, &mut patch, plan);
+				let record = self.patch(plan, &mut edited.text, &patch)?;
+				added.instances[index].patches.push(record);
 			}
-			plan.modify(file.clone(), before, text.into_bytes());
+			texts.insert(file.clone(), edited);
 		}
-		Ok(records)
+		for pending in std::mem::take(&mut added.steps) {
+			let PendingStep {
+				instance: index,
+				step,
+				at_default_target,
+			} = pending;
+			let Some(first) = step.patches.first().filter(|_| added.wire) else {
+				plan.next_step(step.text);
+				continue;
+			};
+			if !at_default_target {
+				plan.note(
+					first.preferred_file().clone(),
+					"the piece is not in its default folder, so cuilo did not wire it here; wire it by hand",
+				);
+				plan.next_step(step.text);
+				continue;
+			}
+			let mut aimed = self.aim(&step.patches, &[])?;
+			for patch in &mut aimed.patches {
+				self.adapt_patch(&added.instances[index].stack, patch, plan);
+			}
+			match self.wire(&mut texts, &aimed)? {
+				Wiring::Applied(regions) => {
+					let instance = &mut added.instances[index];
+					for (record, region) in regions {
+						instance.patches.push(record);
+						plan.keep(region.into_bytes());
+					}
+					instance.wired = true;
+					let mut files: Vec<RelPath> = aimed.patches.iter().map(|patch| patch.file().clone()).collect();
+					files.sort();
+					files.dedup();
+					plan.wired(&instance.id, files, step.text);
+				}
+				Wiring::Skipped { file, reason } => {
+					plan.note(file, format!("{reason}; wire it by hand"));
+					plan.next_step(step.text);
+				}
+			}
+		}
+		for (file, edited) in texts {
+			plan.modify(file, edited.before, edited.text.into_bytes());
+		}
+		Ok(())
+	}
+
+	/// Applies a wiring step's patches to `texts` only if the project has a file for each and every one applies.
+	pub(super) fn wire(&self, texts: &mut Texts, step: &Aimed) -> Result<Wiring, EngineError> {
+		if let Some(file) = step.missing.first() {
+			return Ok(Wiring::skipped(file, &absent(&step.missing)));
+		}
+		let mut trial = Texts::new();
+		let mut regions = Vec::with_capacity(step.patches.len());
+		for patch in &step.patches {
+			let file = patch.file();
+			let edited = match trial.entry(file.clone()) {
+				Entry::Occupied(entry) => entry.into_mut(),
+				Entry::Vacant(entry) => match texts.get(file) {
+					Some(edited) => entry.insert(edited.clone()),
+					None => match self.workspace.read(file)? {
+						Some(before) => entry.insert(Edited::new(before)),
+						None => return Ok(Wiring::skipped(file, "the file does not exist")),
+					},
+				},
+			};
+			match self.region(&mut edited.text, patch) {
+				Ok(region) => regions.push((record(patch, &region), region)),
+				Err(error) => return Ok(Wiring::skipped(file, &unwired(&error))),
+			}
+		}
+		texts.extend(trial);
+		Ok(Wiring::Applied(regions))
+	}
+
+	/// Picks the file each of `patches` edits with [`Self::target`], once for each list of alternatives, so
+	/// patches that list the same ones edit the same file.
+	pub(super) fn aim(&self, patches: &[RenderedPatch], records: &[PatchRecord]) -> Result<Aimed, EngineError> {
+		let mut picked: Vec<(&[RelPath], Option<&RelPath>)> = Vec::new();
+		let mut aimed = Aimed::default();
+		for patch in patches {
+			let files = patch.files();
+			let target = if let Some((_, target)) = picked.iter().find(|(listed, _)| *listed == files) {
+				*target
+			} else {
+				let target = self.target(files, records)?;
+				picked.push((files, target));
+				target
+			};
+			if target.is_none() && aimed.missing.is_empty() {
+				aimed.missing = files.to_vec();
+			}
+			aimed
+				.patches
+				.push(patch.at(target.unwrap_or_else(|| patch.preferred_file())));
+		}
+		Ok(aimed)
+	}
+
+	/// The alternative of `files` to edit: the first one an instance's patch `records` name, so an update keeps
+	/// editing the file it was patched in, or else the first one the project has.
+	fn target<'a>(&self, files: &'a [RelPath], records: &[PatchRecord]) -> Result<Option<&'a RelPath>, EngineError> {
+		if let Some(file) = files
+			.iter()
+			.find(|file| records.iter().any(|record| record.file == **file))
+		{
+			return Ok(Some(file));
+		}
+		for file in files {
+			if self.workspace.occupied(file)? {
+				return Ok(Some(file));
+			}
+		}
+		Ok(None)
 	}
 
 	/// Records the rendered files the project already has, keeping their content; creates the rest.
@@ -192,37 +349,129 @@ impl Engine {
 		text: &mut String,
 		patch: &Patch,
 	) -> Result<PatchRecord, EngineError> {
-		let inserted = match self.patchers.apply(text, patch) {
-			Ok(Patched::Changed { text: next, inserted }) => {
-				*text = next;
-				inserted
-			}
-			Ok(Patched::AlreadyApplied { inserted }) => inserted,
-			Err(source) => {
-				return Err(EngineError::Patch {
-					file: patch.file().clone(),
-					source,
-				});
-			}
-		};
-		let record = PatchRecord {
+		let inserted = self.region(text, patch).map_err(|source| EngineError::Patch {
 			file: patch.file().clone(),
-			inserted: Digest::of(inserted.as_bytes()),
-		};
+			source,
+		})?;
+		let record = record(patch, &inserted);
 		plan.keep(inserted.into_bytes());
 		Ok(record)
 	}
+
+	/// Applies `patch` to `text` and returns the region it now owns.
+	fn region(&self, text: &mut String, patch: &Patch) -> Result<String, PatchError> {
+		Ok(match self.patchers.apply(text, patch)? {
+			Patched::Changed { text: next, inserted } => {
+				*text = next;
+				inserted
+			}
+			Patched::AlreadyApplied { inserted } => inserted,
+		})
+	}
 }
 
-/// New instances and their patches, applied once every piece is rendered.
+/// Project files being patched, by path.
+pub(super) type Texts = BTreeMap<RelPath, Edited>;
+
+/// Patches with the file each edits picked among its alternatives.
+#[derive(Debug, Default)]
+pub(super) struct Aimed {
+	/// Each patch, editing the file picked for it, or its preferred file when the project has none of them.
+	pub patches: Vec<Patch>,
+	/// The alternatives of the first patch the project has none of; empty when it has a file for each.
+	pub missing: Vec<RelPath>,
+}
+
+/// A file's content before the plan and its patched text so far.
+#[derive(Clone, Debug)]
+pub(super) struct Edited {
+	/// Content on disk.
+	pub before: Vec<u8>,
+	/// Text with the patches applied so far.
+	pub text: String,
+}
+
+impl Edited {
+	/// A file not patched yet.
+	pub fn new(before: Vec<u8>) -> Self {
+		let text = String::from_utf8_lossy(&before).into_owned();
+		Self { before, text }
+	}
+}
+
+/// What became of a wiring step's patches.
+#[derive(Debug)]
+pub(super) enum Wiring {
+	/// All applied: each region's record and text.
+	Applied(Vec<(PatchRecord, String)>),
+	/// None applied, because of `file`.
+	Skipped {
+		/// The file a patch could not edit.
+		file: RelPath,
+		/// Why, in plain words.
+		reason: String,
+	},
+}
+
+impl Wiring {
+	fn skipped(file: &RelPath, reason: &str) -> Self {
+		Self::Skipped {
+			file: file.clone(),
+			reason: reason.to_owned(),
+		}
+	}
+}
+
+/// Why a patch has none of its `files` to edit, in plain words.
+fn absent(files: &[RelPath]) -> String {
+	match files {
+		[_] => "the file does not exist".to_owned(),
+		several => format!("none of {} exists", or_list(several)),
+	}
+}
+
+/// Why a wiring patch could not be applied, in plain words.
+fn unwired(error: &PatchError) -> String {
+	match error {
+		PatchError::MissingAnchor(anchors) => format!("no line contains {anchors}"),
+		PatchError::AmbiguousAnchor { anchor, count } => {
+			format!("{count} lines contain `{anchor}`, so the place to wire is unclear")
+		}
+		other => other.to_string(),
+	}
+}
+
+fn record(patch: &Patch, region: &str) -> PatchRecord {
+	PatchRecord {
+		file: patch.file().clone(),
+		inserted: Digest::of(region.as_bytes()),
+	}
+}
+
+/// New instances and their patches and steps, applied once every piece is rendered.
 #[derive(Debug, Default)]
 pub(super) struct Added {
-	/// Take over existing files instead of creating them.
+	/// Take over existing files instead of creating them; steps are left out.
 	pub adopt: bool,
+	/// Apply the patches of wiring steps.
+	pub wire: bool,
 	/// New instances.
 	pub instances: Vec<Instance>,
 	/// Each patch with the index of its instance.
 	pub patches: Vec<(usize, Patch)>,
+	/// Each selected step, in the order the pieces were rendered.
+	pub steps: Vec<PendingStep>,
+}
+
+/// A selected step waiting until every piece is rendered.
+#[derive(Debug)]
+pub(super) struct PendingStep {
+	/// Index of its instance.
+	pub instance: usize,
+	/// The step.
+	pub step: RenderedStep,
+	/// Whether its piece is in its default folder, which its wiring patches assume.
+	pub at_default_target: bool,
 }
 
 /// Refuses a pack whose files differ from those the lockfile pinned for the same version, or that is
@@ -343,6 +592,7 @@ fn instance(
 		piece: piece.manifest().name.clone(),
 		variant,
 		target,
+		wired: false,
 		stack,
 		inputs: values,
 		files: Vec::new(),

@@ -1,7 +1,5 @@
-//! MCP server for `cuilo`: the plan → review → apply flow as tools for AI agents, over stdio.
-//!
-//! Every tool is one engine call; plans are only ever written by `apply_plan`, so an agent can always
-//! show the user what will change first.
+//! MCP server for `cuilo` over stdio: the plan → review → apply flow as one tool per engine call,
+//! where only `apply_plan` writes, so agents can show the user the changes first.
 
 use std::io::{self, BufRead, Write};
 use std::path::Path;
@@ -20,11 +18,13 @@ plan it with plan_add (or plan_update, plan_adopt, plan_capture), show the user 
 apply_plan with the plan id. Nothing is written to the project before apply_plan; undo reverts the last apply. \
 verify_plan runs the project's checks with the plan's files in place, so code from the pack runs as the user: call \
 it only after showing the user the plan and getting their consent. install_commands lists how to add the packages \
-a plan needs; run them only with the user's consent. When a plan notes that files were not formatted because the \
-project is not trusted, tell the user: trusting a project lets its own tools run, so only they should run \
-`cuilo trust`.";
+a plan needs; run them only with the user's consent. A plan's next_steps are setup the user still has to do, such \
+as mounting new routes; after apply_plan, which returns them too, relay them to the user. plan_add's `wire` makes \
+the plan do the wiring steps it can as patches instead; leave it unset unless the user asks, so their own setting \
+applies. When a plan notes that files were not formatted because the project is not trusted, tell the user: \
+trusting a project lets its own tools run, so only they should run `cuilo trust`.";
 
-/// One tool: its name, the engine method behind it, what it does, its arguments and its effect.
+/// An MCP tool backed by one engine method.
 struct Tool {
 	name: &'static str,
 	method: &'static str,
@@ -60,6 +60,15 @@ fn piece_arguments() -> Json {
 	})
 }
 
+fn add_arguments() -> Json {
+	let mut properties = piece_arguments();
+	properties["wire"] = json!({
+		"type": "boolean",
+		"description": "Apply the piece's wiring steps, such as mounting its routes in the app's entry file, as patches in the plan instead of listing them as next steps. Defaults to the user's `wire` setting."
+	});
+	properties
+}
+
 const TOOLS: &[Tool] = &[
 	Tool {
 		name: "detect_project",
@@ -88,7 +97,7 @@ const TOOLS: &[Tool] = &[
 	Tool {
 		name: "describe_piece",
 		method: "piece.describe",
-		description: "Describe a piece: its inputs, variants, files and patches.",
+		description: "Describe a piece: its inputs, variants, files, patches and steps.",
 		properties: || json!({ "pack": { "type": "string" }, "piece": { "type": "string" } }),
 		required: &["pack", "piece"],
 		effect: Effect::ReadOnly,
@@ -96,8 +105,8 @@ const TOOLS: &[Tool] = &[
 	Tool {
 		name: "plan_add",
 		method: "plan.create",
-		description: "Plan generating a piece (and the pieces it requires). Returns a plan id and its changes; nothing is written.",
-		properties: piece_arguments,
+		description: "Plan generating a piece (and the pieces it requires). Returns a plan id and its changes, notes and next steps; nothing is written.",
+		properties: add_arguments,
 		required: &["pack", "piece"],
 		effect: Effect::ReadOnly,
 	},

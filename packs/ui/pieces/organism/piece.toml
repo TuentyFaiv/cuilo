@@ -26,6 +26,15 @@ description = "Kotlin package for Jetpack Compose."
 example = "com.example.app"
 default = "com.example.app"
 
+[translations.es-mx]
+description = "Una sección propia de una interfaz, hecha de moléculas, como un encabezado."
+
+[translations.es-mx.inputs]
+name = "Nombre del componente, p. ej. `site-header`."
+tests = "Agrega un archivo de pruebas; se activa por defecto cuando el proyecto puede correrlo."
+app = "Nombre de la app: la carpeta de la app de SwiftUI o el paquete de Flutter."
+package = "Paquete de Kotlin para Jetpack Compose."
+
 [[variants]]
 name = "angular"
 when = { framework = "angular" }
@@ -36,7 +45,7 @@ when = { framework = "qwik", language = "typescript" }
 
 [[variants]]
 name = "solid"
-when = { framework = "solid", language = "typescript" }
+when = { framework = "solid-v2", language = "typescript" }
 
 [[variants]]
 name = "astro"
@@ -78,24 +87,22 @@ target = ""
 [[variants]]
 name = "compose-multiplatform"
 when = { framework = "compose-multiplatform" }
-files = "files/compose"
-target = "composeApp/src/commonMain/kotlin/com/example/app/ui/organisms"
+target = ["shared", "composeApp"]
 
 [[variants]]
 name = "compose"
 when = { framework = "compose" }
-target = "app/src/main/java/com/example/app/ui/organisms"
+target = "app"
 
 [[variants]]
 name = "swiftui-package"
 when = { language = "swift", package_manager = "swiftpm" }
-files = "files/swiftui"
-target = "Sources/ExampleApp/UI/Organisms"
+target = ""
 
 [[variants]]
 name = "swiftui"
 when = { language = "swift" }
-target = "ExampleApp/UI/Organisms"
+target = ""
 
 [[files]]
 path = "example-organism/example-organism.test.tsx"
@@ -103,6 +110,10 @@ when = "tests"
 
 [[files]]
 path = "example-organism/example-organism.test.ts"
+when = "tests"
+
+[[files]]
+path = "example-organism/example-organism.svelte.test.ts"
 when = "tests"
 
 [[files]]
@@ -119,6 +130,36 @@ when = "!stack.tailwind"
 
 [[files]]
 path = "test/ui/organisms/example_organism_test.dart"
+when = "tests"
+
+[[files]]
+path = "src/test/java/com/example/app/ui/organisms/ExampleOrganismTest.kt"
+when = "tests"
+
+[[files]]
+path = "src/jvmTest/kotlin/com/example/app/ui/organisms/ExampleOrganismTest.kt"
+when = "tests"
+
+[[files]]
+path = "ExampleAppTests/UI/Organisms/ExampleOrganismTests.swift"
+when = "tests"
+
+[[files]]
+path = "Tests/ExampleAppTests/UI/Organisms/ExampleOrganismTests.swift"
+when = "tests"
+
+[[steps]]
+text = "Declare the module with `pub mod example_organism;` in `src/ui/organisms/mod.rs`, which `src/ui/mod.rs` declares with `pub mod organisms;`."
+variants = ["leptos", "dioxus", "yew"]
+
+[[steps]]
+text = "Let the tests run on the JVM with Robolectric: in `app/build.gradle.kts`, add `org.robolectric:robolectric` and `androidx.compose.ui:ui-test-junit4`, with the Compose BOM, to `testImplementation` and `androidx.compose.ui:ui-test-manifest` to `debugImplementation`, and set `testOptions.unitTests.isIncludeAndroidResources = true`."
+variants = ["compose"]
+when = "tests"
+
+[[steps]]
+text = "Let the tests run on the JVM target: add `org.jetbrains.compose.ui:ui-test` and `compose.desktop.currentOs` to the `jvmTest` dependencies of the module the piece is in, `shared` or `composeApp`."
+variants = ["compose-multiplatform"]
 when = "tests"
 
 [[dependencies]]
@@ -148,7 +189,7 @@ when = "tests"
 [[dependencies]]
 ecosystem = "npm"
 name = "@solidjs/testing-library"
-version = "^0.8"
+version = "^1.0.0-rc.2"
 dev = true
 variants = ["solid"]
 when = "tests"
@@ -168,3 +209,9 @@ version = "^2.4"
 dev = true
 variants = ["vue"]
 when = "tests"
+
+[[dependencies]]
+ecosystem = "pub"
+name = "material_ui"
+version = "^1.1.0"
+variants = ["flutter"]

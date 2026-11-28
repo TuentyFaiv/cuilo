@@ -14,6 +14,13 @@ description = "Add tests; on by default when the project can run them."
 prompt = "Add tests?"
 default_when = "stack.vitest || stack.pytest || stack.go || stack.rust"
 
+[translations.es-mx]
+description = "Middleware que propaga o crea un encabezado de la solicitud, p. ej. `request-id`, y lo deja disponible para los manejadores."
+
+[translations.es-mx.inputs]
+name = "Nombre del encabezado sin `x-`, p. ej. `request-id` o `correlation-id`."
+tests = "Agrega pruebas; se activa por defecto cuando el proyecto puede correrlas."
+
 [[variants]]
 name = "hono"
 when = { framework = "hono", language = "typescript" }
@@ -42,7 +49,13 @@ target = "internal/middleware"
 
 [[variants]]
 name = "echo"
-when = { framework = "echo" }
+when = { framework = "echo-v4" }
+files = "files/go"
+target = "internal/middleware"
+
+[[variants]]
+name = "echo-v5"
+when = { framework = "echo-v5" }
 files = "files/go"
 target = "internal/middleware"
 
@@ -55,8 +68,64 @@ path = "tests/middleware/test_request_id.py"
 when = "tests"
 
 [[files]]
+path = "tests/__init__.py"
+when = "tests"
+
+[[files]]
+path = "tests/middleware/__init__.py"
+when = "tests"
+
+[[files]]
 path = "request_id_test.go"
 when = "tests"
+
+[[steps]]
+text = "Register the middleware in the file that creates your Hono app, before your routes, with `app.use(requestId)`."
+variants = ["hono"]
+
+[[steps.patches]]
+kind = "import"
+file = ["src/index.ts", "src/index.tsx"]
+import = 'import { requestId } from "./shared/middleware/request-id";'
+
+[[steps.patches]]
+kind = "anchor"
+file = ["src/index.ts", "src/index.tsx"]
+anchor = "const app = new Hono()"
+insert = "app.use(requestId);"
+
+[[steps]]
+text = "Register the middleware before your routes with `app.use(requestId)`."
+variants = ["express"]
+
+[[steps]]
+text = "Declare the module with `pub mod request_id;` in `src/middleware/mod.rs` and `mod middleware;` in `src/main.rs`, then add it to your router with `.layer(axum::middleware::from_fn(middleware::request_id::request_id))`."
+variants = ["axum"]
+
+[[steps]]
+text = "Add the middleware in `app/main.py` with `app.add_middleware(RequestIdMiddleware)`, imported from `app.middleware.request_id`."
+variants = ["fastapi"]
+
+[[steps.patches]]
+kind = "anchor"
+file = "app/main.py"
+anchor = "app = FastAPI()"
+position = "before"
+insert = "from app.middleware.request_id import RequestIdMiddleware\n\n"
+
+[[steps.patches]]
+kind = "anchor"
+file = "app/main.py"
+anchor = "app = FastAPI()"
+insert = "app.add_middleware(RequestIdMiddleware)"
+
+[[steps]]
+text = "Add the middleware to your router with `r.Use(middleware.RequestId)`."
+variants = ["chi"]
+
+[[steps]]
+text = "Add the middleware with `e.Use(middleware.RequestId())`."
+variants = ["echo", "echo-v5"]
 
 [[dependencies]]
 ecosystem = "npm"
@@ -69,7 +138,7 @@ when = "tests"
 [[dependencies]]
 ecosystem = "cargo"
 name = "uuid"
-version = "1"
+version = "1.10"
 features = ["v7"]
 variants = ["axum"]
 
@@ -111,4 +180,4 @@ when = "tests"
 ecosystem = "go"
 name = "github.com/google/uuid"
 version = "v1.6.0"
-variants = ["chi", "echo"]
+variants = ["chi", "echo", "echo-v5"]

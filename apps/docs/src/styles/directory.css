@@ -1,0 +1,92 @@
+/* The pack directory and pack pages. They set `fullBleed`, so they draw their own header and span the window; their
+   root element has `cu-bleed`. */
+
+.content-panel:has(+ .content-panel .cu-bleed) {
+	display: none;
+}
+
+.content-panel:has(.cu-bleed) {
+	padding: 0;
+	border-top: 0;
+}
+
+.content-panel:has(.cu-bleed) > .sl-container {
+	max-width: none;
+	margin: 0;
+}
+
+.cu-bleed {
+	--cu-pad-x: clamp(1rem, 4.45vw, 4rem);
+	--cu-gutter: max(var(--cu-pad-x), calc((100% - 82rem) / 2));
+	line-height: 1.4;
+	color: var(--cu-ink);
+}
+
+:where(.cu-bleed) :is(h1, h2, h3, h4, p, ul, ol, dl, dd, figure) {
+	margin: 0;
+}
+
+:where(.cu-bleed) :is(ul, ol) {
+	padding: 0;
+	list-style: none;
+}
+
+:where(.cu-bleed) code {
+	font-family: var(--cu-font-mono);
+}
+
+.cu-bleed-head {
+	display: grid;
+	gap: 1rem;
+	padding: 3.5rem var(--cu-gutter) 2.25rem;
+	border-bottom: 1px solid var(--cu-line);
+}
+
+.cu-bleed-body {
+	display: grid;
+	gap: 2.5rem;
+	align-items: start;
+	padding: 2rem var(--cu-gutter) 4.5rem;
+}
+
+.cu-tier {
+	display: inline-flex;
+	flex: none;
+	gap: 0.3125rem;
+	align-items: center;
+	padding: 0.125rem 0.5rem;
+	font-family: var(--cu-font-body);
+	font-size: 0.75rem;
+	font-weight: 500;
+	line-height: 1.25;
+	color: var(--cu-ink);
+	letter-spacing: normal;
+	white-space: nowrap;
+	background: var(--cu-surface-2);
+	border-radius: 999px;
+}
+
+.cu-tier--reviewed {
+	color: var(--cu-accent-text);
+	background: var(--cu-accent-soft);
+}
+
+.cu-tier--signed {
+	color: var(--cu-muted);
+}
+
+:where(.cu-bleed) :where(a, button, input, summary):focus-visible {
+	outline: var(--cu-focus-ring);
+	outline-offset: var(--cu-focus-offset);
+}
+
+@media (max-width: 40rem) {
+	.cu-bleed-head {
+		padding-block: 2rem 1.5rem;
+	}
+
+	.cu-bleed-body {
+		gap: 1.5rem;
+		padding-block: 1.25rem 3rem;
+	}
+}

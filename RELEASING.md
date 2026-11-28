@@ -18,8 +18,9 @@ A release starts when a maintainer pushes a `v<version>` tag that matches the Ca
    stable ones) and the root install scripts forward. Last, it installs the release through the public URL with
    `CUILO_REQUIRE_SIGNATURE=1`.
 5. **npm**, **crates**, **homebrew** (each waits for `release`): publish the platform packages and then the
-   wrapper with provenance (dist-tag `next` for pre-releases), publish the crates, and open a pull request with the
-   new formula on the tap. The formula points at the Cloudflare files.
+   wrapper with provenance, publish the crates, and open a pull request with the new formula on the tap. The formula
+   points at the Cloudflare files. All nine npm packages get one dist-tag: `latest`, or `next` for a pre-release once
+   npm's `latest` is a stable release (the `0.0.0` placeholders don't count).
 
 ## The download host
 
@@ -36,14 +37,14 @@ https://<download host>/
 
 ## What protects users
 
-| Threat                                             | What stops it                                                                                                                                                                                                                     |
-| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Someone on the network reads or changes a download | HTTPS only, TLS 1.2 or newer, no redirects: `curl --proto '=https' --tlsv1.2`, PowerShell with TLS 1.2 and `-MaximumRedirection 0`, cuilo's own HTTPS client. The domain adds HSTS, DNSSEC and CAA records (setup below).         |
-| A changed or swapped binary on the host            | Every binary is signed with a key the host never sees. `cuilo upgrade` and `cargo binstall` require the signature, and the install scripts check it when `minisign` is installed (`CUILO_REQUIRE_SIGNATURE=1` makes it required). |
-| An old, vulnerable release offered as the newest   | `cuilo upgrade` never goes down, and each signature names its version, so an old signed file can't stand in for a new one.                                                                                                        |
-| A published version changed later                  | The R2 bucket lock on `v` and the workflow's never-replace upload; immutable GitHub Releases; npm and crates.io never accept the same version twice.                                                                              |
-| A leaked CI credential                             | Every publishing job waits for your approval of the `release` environment, and each token can reach one bucket, tap or package and nothing else.                                                                                  |
-| A half-downloaded `curl … \| sh`                   | install.sh runs everything inside `main`, so a cut-off script runs nothing.                                                                                                                                                       |
+| Threat                                             | What stops it                                                                                                                                                                                                                                        |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Someone on the network reads or changes a download | HTTPS only, TLS 1.2 or newer, no redirects: `curl --proto '=https' --tlsv1.2`, PowerShell with TLS 1.2 and `-MaximumRedirection 0`, cuilo's own HTTPS client. The domain adds HSTS, DNSSEC and CAA records (setup below).                            |
+| A changed or swapped binary on the host            | Every binary is signed with a key the host never sees. `cuilo upgrade`, automatic updates and `cargo binstall` require the signature, and the install scripts check it when `minisign` is installed (`CUILO_REQUIRE_SIGNATURE=1` makes it required). |
+| An old, vulnerable release offered as the newest   | `cuilo upgrade` and automatic updates never go down, and each signature names its version, so an old signed file can't stand in for a new one.                                                                                                       |
+| A published version changed later                  | The R2 bucket lock on `v` and the workflow's never-replace upload; immutable GitHub Releases; npm and crates.io never accept the same version twice.                                                                                                 |
+| A leaked CI credential                             | Every publishing job waits for your approval of the `release` environment, and each token can reach one bucket, tap or package and nothing else.                                                                                                     |
+| A half-downloaded `curl … \| sh`                   | install.sh runs everything inside `main`, so a cut-off script runs nothing.                                                                                                                                                                          |
 
 What remains: the first `curl … | sh` trusts the download host over HTTPS, as rustup, Bun and Deno do. A user who
 wants more can download `install.sh` and `install.sh.minisig`, check them with
@@ -80,16 +81,20 @@ Apple notarization yet; that takes paid certificates.
   write access to `tuentyfaiv/homebrew-tap` only). Variable: `R2_BUCKET`.
 - [ ] **Immutable releases** (repository settings → General → Releases) so a published release cannot be edited.
 - [ ] **Tag protection**: a ruleset that only lets maintainers create `v*` tags.
-- [ ] **Homebrew tap**: create the public repository `tuentyfaiv/homebrew-tap` with an empty `Formula/` folder.
-- [ ] **npm**: create the free npm organization `cuilo`, which owns the `@cuilo` scope. The first version of each
-  package must exist before trusted publishing can be configured. Publish
-  the first release's packages by hand from the `npm-out/` that `cargo xtask npm dist npm-out` writes
-  (`npm publish <dir> --access public --tag next`), then add the trusted publisher (repository
-  `TuentyFaiv/cuilo`, workflow `release.yml`, environment `release`) to each of the nine packages and remove
-  any npm token.
-- [ ] **crates.io**: likewise, publish `cuilo-core`, `cuilo-packs`, `cuilo-rpc`, `cuilo-mcp` and `cuilo`
-  once with a token (`cargo publish --workspace --exclude xtask --locked`), then add the trusted publisher
-  (workflow `release.yml`, environment `release`) to each crate and revoke the token.
+- [ ] **Homebrew tap**: create the public repository `tuentyfaiv/homebrew-tap`; the release job adds `Formula/cuilo.rb`
+  through a pull request. `HOMEBREW_TAP_TOKEN` needs write access to its contents and pull requests.
+- [ ] **npm**: create the free npm organization `cuilo`, which owns the `@cuilo` scope. Trusted publishing can only
+  be set on a package that exists, so claim the nine names first with `0.0.0` placeholders: a `package.json` with
+  the name, version `0.0.0`, a description, the license and the repository, plus a README saying the release
+  workflow publishes the real package. Sign in with `npm login` and run `npm publish <dir> --access public` for each.
+  Then, on npmjs.com, add the trusted publisher to each package (repository `TuentyFaiv/cuilo`, workflow
+  `release.yml`, environment `release`), set its publishing access to require two-factor authentication and disallow
+  tokens, and `npm logout`. The release workflow publishes every real version, as `latest` until 2.0 is stable.
+- [ ] **crates.io**: likewise, claim `cuilo-core`, `cuilo-packs`, `cuilo-rpc`, `cuilo-mcp` and `cuilo` with `0.0.0`
+  placeholders, each an empty library with its own `[workspace]` table. Create an API token that expires within a
+  day, with only the `publish-new` and `yank` scopes, and run `cargo publish --allow-dirty` in each. Add the trusted
+  publisher (workflow `release.yml`, environment `release`) to each crate, yank the placeholders
+  (`cargo yank --version 0.0.0 <crate>`) so nothing installs them, and revoke the token.
 
 - [ ] **v1 users**: once the first release is out, point the v1 package at the new one with
   `npm deprecate @tuentyfaiv/cli "Moved to @cuilo/cli (Cuilo v2): https://cuilo.dev"`.
@@ -97,14 +102,21 @@ Apple notarization yet; that takes paid certificates.
 ## Each release
 
 1. Bump `version` in the root `Cargo.toml` (`[workspace.package]` and the `cuilo-*` dependency pins) and
-   `npm/cli/package.json`; `cargo xtask release-check` lists anything missed.
+   `npm/cli/package.json`, and replace "unreleased" ("sin publicar" in es-MX) in the version's changelog headings
+   with the release date; `cargo xtask release-check` lists anything missed. The version's section of the English
+   changelog becomes the GitHub Release notes (`cargo xtask release-notes` prints them).
 2. Run `cargo xtask ci`, review, commit and push.
 3. Tag the reviewed commit (`git tag -s v<version> && git push origin v<version>`), then approve the `release`
-   environment for each job.
-4. Merge the tap pull request.
+   environment for each job. Once Cloudflare, npm and crates.io have the version, the workflow runs the install smoke
+   test (`.github/workflows/install-smoke.yml`): fresh macOS, Ubuntu and Windows runners install it with the install
+   script, npm, pnpm, Bun, Yarn and `cargo binstall` (and `cargo install` on Ubuntu), check `cuilo --version`, and
+   plan a piece offline.
+4. Merge the tap pull request, then run the smoke test again with Homebrew:
+   `gh workflow run install-smoke.yml -f version=<version>`. It fails until the tap has that version.
 
-A bad release is never replaced: publish a fixed version. Until then, a channel file can be pointed back at the
-previous version by hand. `cuilo upgrade` then stays where it is, and the install scripts install that one.
+A bad release, such as one the smoke test fails on, is never replaced: publish a fixed version. Until then, a channel
+file can be pointed back at the previous version by hand. `cuilo upgrade` and automatic updates then stay where they
+are, and the install scripts install that one.
 
 ## Verifying a release
 
@@ -118,3 +130,6 @@ gh attestation verify cuilo-aarch64-apple-darwin --repo TuentyFaiv/cuilo
 
 The checksums alone only catch a corrupted download, because they come from the same host as the binaries. The
 signature and the attestation are what show a release came from this repository's workflow.
+
+To check later that a version still installs and runs through every channel, run the smoke test as in step 4 of
+[Each release](#each-release).

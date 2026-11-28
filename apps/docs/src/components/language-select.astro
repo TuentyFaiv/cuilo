@@ -1,0 +1,53 @@
+---
+import { LOCALES } from "../i18n/locales";
+import { localized } from "../i18n/ui";
+import { unlocalized } from "../sections";
+import SelectMenu from "./select-menu.astro";
+
+interface Props {
+	/** Whether it is the header's compact control; otherwise it is the mobile menu's default-size field. */
+	compact?: boolean;
+}
+
+const { compact = false } = Astro.props;
+const { locale, entry } = Astro.locals.starlightRoute;
+/** This page without its locale prefix; the 404 page has no copy per language, so it offers each language's home. */
+const path = entry.id === "404" ? "/" : unlocalized(Astro.url.pathname, locale);
+/** Each language with this page in it; the options are links, so switching works without JavaScript. */
+const options = Object.entries(LOCALES).map(([key, { label, lang }]) => ({
+	value: key,
+	label,
+	lang,
+	short: lang.slice(0, 2).toUpperCase(),
+	href: localized(key === "root" ? undefined : key, path),
+}));
+---
+
+{options.length > 1 && (
+	<SelectMenu
+		id={compact ? "cu-language" : "cu-language-menu"}
+		look={compact ? "compact" : "field"}
+		icon="languages"
+		label={Astro.locals.t("languageSelect.accessibleLabel")}
+		options={compact ? options : options.map(({ short: _, ...option }) => option)}
+		value={locale ?? "root"}
+		align={compact ? "end" : "start"}
+		data-language-select
+	/>
+)}
+
+<script>
+	/** Points each language's link at this page's query and hash too, as Starlight's picker keeps them. */
+	function keepQueryAndHash(event: Event) {
+		if (!(event.currentTarget instanceof HTMLElement)) {
+			return;
+		}
+		for (const option of event.currentTarget.querySelectorAll<HTMLAnchorElement>("a[role=option]")) {
+			option.href = `${new URL(option.href).pathname}${location.search}${location.hash}`;
+		}
+	}
+
+	for (const select of document.querySelectorAll<HTMLElement>("[data-language-select]")) {
+		select.addEventListener("beforetoggle", keepQueryAndHash, { capture: true });
+	}
+</script>

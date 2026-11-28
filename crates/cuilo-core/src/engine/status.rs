@@ -145,13 +145,14 @@ impl Engine {
 		else {
 			return Ok(None);
 		};
-		let rendered = render(&RenderRequest {
+		let mut rendered = render(&RenderRequest {
 			piece,
 			values: &instance.inputs,
 			stack: &instance.stack,
 			variant: instance.variant.as_ref().map(Name::as_str),
 			target: instance.target.as_ref(),
 		})?;
+		self.adapt_files(&instance.stack, &mut rendered.files, None);
 		let Some(file) = rendered.files.into_iter().find(|file| file.path == *path) else {
 			return Ok(None);
 		};

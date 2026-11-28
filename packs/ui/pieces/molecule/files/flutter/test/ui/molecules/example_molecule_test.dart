@@ -1,6 +1,6 @@
 import 'package:example_app/ui/molecules/example_molecule.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 void main() {
   testWidgets('labels the group for assistive technology', (tester) async {

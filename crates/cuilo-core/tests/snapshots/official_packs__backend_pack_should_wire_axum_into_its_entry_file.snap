@@ -1,0 +1,19 @@
+---
+source: crates/cuilo-core/tests/official_packs.rs
+expression: "wired(r#\"{\"framework\": [\"axum\"]}\"#, \"src/main.rs\", AXUM_MAIN)?"
+---
+→ Nest the routes before your router's layers with `.nest("/status-badges", status_badges::routes(Arc::new(StatusBadgeService::new(InMemoryStatusBadgeRepository::default()))))`, importing them from `status_badges`.
+→ Declare the module with `pub mod status_badge;` in `src/middleware/mod.rs` and `mod middleware;` in `src/main.rs`, then add it to your router with `.layer(axum::middleware::from_fn(middleware::status_badge::status_badge))`.
+---
+use axum::{Router, routing::get};
+
+mod error;
+
+mod status_badges;
+
+#[tokio::main]
+async fn main() {
+    let app = Router::new().route("/", get(|| async { "Hello, World!" }));
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    axum::serve(listener, app).await.unwrap();
+}

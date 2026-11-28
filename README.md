@@ -35,7 +35,7 @@ More commands:
 | `cuilo pack capture <files…> --piece <name> --name UserCard`    | Turn project code into a piece of `packs/local`; the name needs two or more words |
 | `cuilo log`, `cuilo detect`, `cuilo pack show <pack>`           | History, detected stack, a pack's pieces and inputs                               |
 | `cuilo trust [--revoke]`                                        | Let this project's own formatter, linters and checks run (formatting, `--verify`) |
-| `cuilo upgrade [--check] [--version <v>]`                       | Replace a script-installed cuilo with a newer signed release                      |
+| `cuilo upgrade [--check] [--version <v>]`                       | Upgrade cuilo, through the package manager that installed it, if any              |
 
 Every command takes `--json` and `--no-input` for scripts and agents; `--dry-run`, `--diff`, `--review`
 (keep or skip each hunk, like `git add -p`), `--verify` and `--install` work wherever a plan is applied. Exit
@@ -44,8 +44,7 @@ codes: `0` done, `1` failed, `2` usage or confirmation needed, `3` plan rejected
 
 ### Installing a release
 
-Releases are not published yet. Once they are, every channel installs the same binaries, built and attested by
-GitHub Actions and served from Cloudflare under `/v<version>/`; [RELEASING.md](RELEASING.md) describes how they are
+Every channel installs the same binaries, built and attested by GitHub Actions and served from Cloudflare under `/v<version>/`; [RELEASING.md](RELEASING.md) describes how they are
 made and what protects them.
 
 | Channel              | Command                                                                       | What checks it                                      |
@@ -59,11 +58,16 @@ made and what protects them.
 The npm package has no dependencies and runs
 nothing at install time: the package manager picks the one platform package (`@cuilo/cli-darwin-arm64`,
 `…-linux-x64-musl`, …) that matches the system. The install scripts put `cuilo` in `~/.cuilo/bin`
-(`CUILO_INSTALL` changes it; `CUILO_VERSION` or an argument picks a version, else the newest stable one), and
-`CUILO_REQUIRE_SIGNATURE=1` makes them refuse to install without checking the signature. Only those copies update
-themselves: `cuilo upgrade` never moves to an older version, and replaces the binary only when its `SHA256SUMS`
-carries a valid signature by the release key built into cuilo. Copies installed another way are left to their
-package manager, and `cuilo upgrade --check` only reports what is available. To see where a binary was built, run
+(`CUILO_INSTALL` changes it; `CUILO_VERSION` or an argument picks a version, else the newest stable one, or the newest
+pre-release while there is no stable one). Until 2.0 is stable, npm's `latest` tag is the newest pre-release too, but
+Cargo installs a pre-release only when it is named: `cargo binstall cuilo --version <version>`.
+`CUILO_REQUIRE_SIGNATURE=1` makes the scripts refuse to install without checking the signature. Script copies update
+themselves, once a day in the background or with `cuilo upgrade`, and only when the release's `SHA256SUMS` carries a
+valid signature by the release key built into cuilo; without `--version`, they never move to an older version. For
+global installs made another way, `cuilo upgrade` runs their package manager, and the daily check prints a notice
+instead; for a project's own copy or one run through `npx`, `bunx`, `pnpm dlx` or `yarn dlx`, it prints the command
+to run instead of running anything. `updates = "notify"` or `"off"` in the user config, or `CUILO_UPDATES`, changes this, and
+`cuilo upgrade --check` only reports what is available. To see where a binary was built, run
 `gh attestation verify $(command -v cuilo) --repo TuentyFaiv/cuilo`.
 
 Every release file is signed with this minisign key (also in
@@ -145,24 +149,32 @@ packs/
   ui/                official atomic UI pieces: atom, molecule, organism (web, Rust, native)
   backend/           official backend pieces: resource, error, middleware, database
 schemas/             JSON Schemas for pack.toml, piece.toml, cuilo.lock and config
-apps/docs/           legacy v1 docs starter, replaced in Phase 7
+fixtures/stacks/     one generated project per stack that `cargo xtask verify-packs` adds the official pieces to
+apps/docs/           the cuilo.dev docs site (Astro + Starlight, English and Spanish), served as
+                       static files from Cloudflare Workers
 install/             install.sh and install.ps1, served from the download host
 ```
 
 ## Development
 
 Requirements: [rustup](https://rustup.rs) (the pinned toolchain in `rust-toolchain.toml` installs automatically) and
-[Bun](https://bun.sh) ≥ 1.4.4 for Biome.
+[Bun](https://bun.sh) ≥ 1.4.4 for Biome and the docs site.
 
 ```bash
-bun install            # Biome only, for JSON/JS formatting and linting
+bun install            # Biome and the docs site
 cargo xtask ci         # everything CI runs: fmt, clippy, rustdoc, tests, cargo-deny, Biome
 cargo xtask fmt        # or a single step: fmt | lint | doc | test | deny | js
 cargo xtask schema     # regenerate schemas/ after changing a file format
+cargo xtask docs       # regenerate the docs site's CLI and schema reference and pack data
+cargo xtask verify-packs --stack svelte   # add the official pieces to real projects, run their checks
+bun run docs           # run the docs site locally; bun run docs:build builds it
 cargo run -- --help    # run the CLI
 ```
 
 `cargo xtask deny` needs [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) on your `PATH`.
+
+The docs site deploys through Cloudflare Workers Builds on every push to `main`; its settings are in
+[`apps/docs/README.md`](apps/docs/README.md).
 
 ### Conventions
 
@@ -201,8 +213,10 @@ return <h2 className="my-example" />;
 // @cuilo end
 ```
 
-A variant can set its own `target` (Flutter writes to `lib/`, Compose to `app/src/main/java/…`); an
-empty `target` writes from the project root, for pieces that also add files under `test/` or `tests/`.
+A variant can set its own `target` (Compose writes into its `app` module), or list alternatives in order of
+preference, of which cuilo uses the first folder the project has (Compose Multiplatform takes `shared`, else the
+older `composeApp`); an empty `target` writes from the project root, for pieces that also add files under `test/`
+or `tests/`.
 
 Templates cannot read files or the environment, or run code. A pack can only write the paths its
 `permissions.write` globs declare, never `.git/` or cuilo's own state (in any letter case, or under another name
@@ -233,8 +247,9 @@ variants = ["hono", "express"]
 Plans list dependencies and offer to add them with the project's package manager (see "Packages a piece
 needs"). Declaring them needs `permissions.dependencies = true` in `pack.toml`, and the user can refuse them.
 
-Patches edit files the project already has: `anchor` inserts text next to a unique line, `import` adds an import,
-and `css_vars` adds custom properties to a CSS block, creating the block if needed and keeping values already set:
+Patches edit files the project already has: `anchor` inserts text next to a unique line (or the first of a list of
+alternatives the file contains, e.g. `anchor = ["export default app", "serve("]`), `import` adds an import, and
+`css_vars` adds custom properties to a CSS block, creating the block if needed and keeping values already set:
 
 ```toml
 [[patches]]
@@ -359,15 +374,128 @@ out of the lockfile, so the next update offers it again.
 
 ## Official packs
 
-`packs/` holds the default packs; `tests/official_packs.rs` renders every piece in every variant.
+`packs/` holds the default packs; `tests/official_packs.rs` renders every piece in every variant, and
+`cargo xtask verify-packs` checks the generated code with each stack's own tools.
 
 - **`ui`**: atomic design pieces in `src/ui/{atoms,molecules,organisms}/<name>/`, with typed props, accessible
-  markup, CSS (or Tailwind when detected) and tests, for React, Solid, Qwik, Svelte, Vue, Astro, Angular, Lit,
+  markup, CSS (or Tailwind when detected) and tests, for React, Solid 2, Qwik, Svelte, Vue, Astro, Angular, Lit,
   Leptos, Dioxus, Yew, Flutter, Jetpack Compose (Android and Multiplatform) and SwiftUI.
 - **`backend`**: `resource` (model → repository → service → routes, plus tests), `error` (RFC 9457 problem
   details), `middleware` (request id style headers) and `database`, for Hono, Express, Axum, FastAPI, chi and
-  Echo. Repositories follow the detected ORM (Drizzle, Prisma, sqlx, SQLAlchemy, GORM) and always include an
-  in-memory one for tests.
+  Echo v4 and v5. Repositories follow the detected ORM (Drizzle, Prisma, sqlx, SQLAlchemy, GORM) and always include an
+  in-memory one for tests; `database` sets up the client, connection or pool they use from `DATABASE_URL`.
+
+### Verifying the official packs
+
+`cargo xtask verify-packs` adds every official piece, in every variant, to a copy of a real project of that stack
+and runs the stack's own tools on the result: svelte-check, `astro check`, `ng build`, `tsc` or `vue-tsc`,
+`cargo clippy -- -D warnings`, `go vet` and `gofmt -l`, strict mypy, `flutter analyze` with infos and warnings
+fatal, the Kotlin compiler with `allWarningsAsErrors` (plus Android lint with warnings as errors for Jetpack
+Compose), and `xcodebuild build-for-testing` or `swift build` with warnings as errors. Then it runs the tests the
+piece wrote (Vitest, `ng test`, `cargo test`, `go test`, pytest, `flutter test`, Robolectric through
+`testDebugUnitTest`, Compose's UI tests through `jvmTest`, and Swift Testing through `xcodebuild
+test-without-building` on one iOS simulator, without parallel clones so it boots once per run, and `swift test`). The `swiftui-package` tests import the library without `@testable`, so a view or initializer that is
+not `public` fails the run. No database is needed: commands see a placeholder `DATABASE_URL`.
+
+```bash
+cargo xtask verify-packs --list                        # every combination, its checks and what is not covered yet
+cargo xtask verify-packs --stack svelte                # one stack; also --group <group>, e.g. kotlin or swift
+cargo xtask verify-packs --piece ui/atom --pack ui     # filters combine
+cargo xtask verify-packs --stack hono-prisma --keep    # keep each copy in target/verify-packs after it passes
+cargo xtask verify-packs --latest                      # first update every dependency to its newest release
+```
+
+For each combination it copies `fixtures/stacks/<stack>` to `target/verify-packs/<stack>/<pack>-<piece>`, installs
+the locked dependencies, checks that `cuilo detect` sees the intended stack, runs the workspace's `cuilo add` with
+the examples the inputs describe, `tests=true`, `--wire` and `--install`, follows the next steps a user would
+(module declarations, mounting routes, `prisma generate`, the Gradle test dependencies), then runs the checks. It stops at the first failure and
+prints the command, its output and how to run it again, so a failure reproduces with a copy-paste. A combination
+whose toolchain is missing is skipped with the reason; `--require-toolchains`, which CI passes, makes that a
+failure. Each group needs its toolchain on the `PATH`:
+
+| Group        | Toolchain                                                                                                              |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `typescript` | Bun and Node.js; the Svelte tests run in Playwright's Chromium, which the command installs                             |
+| `rust`       | the pinned toolchain; `--latest` also needs `cargo upgrade` from [cargo-edit](https://github.com/killercup/cargo-edit) |
+| `go`         | Go 1.27                                                                                                                |
+| `python`     | uv                                                                                                                     |
+| `flutter`    | Flutter 3.50                                                                                                           |
+| `kotlin`     | a JDK 17 or newer as `java`, and the Android SDK in `ANDROID_HOME` for `compose`; `--latest` also needs curl           |
+| `swift`      | Xcode 27.2 on macOS, with its iPhone 17 simulator                                                                      |
+
+Android Studio's bundled JBR works as the JDK (`JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"`
+with `$JAVA_HOME/bin` on the `PATH`), and Gradle adds the Android platform the `compose` fixture compiles against to
+the SDK when it is missing.
+
+`--latest` keeps the few packages each stack lists in `hold` (in `crates/xtask/src/verify/stacks.rs`) at the
+fixture's major: TypeScript 7 for the checkers built on its JavaScript API, and Prisma 8. Flutter runs
+`flutter pub upgrade --major-versions`, SwiftPM `swift package update`, and an Xcode project resolves its packages
+again without its `Package.resolved`. Gradle has no command for it, so `--latest` moves each version in
+`gradle/libs.versions.toml` to the newest release of the library or plugin that uses it (a pre-release to the newest
+release of any kind, a stable version to the newest stable one), again after the next steps add theirs, and the
+wrapper to the newest Gradle.
+
+The [Packs workflow](.github/workflows/packs.yml) runs one job per group, `swift` on GitHub's `xcode-27` macOS
+image (`macos-latest` has only Xcode 26) and the rest on Linux, when a change touches the packs, the engine, the
+fixtures or the workflow, every night with `--latest` (opening or updating an issue when it fails), and on demand.
+Its `packs-ok` job passes when every group passed or none needed to run, so it is the check to require: mark
+`packs-ok` as a required status check in the branch protection of `main` and `staging`, a repository setting the
+workflow cannot change.
+
+Each fixture comes from its framework's own generator, trimmed of demo code, with its lockfile committed. The Gradle
+fixtures pin every version in their version catalog and their wrapper by `distributionSha256Sum`, and the workflow
+validates their wrapper jars; the Swift fixtures have no dependencies, so they have no `Package.resolved`. Where the
+build compiles only some folders (Flutter's `lib` and `test`, Gradle source sets, the Xcode app's folder, a package's
+targets), the stack lists them as `sources`, and a piece that creates a file elsewhere fails the run, since the
+checks would never see it.
+
+| Fixture                         | Made with                                                                                                                 |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `svelte`                        | `sv@1.7.1 create --template minimal --types ts --add vitest` (component tests in the browser)                             |
+| `astro`                         | `create-astro@5.3.2 --template minimal`, plus `@astrojs/check`, TypeScript 6 and Vitest with `getViteConfig`              |
+| `leptos`                        | [`leptos-rs/start-trunk`](https://github.com/leptos-rs/start-trunk) at `9bbd060`, stable channel                          |
+| `dioxus`                        | [`DioxusLabs/dioxus-template`](https://github.com/DioxusLabs/dioxus-template) `v0.7` at `1308c32`, Bare-Bones for the web |
+| `yew`                           | [`yewstack/yew-trunk-minimal-template`](https://github.com/yewstack/yew-trunk-minimal-template) at `68dcc85`, stable      |
+| `axum`, `axum-sqlx`             | axum's hello world with `cargo add axum tokio`; then `cargo add sqlx --features runtime-tokio,postgres`                   |
+| `angular`                       | `@angular/cli@22.3.0 new --style css --ssr false --defaults` (Vitest), with a one-line welcome page                       |
+| `qwik`                          | `create-qwik@1.20.4 empty`, then `qwik add vitest`, without ESLint and Prettier                                           |
+| `solid`                         | `create-solid@0.13.0 --solid --ts -t basic --no-ssr --no-devtools` (Solid 2), minus its demo pages and counter            |
+| `vue`                           | `create-vue@3.24.0 --ts --vitest --bare`, without the devtools plugin                                                     |
+| `react`, `lit`                  | `create-vite@9.4.0 --template react-ts` and `lit-ts`, plus Vitest with jsdom                                              |
+| `hono`                          | `create-hono@0.19.5 --template nodejs`                                                                                    |
+| `express`                       | Express 5's hello world in TypeScript with `NodeNext` modules (Express has no TypeScript generator)                       |
+| `*-drizzle`                     | the framework's fixture plus `drizzle-orm` and `pg`                                                                       |
+| `*-prisma`                      | the framework's fixture plus Prisma 7 and `prisma init --output ../src/generated/prisma`, checking `src` only             |
+| `fastapi`, `fastapi-sqlalchemy` | `uv init --app --no-package` on Python 3.15 with `fastapi[standard]` and strict mypy; then `sqlalchemy[asyncio]`          |
+| `chi`, `echo`, `*-gorm`         | each router's hello world, Echo v4's for `echo`; then `gorm.io/gorm`                                                      |
+| `echo-v5`                       | the hello world in the README of Echo v5.4.7                                                                              |
+| `flutter`                       | Flutter 3.50.1's `flutter create --empty --project-name cuilo_fixture --platforms android,ios`, minus their folders       |
+| `compose`                       | Android Studio 2026.1.3's Empty Activity with AGP 9.5.3, Compose BOM 2026.11.01, compileSdk 37.2 and Gradle 9.9.2         |
+| `compose-multiplatform`         | the [KMP wizard](https://kmp.jetbrains.com)'s Desktop target with tests: Compose Multiplatform 1.12.2, Gradle 9.5.1       |
+| `compose-multiplatform-legacy`  | `compose-multiplatform` moved back to the wizard's older layout: one `composeApp` module, the desktop app included        |
+| `swiftui`                       | Xcode 27.2's iOS App template (SwiftUI, Swift Testing, no storage), without the UI test target                            |
+| `swiftui-package`               | Swift 6.4.2's `swift package init --type library`, plus the iOS 17 and macOS 14 `platforms` SwiftUI needs                 |
+
+Android Studio and Xcode have no command-line generator, so `compose` and `swiftui` are written out from the
+templates the apps install: the strings in Android Studio's `wizard-template.jar` and the settings in Xcode's
+`.xctemplate` files. `compose` leaves out the launcher icons, backup rules and instrumented test, and
+`compose-multiplatform` the wizard's daemon JVM pin, so Gradle runs on the JDK it is given.
+`compose-multiplatform-legacy` has the same versions and code in the layout the wizard and JetBrains'
+[KMP-App-Template](https://github.com/Kotlin/KMP-App-Template) used before they renamed `composeApp` to `shared`: no
+`desktopApp`, with `composeApp` running the desktop app itself. All three add
+`allWarningsAsErrors`, and `compose` Android lint with warnings as errors, without the checks that only report newer
+releases or the icons it leaves out. The wizard call is `generateKmtProject` with `name=CuiloFixture`,
+`id=com.example.fixture` and the spec
+`{"template_id":"kmt","targets":{"desktop":{"ui":["compose"]}},"include_tests":true}`.
+
+To refresh a fixture, run its generator again in a scratch folder outside the Cargo workspace (`cargo new` inside it
+adds a workspace member), apply the same trims, and replace `fixtures/stacks/<stack>`. Rust fixtures keep their own
+`[workspace]` table so Cargo treats them as separate projects. Refresh only the lockfile with the stack's own
+command in the fixture (`bun update`, `cargo update`, `go get -u ./... && go mod tidy`, `uv lock --upgrade`,
+`flutter pub upgrade` or `swift package update`), or for Gradle the catalog's versions and `./gradlew wrapper
+--gradle-version <version> --gradle-distribution-sha256-sum <sum>`, run twice so the jar matches too, then run
+`cargo xtask verify-packs --stack <stack>`. Biome skips `fixtures/`, and Cargo and cargo-deny only see the
+workspace in `crates/`.
 
 File names are kebab-case wherever the language allows it (`user-card.tsx`, `user-card.module.css`). Where the
 language or its standard tooling fixes the name, the pack follows it: snake_case for Rust, Python, Go and Dart

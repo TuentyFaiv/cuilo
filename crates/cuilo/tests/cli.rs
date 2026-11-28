@@ -13,6 +13,25 @@ fn cuilo() -> Result<Command, Box<dyn Error>> {
 	Ok(Command::cargo_bin(brand::BINARY_NAME)?)
 }
 
+/// Writes an executable through a child process, so this multi-threaded test process never holds it open
+/// for writing: on Linux, a process another test forks meanwhile would keep it busy (`ETXTBSY`).
+#[cfg(unix)]
+fn write_executable(path: &std::path::Path, contents: &str) -> TestResult {
+	use std::io::Write as _;
+
+	let mut child = std::process::Command::new("/bin/sh")
+		.args(["-c", "cat > \"$1\" && chmod 755 \"$1\"", "sh"])
+		.arg(path)
+		.stdin(std::process::Stdio::piped())
+		.spawn()?;
+	child.stdin.take().ok_or("no stdin")?.write_all(contents.as_bytes())?;
+	if child.wait()?.success() {
+		Ok(())
+	} else {
+		Err(format!("could not write {}", path.display()).into())
+	}
+}
+
 #[test]
 fn version_flag_should_print_name_and_package_version() -> TestResult {
 	let expected = format!("{} {}", brand::BINARY_NAME, env!("CARGO_PKG_VERSION"));
@@ -72,8 +91,7 @@ fn react_project() -> Result<tempfile::TempDir, Box<dyn Error>> {
 	Ok(dir)
 }
 
-/// A pack cache for `--verify`, which keeps its copies there: below the build folder, since a cache
-/// in the shared temp folder is refused.
+/// A pack cache for `--verify` below the build folder, since one in the shared temp folder is refused.
 #[cfg(unix)]
 fn private_cache() -> Result<tempfile::TempDir, Box<dyn Error>> {
 	Ok(tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR"))?)
@@ -121,6 +139,34 @@ fn add_should_plan_then_apply_only_with_yes() -> TestResult {
 		.stdout(contains("Applied transaction 1"));
 
 	assert!(dir.path().join("src/ui/atoms/button/button.tsx").is_file());
+	Ok(())
+}
+
+#[test]
+fn detect_should_show_the_import_style_in_text_and_json_and_take_the_configured_one() -> TestResult {
+	let dir = react_project()?;
+	std::fs::write(
+		dir.path().join("tsconfig.json"),
+		"{\n\t// Node.js\n\t\"compilerOptions\": { \"module\": \"NodeNext\" },\n}\n",
+	)?;
+	let style = |args: &[&str]| -> Result<serde_json::Value, Box<dyn Error>> {
+		let output = in_project(&dir)?.args(args).output()?;
+		assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+		let value: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+		Ok(value["stack"]["import_style"].clone())
+	};
+
+	assert_eq!(style(&["detect"])?, serde_json::json!(["imports-js"]));
+	assert_eq!(style(&["--json", "detect"])?, serde_json::json!(["imports-js"]));
+	std::fs::write(
+		dir.path().join("cuilo.json"),
+		r#"{"stack": {"import_style": ["imports-extensionless"]}}"#,
+	)?;
+	assert_eq!(style(&["detect"])?, serde_json::json!(["imports-extensionless"]));
+	std::fs::write(dir.path().join("cuilo.json"), r#"{"stack": {"import_style": ["js"]}}"#)?;
+	in_project(&dir)?.arg("detect").assert().failure().stderr(contains(
+		"must be `imports-extensionless`, `imports-js` or `imports-ts`",
+	));
 	Ok(())
 }
 
@@ -227,24 +273,21 @@ fn pack_list_should_include_the_official_packs() -> TestResult {
 		.args(["pack", "list"])
 		.assert()
 		.success()
-		.stdout(contains("ui 0.2.0").and(contains("backend 0.1.0")));
+		.stdout(contains("ui 0.2.0").and(contains("backend 0.2.0")));
 	Ok(())
 }
 
 #[cfg(unix)]
 #[test]
 fn trust_should_let_the_project_formatter_shape_generated_files() -> TestResult {
-	use std::os::unix::fs::PermissionsExt as _;
-
 	let dir = react_project()?;
 	std::fs::write(dir.path().join("biome.json"), "{}\n")?;
 	let bin = dir.path().join("node_modules/.bin");
 	std::fs::create_dir_all(&bin)?;
-	std::fs::write(
-		bin.join("biome"),
+	write_executable(
+		&bin.join("biome"),
 		"#!/bin/sh\ncat >/dev/null\nprintf '// formatted\\n'\n",
 	)?;
-	std::fs::set_permissions(bin.join("biome"), std::fs::Permissions::from_mode(0o755))?;
 
 	in_project(&dir)?
 		.args(["add", "ui/atom", "Tag", "--dry-run"])
@@ -295,6 +338,214 @@ fn upgrade_should_leave_a_copy_it_did_not_install_alone_without_downloading() ->
 		.assert()
 		.code(1)
 		.stdout(contains("cannot upgrade itself").and(contains("install script")));
+	Ok(())
+}
+
+#[test]
+fn upgrade_help_should_hide_the_background_flag() -> TestResult {
+	cuilo()?
+		.args(["upgrade", "--help"])
+		.assert()
+		.success()
+		.stdout(contains("--check").and(contains("--background").not()));
+	Ok(())
+}
+
+#[test]
+fn upgrade_background_should_stay_silent_and_record_nothing_in_ci() -> TestResult {
+	let dir = tempfile::tempdir()?;
+
+	cuilo()?
+		.args(["upgrade", "--background"])
+		.env("CI", "true")
+		.env("CUILO_CACHE_DIR", dir.path())
+		.assert()
+		.success()
+		.stdout("")
+		.stderr("");
+	assert_eq!(std::fs::read_dir(dir.path())?.count(), 0);
+	Ok(())
+}
+
+/// A copy of this build in the folder `bin`.
+#[cfg(unix)]
+fn copy_in(bin: &std::path::Path) -> Result<std::path::PathBuf, Box<dyn Error>> {
+	std::fs::create_dir_all(bin)?;
+	let exe = bin.join(brand::BINARY_NAME);
+	let copied = std::process::Command::new("cp")
+		.arg(assert_cmd::cargo::cargo_bin(brand::BINARY_NAME))
+		.arg(&exe)
+		.status()?;
+	if !copied.success() {
+		return Err(format!("could not copy cuilo to {}", exe.display()).into());
+	}
+	Ok(exe)
+}
+
+/// A copy of this build where a global npm install puts it, and a `PATH` whose fake `npm` prints
+/// `npm says hi`, saves its arguments in `npm-args` and the folder it runs in in `npm-pwd`, and exits
+/// with `status`.
+#[cfg(unix)]
+fn npm_install(dir: &std::path::Path, status: u8) -> Result<(std::path::PathBuf, String), Box<dyn Error>> {
+	let exe = copy_in(&dir.join("lib/node_modules/@cuilo/cli-test/bin"))?;
+	let fakes = dir.join("fake-bin");
+	std::fs::create_dir_all(&fakes)?;
+	write_executable(
+		&fakes.join("npm"),
+		&format!(
+			"#!/bin/sh\necho \"$@\" > '{}'\npwd -P > '{}'\necho npm says hi\nexit {status}\n",
+			dir.join("npm-args").display(),
+			dir.join("npm-pwd").display()
+		),
+	)?;
+	Ok((exe, format!("{}:/usr/bin:/bin", fakes.display())))
+}
+
+#[cfg(unix)]
+#[test]
+fn upgrade_should_run_npm_for_an_npm_install_and_keep_stdout_json() -> TestResult {
+	let dir = tempfile::tempdir()?;
+	let (exe, path) = npm_install(dir.path(), 0)?;
+
+	let output = Command::new(&exe)
+		.args(["--json", "upgrade", "--version", "99.0.0"])
+		.env("PATH", &path)
+		.env("CUILO_CACHE_DIR", dir.path().join("cache"))
+		.output()?;
+
+	let stderr = String::from_utf8_lossy(&output.stderr);
+	assert!(output.status.success(), "{stderr}");
+	let value: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+	assert_eq!(value["install"], "npm");
+	assert_eq!(value["upgraded"], true);
+	assert_eq!(value["command"], "npm install --global @cuilo/cli@99.0.0");
+	assert!(
+		stderr.contains("$ npm install --global @cuilo/cli@99.0.0") && stderr.contains("npm says hi"),
+		"{stderr}"
+	);
+	assert_eq!(
+		std::fs::read_to_string(dir.path().join("npm-args"))?,
+		"install --global @cuilo/cli@99.0.0\n"
+	);
+	Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn upgrade_should_fail_naming_the_npm_command_that_failed() -> TestResult {
+	let dir = tempfile::tempdir()?;
+	let (exe, path) = npm_install(dir.path(), 7)?;
+
+	Command::new(&exe)
+		.args(["upgrade", "--version", "99.0.0"])
+		.env("PATH", &path)
+		.env("CUILO_CACHE_DIR", dir.path().join("cache"))
+		.assert()
+		.code(1)
+		.stdout(contains("npm says hi"))
+		.stderr(contains("`npm install --global @cuilo/cli@99.0.0` failed"));
+	Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn upgrade_should_run_the_package_manager_in_the_cache_folder_never_the_caller_s() -> TestResult {
+	let dir = tempfile::tempdir()?;
+	let (exe, path) = npm_install(dir.path(), 0)?;
+	let project = dir.path().join("project");
+	let home = dir.path().join("home");
+	std::fs::create_dir_all(&project)?;
+	std::fs::create_dir_all(&home)?;
+	let cache = dir.path().join("cache");
+	let upgrade = |cache: &std::path::Path| -> Result<String, Box<dyn Error>> {
+		Command::new(&exe)
+			.args(["upgrade", "--version", "99.0.0"])
+			.current_dir(&project)
+			.env("PATH", &path)
+			.env("HOME", &home)
+			.env("CUILO_CACHE_DIR", cache)
+			.assert()
+			.success();
+		Ok(
+			std::fs::read_to_string(dir.path().join("npm-pwd"))?
+				.trim_end()
+				.to_owned(),
+		)
+	};
+
+	assert_eq!(upgrade(&cache)?, cache.canonicalize()?.to_string_lossy());
+	assert_eq!(
+		upgrade(std::path::Path::new("cache"))?,
+		home.canonicalize()?.to_string_lossy(),
+		"a relative cache folder is inside the caller's"
+	);
+	assert!(!project.join("cache").exists());
+	Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn upgrade_should_print_the_project_s_own_command_for_a_project_copy_and_run_nothing() -> TestResult {
+	let dir = tempfile::tempdir()?;
+	std::fs::write(dir.path().join("package.json"), "{}")?;
+	std::fs::write(dir.path().join("bun.lock"), "")?;
+	let exe = copy_in(&dir.path().join("node_modules/@cuilo/cli-test/bin"))?;
+	let nothing = tempfile::tempdir()?;
+	let root = dir.path().canonicalize()?;
+
+	let output = Command::new(&exe)
+		.args(["--json", "upgrade", "--version", "99.0.0"])
+		.env("PATH", nothing.path())
+		.output()?;
+	let value: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+
+	assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+	assert_eq!(
+		(&value["install"], &value["kind"], &value["upgraded"]),
+		(&"bun".into(), &"project".into(), &false.into())
+	);
+	assert_eq!(value["project"], root.to_string_lossy().as_ref());
+	assert_eq!(value["command"], "bun add --dev @cuilo/cli@99.0.0");
+	Command::new(&exe)
+		.args(["upgrade", "--version", "99.0.0"])
+		.env("PATH", nothing.path())
+		.assert()
+		.success()
+		.stdout(contains(format!(
+			"; this copy is a dependency of the project in {}; run `bun add --dev @cuilo/cli@99.0.0` there.",
+			root.display()
+		)));
+	Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn upgrade_should_point_an_npx_copy_back_to_npx_and_run_nothing() -> TestResult {
+	let dir = tempfile::tempdir()?;
+	let exe = copy_in(
+		&dir
+			.path()
+			.join("_npx/0e5ad6a08e1e9350/node_modules/@cuilo/cli-test/bin"),
+	)?;
+	let nothing = tempfile::tempdir()?;
+
+	let output = Command::new(&exe)
+		.args(["--json", "upgrade", "--version", "99.0.0"])
+		.env("PATH", nothing.path())
+		.output()?;
+	let value: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+
+	assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+	assert_eq!(
+		(&value["install"], &value["kind"], &value["command"]),
+		(&"npm".into(), &"ephemeral".into(), &"npx @cuilo/cli@99.0.0".into())
+	);
+	Command::new(&exe)
+		.args(["upgrade", "--version", "99.0.0"])
+		.env("PATH", nothing.path())
+		.assert()
+		.success()
+		.stdout(contains("; this copy runs through npx; run `npx @cuilo/cli@99.0.0`."));
 	Ok(())
 }
 
@@ -382,8 +633,6 @@ fn verify_should_show_the_plan_and_run_nothing_until_the_user_agrees() -> TestRe
 #[cfg(unix)]
 #[test]
 fn rustfmt_should_run_only_in_a_trusted_project() -> TestResult {
-	use std::os::unix::fs::PermissionsExt as _;
-
 	let dir = tempfile::tempdir()?;
 	std::fs::write(
 		dir.path().join("Cargo.toml"),
@@ -407,11 +656,10 @@ fn rustfmt_should_run_only_in_a_trusted_project() -> TestResult {
 	let bin = dir.path().join(".home/bin");
 	std::fs::create_dir_all(&bin)?;
 	let marker = dir.path().join(".home/rustfmt-ran");
-	std::fs::write(
-		bin.join("rustfmt"),
-		format!("#!/bin/sh\ntouch '{}'\ncat\n", marker.display()),
+	write_executable(
+		&bin.join("rustfmt"),
+		&format!("#!/bin/sh\ntouch '{}'\ncat\n", marker.display()),
 	)?;
-	std::fs::set_permissions(bin.join("rustfmt"), std::fs::Permissions::from_mode(0o755))?;
 	let path = format!("{}:{}", bin.display(), std::env::var("PATH")?);
 	let add = || -> Result<Command, Box<dyn Error>> {
 		let mut command = in_project(&dir)?;
@@ -633,5 +881,107 @@ fn a_running_rpc_session_should_stop_running_checks_once_trust_is_revoked() -> T
 	assert_eq!(std::fs::read_to_string(&marker)?.lines().count(), 1);
 	drop(input);
 	assert!(server.wait()?.success());
+	Ok(())
+}
+
+/// A Hono project with a local pack whose `page` piece has a plain step and a wiring step.
+fn wiring_project() -> Result<tempfile::TempDir, Box<dyn Error>> {
+	let dir = tempfile::tempdir()?;
+	std::fs::create_dir_all(dir.path().join(".home/config"))?;
+	std::fs::create_dir(dir.path().join("src"))?;
+	std::fs::write(dir.path().join("cuilo.json"), r#"{"stack": {"framework": ["hono"]}}"#)?;
+	std::fs::write(dir.path().join("src/index.ts"), "const app = new Hono();\n")?;
+	local_pack(
+		&dir,
+		"site",
+		&[
+			(
+				"pack.toml",
+				"schema_version = 1\nname = \"site\"\nversion = \"1.0.0\"\n[permissions]\nwrite = [\"src/**\"]\n",
+			),
+			(
+				"pieces/page/piece.toml",
+				"schema_version = 1\nname = \"page\"\ntarget = \"src/pages\"\n[inputs.name]\ntype = \"string\"\nexample = \"MyPage\"\n\
+				 [[steps]]\ntext = \"Restart the dev server.\"\n\
+				 [[steps]]\ntext = \"Mount `myPageRoutes` in `src/index.ts`.\"\n\
+				 [[steps.patches]]\nkind = \"anchor\"\nfile = \"src/index.ts\"\nanchor = \"const app = new Hono()\"\ninsert = \"app.route('/my-page', myPageRoutes);\"\n",
+			),
+			("pieces/page/files/my-page.ts", "export const myPageRoutes = [];\n"),
+		],
+	)?;
+	Ok(dir)
+}
+
+#[test]
+fn add_should_list_next_steps_once_at_the_end() -> TestResult {
+	let dir = wiring_project()?;
+
+	let preview = in_project(&dir)?
+		.args(["add", "page", "Settings", "--from", "./site", "--dry-run"])
+		.output()?;
+	let applied = in_project(&dir)?
+		.args(["add", "page", "Settings", "--from", "./site", "--yes"])
+		.output()?;
+
+	let preview = String::from_utf8(preview.stdout)?;
+	let applied = String::from_utf8(applied.stdout)?;
+	assert_eq!(preview.matches("Next steps:").count(), 1, "{preview}");
+	assert_eq!(applied.matches("Next steps:").count(), 1, "{applied}");
+	assert!(
+		applied.ends_with("Next steps:\n  1. Restart the dev server.\n  2. Mount `settingsRoutes` in `src/index.ts`.\n"),
+		"{applied}"
+	);
+	assert!(applied.find("Applied") < applied.find("Next steps:"), "{applied}");
+	assert_eq!(
+		std::fs::read_to_string(dir.path().join("src/index.ts"))?,
+		"const app = new Hono();\n"
+	);
+	Ok(())
+}
+
+#[test]
+fn wire_flags_should_override_the_user_config() -> TestResult {
+	let dir = wiring_project()?;
+	let index = || std::fs::read_to_string(dir.path().join("src/index.ts"));
+
+	let wired = in_project(&dir)?
+		.args(["add", "page", "Settings", "--from", "./site", "--wire", "--yes"])
+		.output()?;
+	assert!(index()?.contains("app.route('/settings', settingsRoutes);"));
+	assert!(!String::from_utf8(wired.stdout)?.contains("Mount"));
+
+	std::fs::write(dir.path().join(".home/config/config.toml"), "wire = true\n")?;
+	let unwired = in_project(&dir)?
+		.args(["add", "page", "Billing", "--from", "./site", "--no-wire", "--yes"])
+		.output()?;
+	assert!(!index()?.contains("billing"));
+	assert!(String::from_utf8(unwired.stdout)?.contains("2. Mount `billingRoutes` in `src/index.ts`."));
+
+	in_project(&dir)?
+		.args(["add", "page", "Profile", "--from", "./site", "--yes"])
+		.assert()
+		.success();
+	assert!(index()?.contains("app.route('/profile', profileRoutes);"));
+
+	in_project(&dir)?
+		.args(["add", "page", "Team", "--from", "./site", "--wire", "--no-wire"])
+		.assert()
+		.code(2);
+	Ok(())
+}
+
+#[test]
+fn json_plan_should_carry_the_next_steps() -> TestResult {
+	let dir = wiring_project()?;
+
+	let output = in_project(&dir)?
+		.args(["--json", "add", "page", "Settings", "--from", "./site", "--dry-run"])
+		.output()?;
+	let value: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+
+	assert_eq!(
+		value["plan"]["next_steps"],
+		serde_json::json!(["Restart the dev server.", "Mount `settingsRoutes` in `src/index.ts`."])
+	);
 	Ok(())
 }

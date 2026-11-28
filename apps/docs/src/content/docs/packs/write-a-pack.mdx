@@ -1,0 +1,396 @@
+---
+title: Write a pack
+description: Build a pack from real code with typed inputs, variants per stack, patches, next steps and permissions, and test it from a local folder.
+---
+
+import { FileTree, Steps } from "@astrojs/starlight/components";
+
+A pack is a folder with a `pack.toml` and one folder per piece. Templates are working code in your language, not a template language. This page builds a small pack, `acme-ui`, with one piece, `card`, and tests it from a folder.
+
+## Folder layout
+
+<FileTree>
+- my-pack/
+  - pack.toml name, version, permissions
+  - pack.minisig optional signature
+  - pieces/
+    - card/
+      - piece.toml inputs, variants, file rules, patches, steps
+      - files/
+        - react/
+          - example-card/
+            - example-card.tsx
+            - example-card.module.css
+        - plain/
+          - example-card/
+            - example-card.ts
+  - migrations/ optional ast-grep rules for updates
+</FileTree>
+
+- Each folder in `pieces/` is a piece, and the `name` in its `piece.toml` must match the folder.
+- Pack, piece and variant names are 1 to 64 lowercase letters, digits and `-`, starting with a letter.
+- A pack may not contain symlinks. It holds at most 4096 files, 1 MiB per file and 64 MiB in all.
+- When cuilo loads a folder, it skips `.git` and `.DS_Store`. Every other file, except `pack.minisig`, counts toward the pack's SHA-256 digest.
+
+## `pack.toml`
+
+```toml
+schema_version = 1
+name = "acme-ui"
+version = "0.1.0"
+description = "Cards for Acme apps."
+kinds = ["ui"]
+license = "MIT"
+
+[permissions]
+write = ["src/components/**", "src/app.ts"]
+dependencies = true
+```
+
+`version` is a semantic version. Change it whenever the files change: once a project pins a version in `cuilo.lock`, cuilo refuses different files under the same version. The names `ui` and `backend` belong to the official packs, so a pack from any other source must use another name. Every key is listed in the [pack manifest reference](/reference/pack-manifest/).
+
+`kinds` says what the pack is for: `ui`, `backend`, `mobile` or `desktop`, as many as apply, each once. The [pack directory](/directory/) lists the pack under each of its kinds. The official `ui` pack declares `["ui", "mobile", "desktop"]`, since its components also run in Flutter, Compose Multiplatform, SwiftUI and Dioxus apps on phones and desktops.
+
+### Permissions
+
+`permissions.write` lists the paths the pack may create or patch, as globs: `*` matches within one path segment, `?` matches one character and `**` matches any number of segments. A plan that writes anywhere else is rejected with `the pack does not declare permission to write here`, and cuilo exits with [code `3`](/reference/exit-codes/).
+
+No pack can write `.git/`, `.cuilo/` or `cuilo.lock`, in any letter case. Plans also flag risky paths, such as `package.json`, CI workflows, `.env` files and AI agent configuration, so the user looks twice.
+
+Set `permissions.dependencies = true` if any piece declares `[[dependencies]]`. Without it, the pack does not load.
+
+## `piece.toml`
+
+```toml
+schema_version = 1
+name = "card"
+description = "A card with a title."
+target = "src/components"
+
+[inputs.name]
+type = "string"
+description = "Component name, e.g. `user-card`."
+example = "ExampleCard"
+
+[inputs.styled]
+type = "bool"
+description = "Add a CSS module."
+default = true
+
+[inputs.size]
+type = "enum"
+choices = ["small", "large"]
+default = "small"
+
+[[variants]]
+name = "react"
+when = { framework = "react" }
+
+[[variants]]
+name = "plain"
+
+[[files]]
+path = "example-card/example-card.module.css"
+when = "styled"
+```
+
+`target` is the folder the piece writes into, relative to the project root. It is required; use `""` to write from the root. It can contain examples, such as `src/modules/example-items`. Users can choose another folder with `--target`, or per piece with `paths` in [`cuilo.json`](/reference/configuration/). Every key is listed in the [piece manifest reference](/reference/piece-manifest/).
+
+## Templates are real code
+
+Each text input can name an `example`: text that appears in the templates. cuilo replaces it with the value the user gives, in file contents, file and folder names, `target`, the `file`, `insert` and `import` of patches, and the `text` of steps. An example of two or more words is replaced in every case form, and as written:
+
+| Form       | `ExampleCard` becomes, for `UserProfile` |
+| ---------- | ---------------------------------------- |
+| PascalCase | `UserProfile`                            |
+| camelCase  | `userProfile`                            |
+| kebab-case | `user-profile`                           |
+| snake_case | `user_profile`                           |
+| CONSTANT   | `USER_PROFILE`                           |
+| Title Case | `User Profile`                           |
+| lower case | `user profile`                           |
+| flat       | `userprofile`                            |
+| path       | `user/profile`                           |
+
+Sentence case (`Example card`) is not a case form and stays as written. A one-word example is replaced only where it appears exactly as written, so ordinary words such as an HTML `<header>` tag stay untouched. Dotted examples work too: `com.example.app` is replaced as written and as the folder `com/example/app`.
+
+Replacement matches anywhere, including inside longer words: `useExampleCard` becomes `useUserProfile`. Pick an example that appears nowhere else. A `number` input's example, such as `3000`, is replaced as written. Binary files are copied as they are; only their names change.
+
+Templates cannot read files or the environment, and cannot run code.
+
+### Relative imports
+
+Write relative imports in JavaScript and TypeScript templates without an extension, the way a bundler reads them, and cuilo adapts them to each project. Say the piece's `example-card.ts` imports its `example-card.title.ts`:
+
+```ts title="example-card/example-card.ts"
+import { cardTitle } from "./example-card.title";
+```
+
+For `UserProfile`, in a project whose `tsconfig.json` uses `NodeNext`, cuilo writes `./user-profile.title.js`. In a Deno project, or one with `allowImportingTsExtensions`, it writes the file's own extension, such as `./user-profile.title.ts`. Elsewhere the import stays as written. A dot in a name, as in `example-card.title`, is part of the name: cuilo looks for the file the import names among the files the plan writes and the files the project has. Imports that already end in a script extension, imports of other files such as `./example-card.module.css`, and package and alias imports stay as you write them. See [relative imports in generated code](/guides/stack-detection/#relative-imports-in-generated-code).
+
+### Conditions in templates
+
+Keep or drop lines with directives inside comments. Any comment style works: `//`, `#`, `--`, `;`, `/* */`, `<!-- -->` and `{/* */}`.
+
+```tsx
+import styles from "./example-card.module.css"; // @cuilo if styled
+
+export type ExampleCardProps = { title: string };
+
+export function ExampleCard({ title }: ExampleCardProps) {
+	// @cuilo if size == "large"
+	const level = 1;
+	// @cuilo else
+	const level = 3;
+	// @cuilo end
+	// @cuilo if styled
+	return <h2 className={styles.exampleCard} data-level={level}>{title}</h2>;
+	// @cuilo else
+	return <h2 className="example-card" data-level={level}>{title}</h2>;
+	// @cuilo end
+}
+```
+
+With the default inputs and the name `UserProfile`, cuilo writes `src/components/user-profile/user-profile.tsx`:
+
+```tsx
+import styles from "./user-profile.module.css";
+
+export type UserProfileProps = { title: string };
+
+export function UserProfile({ title }: UserProfileProps) {
+	const level = 3;
+	return <h2 className={styles.userProfile} data-level={level}>{title}</h2>;
+}
+```
+
+- A directive after code on the same line keeps that line, without the comment, only when the condition holds.
+- `@cuilo else` and `@cuilo end` must be on their own line. Blocks nest up to 16 levels.
+- `@cuilo` followed by a space outside a comment is an error. Without the space, as in `// @cuilo:routes`, it is plain text, which makes a safe anchor for patches.
+
+A condition reads inputs and the project's stack:
+
+- `styled` is true when the input is `true`, a number other than `0`, or non-empty text. `!styled` negates it.
+- `size == "large"` and `size != 'large'` compare with a quoted string, a whole number, `true` or `false`.
+- `&&` binds tighter than `||`. Parentheses group.
+- `stack.<value>` is true when the project's stack has that value for any fact, e.g. `stack.tailwind`, `stack.vitest` or `stack.rust`.
+
+A condition can name only the piece's own inputs and `stack.` values; anything else stops the pack from loading. Conditions are at most 256 characters.
+
+## Inputs
+
+| `type`   | Keys besides `description` and `prompt` | Notes                                                                    |
+| -------- | --------------------------------------- | ------------------------------------------------------------------------ |
+| `string` | `example`, `default`                    | With a multi-word `example`, the value must be an identifier.            |
+| `bool`   | `default`, `default_when`               | Defaults to `false`. `default_when` is a condition on `stack.` values.   |
+| `enum`   | `choices` (required), `default`         | The value must be one of `choices`.                                      |
+| `number` | `example`, `default`, `min`, `max`      | A whole number within `min` and `max`.                                   |
+
+Text values are one line of at most 256 characters. When a `bool` has `default_when`, it takes the place of `default`.
+
+Input names are letters, digits and `_`, starting with a letter. A `string`, `enum` or `number` input without a `default` is required. The positional argument of `cuilo add pack/piece <NAME>` sets the `name` input; every other input is passed as `-i key=value`. A `bool` accepts `true`, `false`, `yes`, `no`, `y`, `n`, `1`, `0`, `on` and `off`.
+
+In a terminal, cuilo asks for missing required inputs, using `prompt`, or `description` when there is no prompt. With `--no-input` it stops with ``input `name` is required``. Projects can set defaults per piece with `defaults` in `cuilo.json`.
+
+`default_when` lets a piece add only what the project can use:
+
+```toml
+[inputs.tests]
+type = "bool"
+prompt = "Add tests?"
+default_when = "stack.vitest || !(stack.javascript || stack.typescript)"
+```
+
+## Variants
+
+A piece with `[[variants]]` has one template folder per stack. cuilo tries the variants in order and uses the first whose `when` facts all hold. A variant without `when` matches every project, so put it last as a fallback. `--variant <name>` picks one by name.
+
+- `when` takes the facts `framework`, `language`, `runtime`, `database`, `styling`, `package_manager`, `testing`, `formatter` and `import_style`. Run `cuilo detect` to see a project's facts, and read [stack detection](/guides/stack-detection/) for how they are found.
+- A variant's templates are in `files/<name>` unless `files` names another folder, so several variants can share one, e.g. `files = "files/typescript"`.
+- A variant's `target` replaces the piece's. The `ui` pack's Compose variant writes into the `app` module, with its sources under `src/main/java` and its tests under `src/test/java`, and its Flutter variant uses `""` because it also adds files under `test/`.
+- A variant's `target` can also list alternatives in order of preference: cuilo uses the first folder the project has, and the first alternative when it has none. The `ui` pack's Compose Multiplatform variant uses `["shared", "composeApp"]`, for the current layout of the KMP wizard and the older one. `cuilo.lock` records the folder used, so updates keep it.
+- A piece without variants keeps its templates in `files/`.
+
+If no variant matches, cuilo stops with `no variant matches this project; available: …` and lists the variant names.
+
+## Optional files
+
+`[[files]]` keeps one template only when its `when` condition holds. Its `path` is relative to the variant folder and must match a template in at least one of them. In the example, `example-card.module.css` is written only when `styled` is true.
+
+## Patches
+
+Patches edit files the project already has. The file must exist and be covered by `permissions.write`. Each patch takes an optional `when` condition, and `file`, `insert` and `import` can contain examples.
+
+```toml
+[[patches]]
+kind = "import"
+file = "src/app.ts"
+import = 'import { ExampleCard } from "./components/example-card/example-card";'
+
+[[patches]]
+kind = "anchor"
+file = "src/app.ts"
+anchor = "// cuilo:cards"
+insert = "cards.push(ExampleCard);"
+
+[[patches]]
+kind = "css_vars"
+file = "src/styles.css"
+selector = ":root"
+vars = { card-radius = "0.5rem", card-border = "220 13% 91%" }
+```
+
+- `anchor` inserts `insert` on the lines after the one line that contains the anchor text, with that line's indentation. Set `position = "before"` to insert before it. The anchor must appear exactly once.
+- When the anchor line differs between projects, as it does in the entry files of a framework's templates, `anchor` can be a list of alternatives, such as `anchor = ["export default app", "serve("]`. cuilo uses the first one the file contains. An alternative found on more than one line fails the patch, and cuilo does not try the next ones: the place you prefer is in the file, but which line it means is unclear.
+- `import` adds a JavaScript or TypeScript import after the existing ones. In `.svelte` and `.vue` files it goes into the `<script>` block, and in `.astro` files into the frontmatter.
+- In the `import` of an `import` patch and the `insert` of an `anchor` patch into a `.ts`, `.tsx`, `.js` or other script file, cuilo adapts relative imports as it does in templates, from the folder of the file the patch edits. Write them without an extension.
+- `css_vars` adds custom properties, without the leading `--`, to the block for `selector`. It creates the block when it is missing and keeps values the file already sets.
+
+A patch whose text is already in the file changes nothing.
+
+When the file itself differs between projects, `file` can be a list of alternatives in order of preference, such as `file = ["src/index.ts", "src/index.tsx"]`. cuilo edits the first one the project has, and each alternative can contain examples. When the project has none of them, the patch fails and names them all. Patches of one step, or of `[[patches]]`, that share an alternative must list the same alternatives in the same order, so they always edit the same file: an `import` and an `anchor` for one entry file can't end up in two. cuilo refuses to load a pack that breaks this rule.
+
+## Next steps and wiring
+
+Setup that lives in the user's own files, such as mounting routes or registering middleware, goes in `[[steps]]`, not in comments in the templates. After `cuilo add`, cuilo lists each step under **Next steps**. A step with `[[steps.patches]]` is a wiring step: cuilo can do it for the user.
+
+```toml
+[[steps]]
+text = "Mount the routes in `src/index.ts` with `app.route(\"/example-items\", exampleItemRoutes)`."
+variants = ["hono"]
+
+[[steps.patches]]
+kind = "import"
+file = ["src/index.ts", "src/index.tsx"]
+import = 'import { exampleItemRoutes } from "./example-items/example-item.routes";'
+
+[[steps.patches]]
+kind = "anchor"
+file = ["src/index.ts", "src/index.tsx"]
+anchor = ["export default app", "serve("]
+position = "before"
+insert = "app.route(\"/example-items\", exampleItemRoutes);\n\n"
+
+[[steps]]
+text = "Add `model ExampleItem` to `schema.prisma`."
+when = "stack.prisma"
+```
+
+- `text` is one sentence with the code to add. Examples in it are replaced, as in patches.
+- `variants` and `when` choose steps the way they choose dependencies: an empty `variants` means every variant, and `when` is a condition on inputs and `stack.` values.
+- A step without patches is always listed.
+- A wiring step's patches take the same kinds and keys as `[[patches]]`. cuilo applies them only when the user turns wiring on, with `cuilo add --wire` or `wire = true` in the [user config](/reference/user-config/). Then they are ordinary patches: they show in the plan, need `permissions.write` and are recorded in `cuilo.lock`, and the step is not listed. With wiring off, the step is listed and nothing is patched.
+- A step's patches apply all or none. When one cannot apply, because its file or anchor is missing or the anchor appears more than once, cuilo applies none of them. The plan still goes ahead, lists the step and notes why on the file, e.g. ``src/index.ts: no line contains `export default app` or `serve(`; wire it by hand``. When the project has none of a patch's file alternatives, the note names them all: ``src/index.ts: none of `src/index.ts` or `src/index.tsx` exists; wire it by hand``.
+- Wiring patches assume the piece's default folder, so they are not applied when the user writes the piece elsewhere with `--target` or `paths`. The step is listed instead.
+- `cuilo adopt` lists no steps and applies no wiring.
+- On `cuilo update`, a piece whose wiring was applied, marked `wired = true` in `cuilo.lock`, gets its wiring patches updated like any other patch. They stay in the file they were applied to, which `cuilo.lock` records, even when the project has since gained an alternative listed before it. cuilo never wires a piece that was added without it. When a wiring patch no longer applies, the update leaves that file as it is and notes why.
+
+Give a step patches only when the framework has a conventional entry file and an anchor line that appears once in it, such as `src/index.ts` from `create-hono`. Choose the anchor so the inserted code is in the right place: routes inserted right after `const app = new Hono()` would come before the user's own middleware, such as authentication, which then would not run for them. The official `backend` pack edits `src/index.ts`, or `src/index.tsx` when the project has only that one. It inserts middleware right after the app is created, and routes just before the line that exports or serves the app: `export default app`, `export const handler = handle(app)`, `fire(app)` or `serve(`. That covers every `create-hono` template whose entry file is `src/index.ts` or `src/index.tsx`. List whole lines before short alternatives such as `serve(`, which can also match other text. Otherwise, keep the step as text.
+
+## Pieces that build on others
+
+```toml
+requires = ["theme"]
+```
+
+cuilo adds the required pieces of the same pack first, unless the project already has them. A required piece gets the values you gave for inputs it also declares, such as `tests`. Text inputs with an `example`, such as `name`, are not passed on, so give the required piece's own example inputs a `default`.
+
+## Packages the code imports
+
+```toml
+[[dependencies]]
+ecosystem = "npm"
+name = "clsx"
+version = "^2.1"
+variants = ["react"]
+```
+
+`ecosystem` is `npm`, `cargo`, `pypi`, `go`, `pub`, `rubygems` or `packagist`. Optional keys are `dev`, `features`, `variants` and `when`. Plans list these packages and offer to add them with the project's package manager; see [dependencies](/guides/dependencies/).
+
+A pack can also ship migrations that run on update; see [updates](/guides/updates/).
+
+## Descriptions in other languages
+
+Descriptions are in English: the pack's, each piece's and each input's. A `[translations.<locale>]` table gives them in another language, keyed by a lowercase language tag such as `es-mx` or `pt-br`. Readers in that locale, such as the Spanish pages of the [pack directory](/directory/), see the translation, and the English text wherever it gives none.
+
+```toml title="pack.toml"
+[translations.es-mx]
+description = "Tarjetas para las apps de Acme."
+```
+
+```toml title="pieces/card/piece.toml"
+[translations.es-mx]
+description = "Una tarjeta con un título."
+
+[translations.es-mx.inputs]
+name = "Nombre del componente, p. ej. `user-card`."
+styled = "Agrega un módulo CSS."
+```
+
+- A translated `description` needs an English `description` to translate, and can't be empty.
+- Each key under `inputs` names an input of the piece that has a `description`. The `size` input above has none, so translating it stops the pack from loading with `` `pieces/card/piece.toml`: translation `es-mx` describes input `size`, which has no `description` to translate ``.
+- Locale keys are lowercase: `es-mx`, not `es-MX`.
+- cuilo itself stays in English: prompts, next steps and the text of `cuilo pack show`.
+
+## Test it locally
+
+These steps run in a React project whose `src/app.ts` has the `// cuilo:cards` line the patches need.
+
+<Steps>
+
+1. Load the folder to check that it is valid:
+
+   ```sh
+   cuilo pack add ./my-pack
+   ```
+
+   ```text
+   Loaded acme-ui 0.1.0 from path:./my-pack (not signed by a trusted key)
+   ```
+
+2. Plan a piece from it without writing anything:
+
+   ```sh
+   cuilo add acme-ui/card UserProfile --from ./my-pack --dry-run
+   ```
+
+   ```text
+   add acme-ui/card
+     create  src/components/user-profile/user-profile.module.css
+     create  src/components/user-profile/user-profile.tsx
+     modify  src/app.ts
+   Packages to add (offered after applying; --install adds them without asking):
+     npm      clsx ^2.1
+   ```
+
+   Add `--diff` to see the changes to `src/app.ts`.
+
+3. Try other inputs and variants, e.g. `-i size=large -i styled=false` or `--variant plain`.
+
+4. Apply it in a throwaway project with `--yes`, and run that project's own checks.
+
+</Steps>
+
+A relative folder is read from the project root, and `cuilo.lock` records it as `path:./my-pack`. Once you apply, the lockfile pins the pack's digest, and loading the edited folder again fails with `` `path:./my-pack` changed: the lockfile pinned sha256:…, the source now has sha256:… ``. While you iterate, use `--dry-run`, or `cuilo undo` to remove the last apply. To move a project to your edits, raise `version` and run `cuilo update acme-ui --from ./my-pack`.
+
+:::tip
+Load errors name the file and the problem, e.g. `` `pieces/card/piece.toml`: declares dependencies, but `pack.toml` does not set `permissions.dependencies` `` or `` `files/plain/example-card/example-card.ts`: line 3: `@cuilo if` is never closed with `@cuilo end` ``.
+:::
+
+## Start from code you already have
+
+`cuilo pack capture` turns project files into a piece of a local pack. `--name` gives the spelling to replace, which needs two or more words:
+
+```sh
+cuilo pack capture src/components/user-card/user-card.tsx src/components/user-card/user-card.css --piece card --name UserCard
+```
+
+```text
+capture card into packs/local
+  create  packs/local/pieces/card/files/user-card/user-card.tsx
+  create  packs/local/pieces/card/files/user-card/user-card.css
+  create  packs/local/pieces/card/piece.toml
+  create  packs/local/pack.toml
+```
+
+The new `piece.toml` has `target = "src/components"` and a `name` input with `example = "UserCard"`, and the new `pack.toml` allows writing `src/components/**`, the folder the files share. Add variants, conditions and inputs from there. See [adopt and capture](/guides/adopt-and-capture/) and [`cuilo pack capture`](/reference/cli/pack/#cuilo-pack-capture).

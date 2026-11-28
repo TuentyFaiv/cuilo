@@ -1,0 +1,80 @@
+---
+import { ui } from "../i18n/ui";
+import { sectionTabs } from "../sections";
+
+const { locale } = Astro.locals.starlightRoute;
+const t = ui(locale);
+const tabs = sectionTabs(Astro.url.pathname, locale);
+---
+
+<nav class="section-tabs" aria-label={t.navSections} data-section-tabs>
+	{tabs.map((tab) => (
+		<a href={tab.href} aria-current={tab.current ? "true" : undefined}>
+			{tab.label}
+		</a>
+	))}
+</nav>
+
+<script>
+	/** Scrolls each tab row so its current tab is in view; a row inside the closed mobile menu has no width until it opens. */
+	function revealCurrentTabs() {
+		for (const row of document.querySelectorAll<HTMLElement>("[data-section-tabs]")) {
+			const tab = row.querySelector<HTMLElement>("[aria-current]");
+			if (tab && row.clientWidth > 0) {
+				row.scrollLeft = tab.offsetLeft - (row.clientWidth - tab.offsetWidth) / 2;
+			}
+		}
+	}
+
+	revealCurrentTabs();
+	document.getElementById("starlight__sidebar")?.addEventListener("toggle", revealCurrentTabs);
+</script>
+
+<style>
+	.section-tabs {
+		position: relative;
+		display: flex;
+		gap: 0.25rem;
+		padding: 0 var(--sl-sidebar-pad-x) 0.75rem;
+		margin-inline: calc(-1 * var(--sl-sidebar-pad-x));
+		overflow-x: auto;
+		scrollbar-width: thin;
+		border-bottom: 1px solid var(--cu-line);
+	}
+
+	.section-tabs a {
+		display: inline-flex;
+		flex: none;
+		align-items: center;
+		min-height: var(--cu-control-height);
+		padding-inline: var(--cu-control-pad-x);
+		font-size: var(--cu-control-font-size);
+		font-weight: 500;
+		line-height: 1.2;
+		color: var(--cu-muted);
+		white-space: nowrap;
+		text-decoration: none;
+		border-radius: var(--cu-control-radius);
+	}
+
+	.section-tabs a:hover {
+		color: var(--cu-ink);
+	}
+
+	.section-tabs a:focus-visible {
+		outline: var(--cu-focus-ring);
+		outline-offset: calc(-1 * var(--cu-focus-offset));
+	}
+
+	.section-tabs a[aria-current="true"] {
+		font-weight: 600;
+		color: var(--cu-ink);
+		background: var(--cu-accent-soft);
+	}
+
+	@media (min-width: 72rem) {
+		.section-tabs {
+			display: none;
+		}
+	}
+</style>

@@ -1,0 +1,50 @@
+---
+import { ui } from "../i18n/ui";
+import { prerelease, version as release } from "../release";
+
+const { siteTitle, siteTitleHref, locale } = Astro.locals.starlightRoute;
+const t = ui(locale);
+const [major, minor] = release.split(".");
+const version = prerelease ? `${major}.${minor} ${t.versionLabel}` : `${major}.${minor}`;
+const markSize = 28;
+---
+
+<a href={siteTitleHref} class="site-title">
+	<img src="/mark.svg" alt="" width={markSize} height={markSize}>
+	<span class="wordmark" translate="no">{siteTitle}</span>
+	<span class="version">{version}</span>
+</a>
+
+<style>
+	.site-title {
+		display: flex;
+		gap: 0.55rem;
+		align-items: center;
+		min-width: 0;
+		color: var(--cu-ink);
+		white-space: nowrap;
+		text-decoration: none;
+	}
+
+	.wordmark {
+		font-family: var(--cu-font-display);
+		font-size: 1.45rem;
+		font-weight: 700;
+		letter-spacing: -0.03em;
+	}
+
+	.version {
+		padding: 0.05rem 0.5rem;
+		font-family: var(--cu-font-mono);
+		font-size: 0.7rem;
+		color: var(--cu-muted);
+		border: 1px solid var(--cu-line);
+		border-radius: 999px;
+	}
+
+	@media (max-width: 30rem) {
+		.version {
+			display: none;
+		}
+	}
+</style>

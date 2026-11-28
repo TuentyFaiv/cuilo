@@ -4,7 +4,9 @@ mod cli;
 mod commands;
 mod context;
 mod inputs;
+mod reference;
 mod ui;
+mod updates;
 mod upgrade;
 
 use std::io::{self, IsTerminal, Write as _};
@@ -31,7 +33,17 @@ pub(crate) struct Exit(pub(crate) u8);
 
 fn main() -> ExitCode {
 	let cli = Cli::parse();
-	match run(&cli) {
+	let updates = updates::Watch::start(&cli);
+	let code = report(&cli, run(&cli));
+	if let Some(updates) = updates {
+		updates.finish();
+	}
+	code
+}
+
+/// The exit code for `result`, after printing its error, if any.
+fn report(cli: &Cli, result: anyhow::Result<()>) -> ExitCode {
+	match result {
 		Ok(()) => ExitCode::SUCCESS,
 		Err(error) => {
 			if let Some(Exit(code)) = error.downcast_ref::<Exit>() {
@@ -72,47 +84,19 @@ fn run(cli: &Cli) -> anyhow::Result<()> {
 			io::stdout().write_all(&script)?;
 			Ok(())
 		}
+		Command::Man if cli.json => {
+			Output::json(&reference::describe(Cli::command()));
+			Ok(())
+		}
 		Command::Man => {
 			clap_mangen::Man::new(Cli::command()).render(&mut io::stdout())?;
 			Ok(())
 		}
-		Command::Upgrade { check, version } => {
-			let exe = std::env::current_exe()?;
-			let exe = exe.canonicalize().unwrap_or(exe);
-			let outcome = upgrade::run(
-				&cuilo_packs::transport::HttpsFetch::default(),
-				&exe,
-				*check,
-				version.as_ref(),
-			)?;
-			if cli.json {
-				Output::json(&outcome);
-			} else if outcome.upgraded {
-				println!("Upgraded {} {} → {}.", brand::NAME, outcome.current, outcome.available);
-			} else if outcome.available == outcome.current {
-				println!("{} {} is the newest release.", brand::NAME, outcome.current);
-			} else if *check {
-				let how = if outcome.install == upgrade::Install::Script {
-					format!("run `{} upgrade`", brand::BINARY_NAME)
-				} else {
-					outcome.install.hint()
-				};
-				println!(
-					"{} {} is available (you have {}); {how}.",
-					brand::NAME,
-					outcome.available,
-					outcome.current
-				);
-			} else {
-				println!(
-					"{} {} is newer than the newest release, {}.",
-					brand::NAME,
-					outcome.current,
-					outcome.available
-				);
-			}
+		Command::Upgrade { background: true, .. } => {
+			updates::background();
 			Ok(())
 		}
+		Command::Upgrade { check, version, .. } => upgrade::command(cli.json, *check, version.as_ref()),
 		Command::Mcp => {
 			let user = cuilo_core::UserConfig::load()?;
 			cuilo_mcp::serve(&root, user, io::stdin().lock(), io::stdout())?;

@@ -1,13 +1,14 @@
 //! Core engine for `cuilo`: packs, rendering, plan → apply, history and provenance.
 //!
-//! Layers, lowest first: [`model`] → template → [`patch`] → [`pack`] → [`workspace`] → [`history`] →
-//! [`plan`] → [`engine`]. Each layer only uses the ones below it.
+//! Layers, lowest first: [`model`] → template → imports → [`patch`] → [`pack`] → [`workspace`] →
+//! [`history`] → [`plan`] → [`engine`]. Each layer only uses the ones below it.
 
 pub mod brand;
 pub mod engine;
 pub mod event;
 pub mod format;
 pub mod history;
+mod imports;
 pub mod migrate;
 pub mod model;
 pub mod pack;

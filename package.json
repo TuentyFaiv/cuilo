@@ -3,12 +3,17 @@
 	"private": true,
 	"type": "module",
 	"workspaces": [
+		"apps/*",
 		"packages/*",
 		"npm/*"
 	],
 	"scripts": {
 		"check": "biome check .",
 		"ci": "biome ci .",
+		"docs": "bun run --filter cuilo-docs dev",
+		"docs:build": "bun run --filter cuilo-docs build",
+		"docs:deploy": "bun run --filter cuilo-docs deploy",
+		"docs:deploy-preview": "bun run --filter cuilo-docs deploy:preview",
 		"format": "biome format --write .",
 		"lint": "biome lint ."
 	},

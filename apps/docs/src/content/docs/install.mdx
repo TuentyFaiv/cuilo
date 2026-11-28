@@ -1,0 +1,282 @@
+---
+title: Install
+description: Install cuilo with the install script, npm, Homebrew or Cargo, check what you downloaded, upgrade it and add shell completions.
+---
+
+import { Aside, Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+import { cargoBinstall, cargoInstall, version } from "../../release";
+
+<Aside type="caution" title="cuilo 2 is in alpha">
+Every channel below installs the newest pre-release. Formats and commands can still change until the beta; the [changelog](/changelog/) lists each change.
+</Aside>
+
+## Install a release
+
+Every channel installs the same binaries. GitHub Actions builds and attests them, and Cloudflare serves them from `https://dl.cuilo.dev/v<version>/`.
+
+<Tabs syncKey="install">
+<TabItem label="macOS and Linux">
+
+```sh
+curl --proto '=https' --tlsv1.2 -fsSL https://dl.cuilo.dev/install.sh | sh
+```
+
+The script puts `cuilo` in `~/.cuilo/bin` and tells you what to add to your `PATH` if that folder is not on it yet. On Linux it installs the musl build, for x86_64 and aarch64.
+
+</TabItem>
+<TabItem label="Windows">
+
+```powershell
+irm https://dl.cuilo.dev/install.ps1 | iex
+```
+
+The script puts `cuilo.exe` in `~\.cuilo\bin` and adds that folder to your user `PATH`. Open a new terminal afterwards.
+
+</TabItem>
+<TabItem label="npm">
+
+```sh
+npm install --global @cuilo/cli
+```
+
+</TabItem>
+<TabItem label="pnpm">
+
+```sh
+pnpm add --global @cuilo/cli
+```
+
+</TabItem>
+<TabItem label="Bun">
+
+```sh
+bun add --global @cuilo/cli
+```
+
+</TabItem>
+<TabItem label="Homebrew">
+
+```sh
+brew install tuentyfaiv/tap/cuilo
+```
+
+</TabItem>
+<TabItem label="Cargo">
+
+<Code code={cargoBinstall} lang="sh" />
+
+Or build it from crates.io:
+
+<Code code={cargoInstall} lang="sh" />
+
+</TabItem>
+</Tabs>
+
+Then check that it runs:
+
+```sh
+cuilo --version
+```
+
+### The npm package
+
+`@cuilo/cli` has no dependencies and runs nothing at install time. It needs Node.js 18 or newer. Your package manager picks the one platform package that matches your system, such as `@cuilo/cli-darwin-arm64` or `@cuilo/cli-linux-x64-musl`, and that package holds the binary. Until cuilo 2.0 is stable, each pre-release is published as `latest`, so the commands above install the newest one. From 2.0 on, pre-releases are published under the `next` tag:
+
+```sh
+npm install --global @cuilo/cli@next
+```
+
+If `cuilo` says it has no binary for your platform, your package manager skipped optional dependencies. Reinstall without `--omit=optional` or `--no-optional`.
+
+### Install script options
+
+Both scripts read these environment variables:
+
+| Variable                    | Effect                                                                                          |
+| --------------------------- | ----------------------------------------------------------------------------------------------- |
+| `CUILO_VERSION`             | The version to install. The default is the newest stable release, or the newest pre-release while there is no stable one. |
+| `CUILO_INSTALL`             | The install folder instead of `~/.cuilo`. The binary goes in its `bin` folder.                  |
+| `CUILO_REQUIRE_SIGNATURE=1` | Refuse to install unless `minisign` checks the signature.                                       |
+| `CUILO_NO_MODIFY_PATH=1`    | Windows only: leave your user `PATH` alone.                                                     |
+
+You can also pass the version as an argument:
+
+```sh
+curl --proto '=https' --tlsv1.2 -fsSL https://dl.cuilo.dev/install.sh | sh -s -- 2.0.0
+```
+
+## What each channel checks
+
+| Channel                   | What checks the download                                          |
+| ------------------------- | ----------------------------------------------------------------- |
+| `install.sh`              | SHA-256, and the signature when `minisign` is installed           |
+| `install.ps1`             | SHA-256, and the signature when `minisign` is installed           |
+| npm, pnpm, Bun or Yarn    | Lockfile integrity, npm provenance                                |
+| Homebrew                  | The formula's SHA-256                                             |
+| `cargo binstall`          | The signature                                                     |
+| `cargo install`           | crates.io checksums                                               |
+
+The install scripts say which checks ran on their last line, for example `signature and SHA-256 checked`, or `SHA-256 checked; install minisign to check the signature too`.
+
+`cargo binstall` installs only prebuilt binaries that the release key signed. cuilo's crate turns off its QuickInstall fallback, whose builds the release key never signed, and its build from source. Without a signed binary for your platform, it stops with an error; `cargo install` builds cuilo from crates.io instead.
+
+<Aside type="caution" title="Checksums alone are not proof">
+The `SHA256SUMS` file comes from the same host as the binaries, so a checksum only catches a corrupted download. The signature and the GitHub attestation are what show that a release came from cuilo's release workflow. The first `curl … | sh` trusts the download host over HTTPS.
+</Aside>
+
+Every release file is signed with this minisign key, which is also in [`crates/cuilo/release-key.pub`](https://github.com/TuentyFaiv/cuilo/blob/main/crates/cuilo/release-key.pub):
+
+```text
+RWTFcgVmt+E7Xi77vi6Q/Yu68TJDTsBTKYHqOmyjSOY4VCgpEFCwl+dK
+```
+
+To check the install script before you run it, download it with its signature, verify it, and require the signature for the binary too:
+
+```sh
+curl --proto '=https' --tlsv1.2 -fsSLO https://dl.cuilo.dev/install.sh
+curl --proto '=https' --tlsv1.2 -fsSLO https://dl.cuilo.dev/install.sh.minisig
+minisign -V -P RWTFcgVmt+E7Xi77vi6Q/Yu68TJDTsBTKYHqOmyjSOY4VCgpEFCwl+dK -m install.sh
+CUILO_REQUIRE_SIGNATURE=1 sh install.sh
+```
+
+To see where an installed binary was built, check its GitHub attestation:
+
+```sh
+gh attestation verify $(command -v cuilo) --repo TuentyFaiv/cuilo
+```
+
+Windows and macOS binaries are not code-signed with Authenticode or Apple notarization yet.
+
+## Upgrade
+
+`cuilo upgrade` moves cuilo to the newest release, however you installed it:
+
+```sh
+cuilo upgrade
+```
+
+A copy that the install script made is replaced with the newest signed release. cuilo replaces the binary only when the release's `SHA256SUMS` carries a valid signature by the release key built into cuilo, and the binary matches its signed checksum. It never moves to an older version. A stable cuilo moves only to stable releases, and refuses a pre-release offered as the newest stable one. A pre-release cuilo follows the pre-release channel.
+
+For a copy that a package manager installed globally, `cuilo upgrade` runs that package manager, and prints the command first. It tells them apart by the folder the binary is in:
+
+| Installed with | `cuilo upgrade` runs                                                                                                             |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| npm            | `npm install --global @cuilo/cli@<version>`                                                                                      |
+| pnpm           | `pnpm add --global @cuilo/cli@<version>`                                                                                         |
+| Bun            | `bun add --global @cuilo/cli@<version>`                                                                                          |
+| Yarn           | `yarn global add @cuilo/cli@<version>`                                                                                           |
+| Homebrew       | `brew upgrade tuentyfaiv/tap/cuilo`                                                                                              |
+| Cargo          | `cargo binstall cuilo --version <version> --disable-strategies quick-install,compile --no-confirm` when `cargo-binstall` is installed, else `cargo install cuilo --locked --version <version>` |
+
+The package manager runs in your cuilo cache folder, or your home folder when there is no cache folder, never in the folder you run `cuilo upgrade` from. A project's own config, such as `.yarnrc`, `.cargo/config.toml` or `rust-toolchain.toml`, cannot change what it does.
+
+When the package manager fails, so does `cuilo upgrade`, naming the command. A copy that none of them installed, such as one you copied by hand, cannot upgrade itself: reinstall it with the install script.
+
+To install a specific version, which may be older, pass `--version`. Homebrew cannot install a chosen version, so this does not work for a Homebrew copy.
+
+```sh
+cuilo upgrade --version 2.0.0
+```
+
+`cuilo upgrade --check` only reports whether a newer release exists, and which command `cuilo upgrade` would run. With `--json`, the package manager's output goes to stderr, so stdout stays valid JSON. See [`cuilo upgrade`](/reference/cli/upgrade/).
+
+### Copies cuilo does not upgrade
+
+`cuilo upgrade` upgrades only global installs. The npm package also runs in two other ways, and for those copies `cuilo upgrade` runs nothing. It prints what to run instead.
+
+A one-off runner, such as `npx`, `bunx`, `pnpm dlx` or `yarn dlx`, keeps its copy in a cache. `cuilo upgrade` names the runner and the command that gets the newest release, for example ``this copy runs through npx; run `npx @cuilo/cli@latest`.`` With `--version`, the command names that version. These copies never look for new releases in the background and print no notices.
+
+A copy in a project's own `node_modules` is a dependency of the project, and its lockfile pins it. `cuilo upgrade` prints the command that updates the dependency, picked by the lockfile next to that `node_modules`. The daily notice names that command instead of `cuilo upgrade`.
+
+| Lockfile                                          | Command                                       |
+| ------------------------------------------------- | --------------------------------------------- |
+| `bun.lock` or `bun.lockb`                         | `bun add --dev @cuilo/cli@<version>`          |
+| `pnpm-lock.yaml`                                  | `pnpm add --save-dev @cuilo/cli@<version>`    |
+| `yarn.lock`                                       | `yarn add --dev @cuilo/cli@<version>`         |
+| `package-lock.json`, `npm-shrinkwrap.json`, none  | `npm install --save-dev @cuilo/cli@<version>` |
+
+Without a lockfile, cuilo goes by how `node_modules` is laid out, such as pnpm's `.pnpm` folder, and names npm when nothing says otherwise.
+
+cuilo tells these copies apart by the folder the binary is in. A `node_modules` with no `package.json` next to it is an npm prefix, such as `/usr/local/lib` or `%APPDATA%\npm`, so that copy counts as global. With `--json`, `kind` is `global`, `ephemeral` or `project`, and `project` names the project folder.
+
+### Automatic updates
+
+When you use cuilo in a terminal, it looks for a new release at most once a day. The check runs in the background, so no command waits for it or fails because of it. What happens next depends on `updates` in your [user config](/reference/user-config/#updates), `config.toml` in your cuilo config folder:
+
+| `updates`        | What cuilo does                                                                                                                                                                                                                                                       |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auto` (default) | A copy that the install script made updates itself in the background, with the same signature and checksum checks as `cuilo upgrade`. The next time you run cuilo, it says so once, for example `cuilo updated 2.0.0 → 2.1.0.` Any other copy prints a notice instead. |
+| `notify`         | Prints a notice, at most once a day: ``cuilo 2.1.0 is available (you have 2.0.0); run `cuilo upgrade`.``                                                                                                                                                              |
+| `off`            | Never looks.                                                                                                                                                                                                                                                          |
+
+```toml
+updates = "notify"
+```
+
+A project's copy gets a notice that names the project's command, and a one-off runner's copy never looks. See [copies cuilo does not upgrade](#copies-cuilo-does-not-upgrade).
+
+`CUILO_UPDATES` overrides the config, for example `CUILO_UPDATES=off cuilo status`. It takes `auto`, `notify` or `off` in any letter case, and an empty value counts as unset. cuilo ignores any other value, so the config applies, and warns about it at most once a day: ``CUILO_UPDATES=yes is not `auto`, `notify` or `off`; using the config's `auto`.``
+
+cuilo prints these lines on stderr, after the command's own output. It never checks or prints them with `--json`, when stderr is not a terminal, when `CI` is set, or for `cuilo mcp`, `cuilo completions` and `cuilo upgrade`. A failed check or update is noted in `update.json` in your cache folder and tried again the next day. Until then, a copy that could not update itself prints the notice, so you can run `cuilo upgrade` and see why. See [Environment variables](/reference/environment/).
+
+## Shell completions
+
+`cuilo completions <shell>` prints a completion script for `bash`, `zsh`, `fish`, `powershell` or `elvish`. Save it where your shell looks for completions:
+
+<Tabs syncKey="shell">
+<TabItem label="zsh">
+
+```sh
+mkdir -p ~/.zfunc
+cuilo completions zsh > ~/.zfunc/_cuilo
+```
+
+Add `fpath=(~/.zfunc $fpath)` to `~/.zshrc` before it calls `compinit`.
+
+</TabItem>
+<TabItem label="bash">
+
+```sh
+mkdir -p ~/.local/share/bash-completion/completions
+cuilo completions bash > ~/.local/share/bash-completion/completions/cuilo
+```
+
+</TabItem>
+<TabItem label="fish">
+
+```sh
+cuilo completions fish > ~/.config/fish/completions/cuilo.fish
+```
+
+</TabItem>
+<TabItem label="PowerShell">
+
+Add this line to your `$PROFILE`:
+
+```powershell
+cuilo completions powershell | Out-String | Invoke-Expression
+```
+
+</TabItem>
+</Tabs>
+
+## Build from source
+
+While 2.0 is in alpha, building from source is the way to try it. You need [rustup](https://rustup.rs). The repository pins its Rust toolchain in `rust-toolchain.toml`, and rustup installs it the first time you build.
+
+```sh
+git clone --branch staging https://github.com/TuentyFaiv/cuilo.git
+cd cuilo
+cargo install --path crates/cuilo --locked
+```
+
+This puts `cuilo` in `~/.cargo/bin`. Check it:
+
+```sh
+cuilo --version
+```
+
+<Code code={`cuilo ${version}`} lang="text" />
+
+Next, [generate your first piece](/first-piece/).

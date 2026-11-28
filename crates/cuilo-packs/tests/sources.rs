@@ -68,6 +68,7 @@ fn a_registry_item_should_install_and_update_through_the_engine() -> TestResult 
 		target: None,
 		granted: None,
 		force: false,
+		wire: false,
 	})?;
 	assert_eq!(plan.summary(), "add registry-button/button (with utils)");
 	engine.apply(plan)?;

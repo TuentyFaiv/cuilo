@@ -1,14 +1,165 @@
 schema_version = 1
 name = "database"
-description = "SQLAlchemy async engine, sessions and the declarative base for FastAPI."
-target = "app"
+description = "The database connection the `resource` repositories use, read from `DATABASE_URL`: an sqlx pool, a Drizzle or Prisma client, SQLAlchemy sessions or a GORM connection."
+target = "src/shared"
+
+[translations.es-mx]
+description = "La conexión a la base de datos que usan los repositorios de `resource`, leída de `DATABASE_URL`: un pool de sqlx, un cliente de Drizzle o Prisma, sesiones de SQLAlchemy o una conexión de GORM."
+
+[[variants]]
+name = "hono-drizzle"
+when = { framework = "hono", language = "typescript", database = "drizzle" }
+files = "files/drizzle"
+
+[[variants]]
+name = "hono-prisma"
+when = { framework = "hono", language = "typescript", database = "prisma" }
+files = "files/prisma"
+
+[[variants]]
+name = "express-drizzle"
+when = { framework = "express", language = "typescript", database = "drizzle" }
+files = "files/drizzle"
+
+[[variants]]
+name = "express-prisma"
+when = { framework = "express", language = "typescript", database = "prisma" }
+files = "files/prisma"
+
+[[variants]]
+name = "axum"
+when = { framework = "axum", database = "sqlx" }
+target = "src"
 
 [[variants]]
 name = "fastapi"
 when = { framework = "fastapi", database = "sqlalchemy" }
+target = "app"
+
+[[variants]]
+name = "chi"
+when = { framework = "chi", database = "gorm" }
+files = "files/go"
+target = "internal/database"
+
+[[variants]]
+name = "echo"
+when = { framework = "echo-v4", database = "gorm" }
+files = "files/go"
+target = "internal/database"
+
+[[variants]]
+name = "echo-v5"
+when = { framework = "echo-v5", database = "gorm" }
+files = "files/go"
+target = "internal/database"
+
+[[steps]]
+text = "Set `DATABASE_URL` to your PostgreSQL connection string."
+variants = ["hono-drizzle", "hono-prisma", "express-drizzle", "express-prisma", "axum", "chi", "echo", "echo-v5"]
+
+[[steps]]
+text = "Set `DATABASE_URL` to an async SQLAlchemy URL, e.g. one that starts with `postgresql+asyncpg://`, and add its driver, such as `asyncpg`."
+variants = ["fastapi"]
+
+[[steps]]
+text = "Point drizzle-kit at your tables in `drizzle.config.ts` with `export default defineConfig({ dialect: \"postgresql\", schema: \"./src/**/*.table.ts\", dbCredentials: { url: process.env.DATABASE_URL! } })`, importing `defineConfig` from `drizzle-kit`."
+variants = ["hono-drizzle", "express-drizzle"]
+
+[[steps]]
+text = "Generate the client where `src/shared/database.ts` imports it, with `provider = \"prisma-client\"` and `output = \"../src/generated/prisma\"` in the generator of `prisma/schema.prisma`, as `prisma init` writes it, then run `prisma generate`."
+variants = ["hono-prisma", "express-prisma"]
+
+[[steps]]
+text = "Declare the module with `mod database;` in `src/main.rs`."
+variants = ["axum"]
+
+[[steps.patches]]
+kind = "anchor"
+file = "src/main.rs"
+anchor = "#[tokio::main]"
+position = "before"
+insert = "mod database;\n\n"
+
+[[steps]]
+text = "Enable the sqlx features the code uses with `cargo add sqlx --features runtime-tokio,tls-rustls,postgres,uuid,chrono`."
+variants = ["axum"]
+
+[[steps]]
+text = "Connect in `main` with `database::connect().await` and give the `PgPool` to your repositories."
+variants = ["axum"]
+
+[[steps]]
+text = "Open the connection in `main` with `db, err := database.Open()` from your module's `internal/database` package, and give `db` to your repositories."
+variants = ["chi", "echo", "echo-v5"]
+
+[[dependencies]]
+ecosystem = "npm"
+name = "drizzle-orm"
+version = "^0.45"
+variants = ["hono-drizzle", "express-drizzle"]
+
+[[dependencies]]
+ecosystem = "npm"
+name = "pg"
+version = "^8.23"
+variants = ["hono-drizzle", "express-drizzle"]
+
+[[dependencies]]
+ecosystem = "npm"
+name = "@types/pg"
+version = "^8.23"
+dev = true
+variants = ["hono-drizzle", "express-drizzle"]
+
+[[dependencies]]
+ecosystem = "npm"
+name = "drizzle-kit"
+version = "^0.31"
+dev = true
+variants = ["hono-drizzle", "express-drizzle"]
+
+[[dependencies]]
+ecosystem = "npm"
+name = "@prisma/client"
+version = "^7.10"
+variants = ["hono-prisma", "express-prisma"]
+
+[[dependencies]]
+ecosystem = "npm"
+name = "@prisma/adapter-pg"
+version = "^7.10"
+variants = ["hono-prisma", "express-prisma"]
+
+[[dependencies]]
+ecosystem = "npm"
+name = "prisma"
+version = "^7.10"
+dev = true
+variants = ["hono-prisma", "express-prisma"]
+
+[[dependencies]]
+ecosystem = "cargo"
+name = "sqlx"
+version = "0.9"
+features = ["runtime-tokio", "tls-rustls", "postgres", "uuid", "chrono"]
+variants = ["axum"]
 
 [[dependencies]]
 ecosystem = "pypi"
 name = "sqlalchemy"
 version = ">=2.0"
 features = ["asyncio"]
+variants = ["fastapi"]
+
+[[dependencies]]
+ecosystem = "go"
+name = "gorm.io/gorm"
+version = "v1.31.2"
+variants = ["chi", "echo", "echo-v5"]
+
+[[dependencies]]
+ecosystem = "go"
+name = "gorm.io/driver/postgres"
+version = "v1.6.3"
+variants = ["chi", "echo", "echo-v5"]

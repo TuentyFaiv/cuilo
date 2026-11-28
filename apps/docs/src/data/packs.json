@@ -1,0 +1,1671 @@
+[
+  {
+    "description": "Layered backend pieces: REST resources, problem-details errors, middleware and database connections for Axum, Hono, Express, FastAPI, chi and Echo.",
+    "kinds": [
+      "backend"
+    ],
+    "license": "MIT",
+    "name": "backend",
+    "permissions": {
+      "dependencies": true,
+      "write": [
+        "src/**",
+        "app/**",
+        "tests/**",
+        "internal/**"
+      ]
+    },
+    "pieces": [
+      {
+        "dependencies": [
+          {
+            "dev": null,
+            "ecosystem": "npm",
+            "name": "drizzle-orm",
+            "variants": [
+              "hono-drizzle",
+              "express-drizzle"
+            ],
+            "version": "^0.45"
+          },
+          {
+            "dev": null,
+            "ecosystem": "npm",
+            "name": "pg",
+            "variants": [
+              "hono-drizzle",
+              "express-drizzle"
+            ],
+            "version": "^8.23"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@types/pg",
+            "variants": [
+              "hono-drizzle",
+              "express-drizzle"
+            ],
+            "version": "^8.23"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "drizzle-kit",
+            "variants": [
+              "hono-drizzle",
+              "express-drizzle"
+            ],
+            "version": "^0.31"
+          },
+          {
+            "dev": null,
+            "ecosystem": "npm",
+            "name": "@prisma/client",
+            "variants": [
+              "hono-prisma",
+              "express-prisma"
+            ],
+            "version": "^7.10"
+          },
+          {
+            "dev": null,
+            "ecosystem": "npm",
+            "name": "@prisma/adapter-pg",
+            "variants": [
+              "hono-prisma",
+              "express-prisma"
+            ],
+            "version": "^7.10"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "prisma",
+            "variants": [
+              "hono-prisma",
+              "express-prisma"
+            ],
+            "version": "^7.10"
+          },
+          {
+            "dev": null,
+            "ecosystem": "cargo",
+            "name": "sqlx",
+            "variants": [
+              "axum"
+            ],
+            "version": "0.9"
+          },
+          {
+            "dev": null,
+            "ecosystem": "pypi",
+            "name": "sqlalchemy",
+            "variants": [
+              "fastapi"
+            ],
+            "version": ">=2.0"
+          },
+          {
+            "dev": null,
+            "ecosystem": "go",
+            "name": "gorm.io/gorm",
+            "variants": [
+              "chi",
+              "echo",
+              "echo-v5"
+            ],
+            "version": "v1.31.2"
+          },
+          {
+            "dev": null,
+            "ecosystem": "go",
+            "name": "gorm.io/driver/postgres",
+            "variants": [
+              "chi",
+              "echo",
+              "echo-v5"
+            ],
+            "version": "v1.6.3"
+          }
+        ],
+        "description": "The database connection the `resource` repositories use, read from `DATABASE_URL`: an sqlx pool, a Drizzle or Prisma client, SQLAlchemy sessions or a GORM connection.",
+        "examples": [
+          {
+            "files": [
+              "src/shared/database.ts"
+            ],
+            "variant": "hono-drizzle"
+          },
+          {
+            "files": [
+              "src/shared/database.ts"
+            ],
+            "variant": "hono-prisma"
+          },
+          {
+            "files": [
+              "src/shared/database.ts"
+            ],
+            "variant": "express-drizzle"
+          },
+          {
+            "files": [
+              "src/shared/database.ts"
+            ],
+            "variant": "express-prisma"
+          },
+          {
+            "files": [
+              "src/database.rs"
+            ],
+            "variant": "axum"
+          },
+          {
+            "files": [
+              "app/database.py"
+            ],
+            "variant": "fastapi"
+          },
+          {
+            "files": [
+              "internal/database/database.go"
+            ],
+            "variant": "chi"
+          },
+          {
+            "files": [
+              "internal/database/database.go"
+            ],
+            "variant": "echo"
+          },
+          {
+            "files": [
+              "internal/database/database.go"
+            ],
+            "variant": "echo-v5"
+          }
+        ],
+        "inputs": [],
+        "kind": "piece",
+        "name": "database",
+        "needs": [
+          "database"
+        ],
+        "target": "src/shared",
+        "translations": {
+          "es-mx": {
+            "description": "La conexión a la base de datos que usan los repositorios de `resource`, leída de `DATABASE_URL`: un pool de sqlx, un cliente de Drizzle o Prisma, sesiones de SQLAlchemy o una conexión de GORM."
+          }
+        },
+        "variants": [
+          "hono-drizzle",
+          "hono-prisma",
+          "express-drizzle",
+          "express-prisma",
+          "axum",
+          "fastapi",
+          "chi",
+          "echo",
+          "echo-v5"
+        ]
+      },
+      {
+        "dependencies": [
+          {
+            "dev": null,
+            "ecosystem": "npm",
+            "name": "zod",
+            "variants": [
+              "hono",
+              "express"
+            ],
+            "version": "^4.1"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "vitest",
+            "variants": [
+              "hono",
+              "express"
+            ],
+            "version": "^4.0"
+          },
+          {
+            "dev": null,
+            "ecosystem": "cargo",
+            "name": "thiserror",
+            "variants": [
+              "axum"
+            ],
+            "version": "2"
+          },
+          {
+            "dev": null,
+            "ecosystem": "cargo",
+            "name": "tracing",
+            "variants": [
+              "axum"
+            ],
+            "version": "0.1"
+          },
+          {
+            "dev": null,
+            "ecosystem": "cargo",
+            "name": "serde",
+            "variants": [
+              "axum"
+            ],
+            "version": "1"
+          },
+          {
+            "dev": true,
+            "ecosystem": "cargo",
+            "name": "tokio",
+            "variants": [
+              "axum"
+            ],
+            "version": "1"
+          },
+          {
+            "dev": true,
+            "ecosystem": "cargo",
+            "name": "serde_json",
+            "variants": [
+              "axum"
+            ],
+            "version": "1"
+          },
+          {
+            "dev": true,
+            "ecosystem": "pypi",
+            "name": "pytest",
+            "variants": [
+              "fastapi"
+            ],
+            "version": ">=8"
+          },
+          {
+            "dev": true,
+            "ecosystem": "pypi",
+            "name": "httpx",
+            "variants": [
+              "fastapi"
+            ],
+            "version": ">=0.28"
+          }
+        ],
+        "description": "Application errors rendered as RFC 9457 problem details, with the framework's error handler.",
+        "examples": [
+          {
+            "files": [
+              "src/shared/error-handler.ts",
+              "src/shared/errors.ts"
+            ],
+            "variant": "hono"
+          },
+          {
+            "files": [
+              "src/shared/error-handler.ts",
+              "src/shared/errors.ts"
+            ],
+            "variant": "express"
+          },
+          {
+            "files": [
+              "src/error.rs"
+            ],
+            "variant": "axum"
+          },
+          {
+            "files": [
+              "app/errors.py"
+            ],
+            "variant": "fastapi"
+          },
+          {
+            "files": [
+              "internal/apperror/apperror.go"
+            ],
+            "variant": "chi"
+          },
+          {
+            "files": [
+              "internal/apperror/apperror.go"
+            ],
+            "variant": "echo"
+          },
+          {
+            "files": [
+              "internal/apperror/apperror.go"
+            ],
+            "variant": "echo-v5"
+          }
+        ],
+        "inputs": [
+          {
+            "default": null,
+            "description": "Add tests; on by default when the project can run them.",
+            "example": null,
+            "name": "tests",
+            "required": false,
+            "translations": {
+              "es-mx": {
+                "description": "Agrega pruebas; se activa por defecto cuando el proyecto puede correrlas."
+              }
+            },
+            "type": "bool"
+          }
+        ],
+        "kind": "piece",
+        "name": "error",
+        "needs": [],
+        "target": "src/shared",
+        "translations": {
+          "es-mx": {
+            "description": "Errores de la aplicación con formato problem details de RFC 9457, con el manejador de errores del framework."
+          }
+        },
+        "variants": [
+          "hono",
+          "express",
+          "axum",
+          "fastapi",
+          "chi",
+          "echo",
+          "echo-v5"
+        ]
+      },
+      {
+        "dependencies": [
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "vitest",
+            "variants": [
+              "hono",
+              "express"
+            ],
+            "version": "^4.0"
+          },
+          {
+            "dev": null,
+            "ecosystem": "cargo",
+            "name": "uuid",
+            "variants": [
+              "axum"
+            ],
+            "version": "1.10"
+          },
+          {
+            "dev": true,
+            "ecosystem": "cargo",
+            "name": "tokio",
+            "variants": [
+              "axum"
+            ],
+            "version": "1"
+          },
+          {
+            "dev": true,
+            "ecosystem": "cargo",
+            "name": "tower",
+            "variants": [
+              "axum"
+            ],
+            "version": "0.5"
+          },
+          {
+            "dev": true,
+            "ecosystem": "pypi",
+            "name": "pytest",
+            "variants": [
+              "fastapi"
+            ],
+            "version": ">=8"
+          },
+          {
+            "dev": true,
+            "ecosystem": "pypi",
+            "name": "httpx",
+            "variants": [
+              "fastapi"
+            ],
+            "version": ">=0.28"
+          },
+          {
+            "dev": null,
+            "ecosystem": "go",
+            "name": "github.com/google/uuid",
+            "variants": [
+              "chi",
+              "echo",
+              "echo-v5"
+            ],
+            "version": "v1.6.0"
+          }
+        ],
+        "description": "Middleware that propagates or creates a request header, e.g. `request-id`, and exposes it to handlers.",
+        "examples": [
+          {
+            "files": [
+              "src/shared/middleware/request-id.ts"
+            ],
+            "variant": "hono"
+          },
+          {
+            "files": [
+              "src/shared/middleware/request-id.ts"
+            ],
+            "variant": "express"
+          },
+          {
+            "files": [
+              "src/middleware/request_id.rs"
+            ],
+            "variant": "axum"
+          },
+          {
+            "files": [
+              "app/middleware/request_id.py"
+            ],
+            "variant": "fastapi"
+          },
+          {
+            "files": [
+              "internal/middleware/request_id.go"
+            ],
+            "variant": "chi"
+          },
+          {
+            "files": [
+              "internal/middleware/request_id.go"
+            ],
+            "variant": "echo"
+          },
+          {
+            "files": [
+              "internal/middleware/request_id.go"
+            ],
+            "variant": "echo-v5"
+          }
+        ],
+        "inputs": [
+          {
+            "default": null,
+            "description": "Header name without `x-`, e.g. `request-id` or `correlation-id`.",
+            "example": "RequestId",
+            "name": "name",
+            "required": true,
+            "translations": {
+              "es-mx": {
+                "description": "Nombre del encabezado sin `x-`, p. ej. `request-id` o `correlation-id`."
+              }
+            },
+            "type": "string"
+          },
+          {
+            "default": null,
+            "description": "Add tests; on by default when the project can run them.",
+            "example": null,
+            "name": "tests",
+            "required": false,
+            "translations": {
+              "es-mx": {
+                "description": "Agrega pruebas; se activa por defecto cuando el proyecto puede correrlas."
+              }
+            },
+            "type": "bool"
+          }
+        ],
+        "kind": "piece",
+        "name": "middleware",
+        "needs": [],
+        "target": "src/shared/middleware",
+        "translations": {
+          "es-mx": {
+            "description": "Middleware que propaga o crea un encabezado de la solicitud, p. ej. `request-id`, y lo deja disponible para los manejadores."
+          }
+        },
+        "variants": [
+          "hono",
+          "express",
+          "axum",
+          "fastapi",
+          "chi",
+          "echo",
+          "echo-v5"
+        ]
+      },
+      {
+        "dependencies": [
+          {
+            "dev": null,
+            "ecosystem": "npm",
+            "name": "zod",
+            "variants": [
+              "hono",
+              "express"
+            ],
+            "version": "^4.1"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "vitest",
+            "variants": [
+              "hono",
+              "express"
+            ],
+            "version": "^4.0"
+          },
+          {
+            "dev": null,
+            "ecosystem": "cargo",
+            "name": "serde",
+            "variants": [
+              "axum"
+            ],
+            "version": "1"
+          },
+          {
+            "dev": null,
+            "ecosystem": "cargo",
+            "name": "chrono",
+            "variants": [
+              "axum"
+            ],
+            "version": "0.4"
+          },
+          {
+            "dev": null,
+            "ecosystem": "cargo",
+            "name": "uuid",
+            "variants": [
+              "axum"
+            ],
+            "version": "1.10"
+          },
+          {
+            "dev": true,
+            "ecosystem": "cargo",
+            "name": "tokio",
+            "variants": [
+              "axum"
+            ],
+            "version": "1"
+          },
+          {
+            "dev": true,
+            "ecosystem": "cargo",
+            "name": "tower",
+            "variants": [
+              "axum"
+            ],
+            "version": "0.5"
+          },
+          {
+            "dev": true,
+            "ecosystem": "cargo",
+            "name": "serde_json",
+            "variants": [
+              "axum"
+            ],
+            "version": "1"
+          },
+          {
+            "dev": true,
+            "ecosystem": "pypi",
+            "name": "pytest",
+            "variants": [
+              "fastapi"
+            ],
+            "version": ">=8"
+          },
+          {
+            "dev": true,
+            "ecosystem": "pypi",
+            "name": "httpx",
+            "variants": [
+              "fastapi"
+            ],
+            "version": ">=0.28"
+          },
+          {
+            "dev": null,
+            "ecosystem": "go",
+            "name": "github.com/google/uuid",
+            "variants": [
+              "chi",
+              "echo",
+              "echo-v5"
+            ],
+            "version": "v1.6.0"
+          }
+        ],
+        "description": "A REST resource in layers: model, repository, service, routes and tests; adds the `error` piece if missing.",
+        "examples": [
+          {
+            "files": [
+              "src/modules/blog-posts/blog-post.model.ts",
+              "src/modules/blog-posts/blog-post.repository.ts",
+              "src/modules/blog-posts/blog-post.routes.ts",
+              "src/modules/blog-posts/blog-post.service.ts"
+            ],
+            "variant": "hono"
+          },
+          {
+            "files": [
+              "src/modules/blog-posts/blog-post.model.ts",
+              "src/modules/blog-posts/blog-post.repository.ts",
+              "src/modules/blog-posts/blog-post.routes.ts",
+              "src/modules/blog-posts/blog-post.service.ts"
+            ],
+            "variant": "express"
+          },
+          {
+            "files": [
+              "src/blog_posts/mod.rs",
+              "src/blog_posts/model.rs",
+              "src/blog_posts/repository.rs",
+              "src/blog_posts/routes.rs",
+              "src/blog_posts/service.rs"
+            ],
+            "variant": "axum"
+          },
+          {
+            "files": [
+              "app/blog_posts/__init__.py",
+              "app/blog_posts/dependencies.py",
+              "app/blog_posts/models.py",
+              "app/blog_posts/repository.py",
+              "app/blog_posts/router.py",
+              "app/blog_posts/schemas.py",
+              "app/blog_posts/service.py"
+            ],
+            "variant": "fastapi"
+          },
+          {
+            "files": [
+              "internal/blogposts/handler.go",
+              "internal/blogposts/model.go",
+              "internal/blogposts/repository.go",
+              "internal/blogposts/service.go"
+            ],
+            "variant": "chi"
+          },
+          {
+            "files": [
+              "internal/blogposts/handler.go",
+              "internal/blogposts/model.go",
+              "internal/blogposts/repository.go",
+              "internal/blogposts/service.go"
+            ],
+            "variant": "echo"
+          },
+          {
+            "files": [
+              "internal/blogposts/handler.go",
+              "internal/blogposts/model.go",
+              "internal/blogposts/repository.go",
+              "internal/blogposts/service.go"
+            ],
+            "variant": "echo-v5"
+          }
+        ],
+        "inputs": [
+          {
+            "default": null,
+            "description": "Singular name, e.g. `blog-post`.",
+            "example": "ExampleItem",
+            "name": "name",
+            "required": true,
+            "translations": {
+              "es-mx": {
+                "description": "Nombre en singular, p. ej. `blog-post`."
+              }
+            },
+            "type": "string"
+          },
+          {
+            "default": null,
+            "description": "Plural name for routes, tables and folders, e.g. `blog-posts`.",
+            "example": "ExampleItems",
+            "name": "plural",
+            "required": true,
+            "translations": {
+              "es-mx": {
+                "description": "Nombre en plural para rutas, tablas y carpetas, p. ej. `blog-posts`."
+              }
+            },
+            "type": "string"
+          },
+          {
+            "default": null,
+            "description": "Add tests; on by default when the project can run them.",
+            "example": null,
+            "name": "tests",
+            "required": false,
+            "translations": {
+              "es-mx": {
+                "description": "Agrega pruebas; se activa por defecto cuando el proyecto puede correrlas."
+              }
+            },
+            "type": "bool"
+          },
+          {
+            "default": "example.com/app",
+            "description": "Go module path from `go.mod`.",
+            "example": "example.com/app",
+            "name": "module",
+            "required": false,
+            "translations": {
+              "es-mx": {
+                "description": "Ruta del módulo de Go, tomada de `go.mod`."
+              }
+            },
+            "type": "string"
+          }
+        ],
+        "kind": "piece",
+        "name": "resource",
+        "needs": [],
+        "target": "src/modules/example-items",
+        "translations": {
+          "es-mx": {
+            "description": "Un recurso REST por capas: modelo, repositorio, servicio, rutas y pruebas; agrega la pieza `error` si falta."
+          }
+        },
+        "variants": [
+          "hono",
+          "express",
+          "axum",
+          "fastapi",
+          "chi",
+          "echo",
+          "echo-v5"
+        ]
+      }
+    ],
+    "source": "official:backend",
+    "translations": {
+      "es-mx": {
+        "description": "Piezas de backend por capas: recursos REST, errores con problem details, middleware y conexiones a la base de datos para Axum, Hono, Express, FastAPI, chi y Echo."
+      }
+    },
+    "version": "0.2.0"
+  },
+  {
+    "description": "Atomic design UI pieces (atoms, molecules, organisms) for Svelte, Astro, Leptos, Dioxus, Yew, SwiftUI and other web and native stacks.",
+    "kinds": [
+      "ui",
+      "mobile",
+      "desktop"
+    ],
+    "license": "MIT",
+    "name": "ui",
+    "permissions": {
+      "dependencies": true,
+      "write": [
+        "src/ui/**",
+        "lib/ui/**",
+        "test/ui/**",
+        "app/src/main/java/**",
+        "app/src/test/java/**",
+        "shared/src/commonMain/kotlin/**",
+        "shared/src/jvmTest/kotlin/**",
+        "composeApp/src/commonMain/kotlin/**",
+        "composeApp/src/jvmTest/kotlin/**",
+        "Sources/**",
+        "Tests/*/UI/**",
+        "*/UI/**"
+      ]
+    },
+    "pieces": [
+      {
+        "dependencies": [
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "vitest",
+            "variants": [
+              "qwik",
+              "solid",
+              "astro",
+              "svelte",
+              "vue",
+              "react",
+              "lit"
+            ],
+            "version": "^4.0"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@testing-library/react",
+            "variants": [
+              "react"
+            ],
+            "version": "^16.3"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@testing-library/dom",
+            "variants": [
+              "react"
+            ],
+            "version": "^10.4"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@solidjs/testing-library",
+            "variants": [
+              "solid"
+            ],
+            "version": "^1.0.0-rc.2"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@testing-library/svelte",
+            "variants": [
+              "svelte"
+            ],
+            "version": "^5.2"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@vue/test-utils",
+            "variants": [
+              "vue"
+            ],
+            "version": "^2.4"
+          },
+          {
+            "dev": null,
+            "ecosystem": "pub",
+            "name": "material_ui",
+            "variants": [
+              "flutter"
+            ],
+            "version": "^1.1.0"
+          }
+        ],
+        "description": "The smallest UI building block, such as a badge, icon or label.",
+        "examples": [
+          {
+            "files": [
+              "src/ui/atoms/status-badge/index.ts",
+              "src/ui/atoms/status-badge/status-badge.css",
+              "src/ui/atoms/status-badge/status-badge.spec.ts",
+              "src/ui/atoms/status-badge/status-badge.ts"
+            ],
+            "variant": "angular"
+          },
+          {
+            "files": [
+              "src/ui/atoms/status-badge/index.ts",
+              "src/ui/atoms/status-badge/status-badge.css",
+              "src/ui/atoms/status-badge/status-badge.test.tsx",
+              "src/ui/atoms/status-badge/status-badge.tsx"
+            ],
+            "variant": "qwik"
+          },
+          {
+            "files": [
+              "src/ui/atoms/status-badge/index.ts",
+              "src/ui/atoms/status-badge/status-badge.module.css",
+              "src/ui/atoms/status-badge/status-badge.test.tsx",
+              "src/ui/atoms/status-badge/status-badge.tsx"
+            ],
+            "variant": "solid"
+          },
+          {
+            "files": [
+              "src/ui/atoms/status-badge/index.ts",
+              "src/ui/atoms/status-badge/status-badge.astro",
+              "src/ui/atoms/status-badge/status-badge.test.ts"
+            ],
+            "variant": "astro"
+          },
+          {
+            "files": [
+              "src/ui/atoms/status-badge/index.ts",
+              "src/ui/atoms/status-badge/status-badge.svelte",
+              "src/ui/atoms/status-badge/status-badge.svelte.test.ts"
+            ],
+            "variant": "svelte"
+          },
+          {
+            "files": [
+              "src/ui/atoms/status-badge/index.ts",
+              "src/ui/atoms/status-badge/status-badge.test.ts",
+              "src/ui/atoms/status-badge/status-badge.vue"
+            ],
+            "variant": "vue"
+          },
+          {
+            "files": [
+              "src/ui/atoms/status-badge/index.ts",
+              "src/ui/atoms/status-badge/status-badge.module.css",
+              "src/ui/atoms/status-badge/status-badge.test.tsx",
+              "src/ui/atoms/status-badge/status-badge.tsx"
+            ],
+            "variant": "react"
+          },
+          {
+            "files": [
+              "src/ui/atoms/status-badge/index.ts",
+              "src/ui/atoms/status-badge/status-badge.test.ts",
+              "src/ui/atoms/status-badge/status-badge.ts"
+            ],
+            "variant": "lit"
+          },
+          {
+            "files": [
+              "src/ui/atoms/status_badge.rs"
+            ],
+            "variant": "leptos"
+          },
+          {
+            "files": [
+              "src/ui/atoms/status_badge.rs"
+            ],
+            "variant": "dioxus"
+          },
+          {
+            "files": [
+              "src/ui/atoms/status_badge.rs"
+            ],
+            "variant": "yew"
+          },
+          {
+            "files": [
+              "lib/ui/atoms/status_badge.dart",
+              "test/ui/atoms/status_badge_test.dart"
+            ],
+            "variant": "flutter"
+          },
+          {
+            "files": [
+              "shared/src/commonMain/kotlin/com/example/app/ui/atoms/StatusBadge.kt",
+              "shared/src/jvmTest/kotlin/com/example/app/ui/atoms/StatusBadgeTest.kt"
+            ],
+            "variant": "compose-multiplatform"
+          },
+          {
+            "files": [
+              "app/src/main/java/com/example/app/ui/atoms/StatusBadge.kt",
+              "app/src/test/java/com/example/app/ui/atoms/StatusBadgeTest.kt"
+            ],
+            "variant": "compose"
+          },
+          {
+            "files": [
+              "Sources/App/UI/Atoms/StatusBadge.swift",
+              "Tests/AppTests/UI/Atoms/StatusBadgeTests.swift"
+            ],
+            "variant": "swiftui-package"
+          },
+          {
+            "files": [
+              "App/UI/Atoms/StatusBadge.swift",
+              "AppTests/UI/Atoms/StatusBadgeTests.swift"
+            ],
+            "variant": "swiftui"
+          }
+        ],
+        "inputs": [
+          {
+            "default": null,
+            "description": "Component name, e.g. `status-badge`.",
+            "example": "ExampleAtom",
+            "name": "name",
+            "required": true,
+            "translations": {
+              "es-mx": {
+                "description": "Nombre del componente, p. ej. `status-badge`."
+              }
+            },
+            "type": "string"
+          },
+          {
+            "default": null,
+            "description": "Add a test file; on by default when the project can run it.",
+            "example": null,
+            "name": "tests",
+            "required": false,
+            "translations": {
+              "es-mx": {
+                "description": "Agrega un archivo de pruebas; se activa por defecto cuando el proyecto puede correrlo."
+              }
+            },
+            "type": "bool"
+          },
+          {
+            "default": "app",
+            "description": "App name: the SwiftUI app folder or the Flutter package.",
+            "example": "ExampleApp",
+            "name": "app",
+            "required": false,
+            "translations": {
+              "es-mx": {
+                "description": "Nombre de la app: la carpeta de la app de SwiftUI o el paquete de Flutter."
+              }
+            },
+            "type": "string"
+          },
+          {
+            "default": "com.example.app",
+            "description": "Kotlin package for Jetpack Compose.",
+            "example": "com.example.app",
+            "name": "package",
+            "required": false,
+            "translations": {
+              "es-mx": {
+                "description": "Paquete de Kotlin para Jetpack Compose."
+              }
+            },
+            "type": "string"
+          }
+        ],
+        "kind": "piece",
+        "name": "atom",
+        "needs": [],
+        "target": "src/ui/atoms",
+        "translations": {
+          "es-mx": {
+            "description": "El bloque de UI más pequeño, como un badge, un ícono o una etiqueta."
+          }
+        },
+        "variants": [
+          "angular",
+          "qwik",
+          "solid",
+          "astro",
+          "svelte",
+          "vue",
+          "react",
+          "lit",
+          "leptos",
+          "dioxus",
+          "yew",
+          "flutter",
+          "compose-multiplatform",
+          "compose",
+          "swiftui-package",
+          "swiftui"
+        ]
+      },
+      {
+        "dependencies": [
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "vitest",
+            "variants": [
+              "qwik",
+              "solid",
+              "astro",
+              "svelte",
+              "vue",
+              "react",
+              "lit"
+            ],
+            "version": "^4.0"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@testing-library/react",
+            "variants": [
+              "react"
+            ],
+            "version": "^16.3"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@testing-library/dom",
+            "variants": [
+              "react"
+            ],
+            "version": "^10.4"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@solidjs/testing-library",
+            "variants": [
+              "solid"
+            ],
+            "version": "^1.0.0-rc.2"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@testing-library/svelte",
+            "variants": [
+              "svelte"
+            ],
+            "version": "^5.2"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@vue/test-utils",
+            "variants": [
+              "vue"
+            ],
+            "version": "^2.4"
+          },
+          {
+            "dev": null,
+            "ecosystem": "pub",
+            "name": "material_ui",
+            "variants": [
+              "flutter"
+            ],
+            "version": "^1.1.0"
+          }
+        ],
+        "description": "A small group of atoms with one job, such as a labelled field.",
+        "examples": [
+          {
+            "files": [
+              "src/ui/molecules/search-field/index.ts",
+              "src/ui/molecules/search-field/search-field.css",
+              "src/ui/molecules/search-field/search-field.html",
+              "src/ui/molecules/search-field/search-field.spec.ts",
+              "src/ui/molecules/search-field/search-field.ts"
+            ],
+            "variant": "angular"
+          },
+          {
+            "files": [
+              "src/ui/molecules/search-field/index.ts",
+              "src/ui/molecules/search-field/search-field.css",
+              "src/ui/molecules/search-field/search-field.test.tsx",
+              "src/ui/molecules/search-field/search-field.tsx"
+            ],
+            "variant": "qwik"
+          },
+          {
+            "files": [
+              "src/ui/molecules/search-field/index.ts",
+              "src/ui/molecules/search-field/search-field.module.css",
+              "src/ui/molecules/search-field/search-field.test.tsx",
+              "src/ui/molecules/search-field/search-field.tsx"
+            ],
+            "variant": "solid"
+          },
+          {
+            "files": [
+              "src/ui/molecules/search-field/index.ts",
+              "src/ui/molecules/search-field/search-field.astro",
+              "src/ui/molecules/search-field/search-field.test.ts"
+            ],
+            "variant": "astro"
+          },
+          {
+            "files": [
+              "src/ui/molecules/search-field/index.ts",
+              "src/ui/molecules/search-field/search-field.svelte",
+              "src/ui/molecules/search-field/search-field.svelte.test.ts"
+            ],
+            "variant": "svelte"
+          },
+          {
+            "files": [
+              "src/ui/molecules/search-field/index.ts",
+              "src/ui/molecules/search-field/search-field.test.ts",
+              "src/ui/molecules/search-field/search-field.vue"
+            ],
+            "variant": "vue"
+          },
+          {
+            "files": [
+              "src/ui/molecules/search-field/index.ts",
+              "src/ui/molecules/search-field/search-field.module.css",
+              "src/ui/molecules/search-field/search-field.test.tsx",
+              "src/ui/molecules/search-field/search-field.tsx"
+            ],
+            "variant": "react"
+          },
+          {
+            "files": [
+              "src/ui/molecules/search-field/index.ts",
+              "src/ui/molecules/search-field/search-field.test.ts",
+              "src/ui/molecules/search-field/search-field.ts"
+            ],
+            "variant": "lit"
+          },
+          {
+            "files": [
+              "src/ui/molecules/search_field.rs"
+            ],
+            "variant": "leptos"
+          },
+          {
+            "files": [
+              "src/ui/molecules/search_field.rs"
+            ],
+            "variant": "dioxus"
+          },
+          {
+            "files": [
+              "src/ui/molecules/search_field.rs"
+            ],
+            "variant": "yew"
+          },
+          {
+            "files": [
+              "lib/ui/molecules/search_field.dart",
+              "test/ui/molecules/search_field_test.dart"
+            ],
+            "variant": "flutter"
+          },
+          {
+            "files": [
+              "shared/src/commonMain/kotlin/com/example/app/ui/molecules/SearchField.kt",
+              "shared/src/jvmTest/kotlin/com/example/app/ui/molecules/SearchFieldTest.kt"
+            ],
+            "variant": "compose-multiplatform"
+          },
+          {
+            "files": [
+              "app/src/main/java/com/example/app/ui/molecules/SearchField.kt",
+              "app/src/test/java/com/example/app/ui/molecules/SearchFieldTest.kt"
+            ],
+            "variant": "compose"
+          },
+          {
+            "files": [
+              "Sources/App/UI/Molecules/SearchField.swift",
+              "Tests/AppTests/UI/Molecules/SearchFieldTests.swift"
+            ],
+            "variant": "swiftui-package"
+          },
+          {
+            "files": [
+              "App/UI/Molecules/SearchField.swift",
+              "AppTests/UI/Molecules/SearchFieldTests.swift"
+            ],
+            "variant": "swiftui"
+          }
+        ],
+        "inputs": [
+          {
+            "default": null,
+            "description": "Component name, e.g. `search-field`.",
+            "example": "ExampleMolecule",
+            "name": "name",
+            "required": true,
+            "translations": {
+              "es-mx": {
+                "description": "Nombre del componente, p. ej. `search-field`."
+              }
+            },
+            "type": "string"
+          },
+          {
+            "default": null,
+            "description": "Add a test file; on by default when the project can run it.",
+            "example": null,
+            "name": "tests",
+            "required": false,
+            "translations": {
+              "es-mx": {
+                "description": "Agrega un archivo de pruebas; se activa por defecto cuando el proyecto puede correrlo."
+              }
+            },
+            "type": "bool"
+          },
+          {
+            "default": "app",
+            "description": "App name: the SwiftUI app folder or the Flutter package.",
+            "example": "ExampleApp",
+            "name": "app",
+            "required": false,
+            "translations": {
+              "es-mx": {
+                "description": "Nombre de la app: la carpeta de la app de SwiftUI o el paquete de Flutter."
+              }
+            },
+            "type": "string"
+          },
+          {
+            "default": "com.example.app",
+            "description": "Kotlin package for Jetpack Compose.",
+            "example": "com.example.app",
+            "name": "package",
+            "required": false,
+            "translations": {
+              "es-mx": {
+                "description": "Paquete de Kotlin para Jetpack Compose."
+              }
+            },
+            "type": "string"
+          }
+        ],
+        "kind": "piece",
+        "name": "molecule",
+        "needs": [],
+        "target": "src/ui/molecules",
+        "translations": {
+          "es-mx": {
+            "description": "Un grupo pequeño de átomos con una sola tarea, como un campo con su etiqueta."
+          }
+        },
+        "variants": [
+          "angular",
+          "qwik",
+          "solid",
+          "astro",
+          "svelte",
+          "vue",
+          "react",
+          "lit",
+          "leptos",
+          "dioxus",
+          "yew",
+          "flutter",
+          "compose-multiplatform",
+          "compose",
+          "swiftui-package",
+          "swiftui"
+        ]
+      },
+      {
+        "dependencies": [
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "vitest",
+            "variants": [
+              "qwik",
+              "solid",
+              "astro",
+              "svelte",
+              "vue",
+              "react",
+              "lit"
+            ],
+            "version": "^4.0"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@testing-library/react",
+            "variants": [
+              "react"
+            ],
+            "version": "^16.3"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@testing-library/dom",
+            "variants": [
+              "react"
+            ],
+            "version": "^10.4"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@solidjs/testing-library",
+            "variants": [
+              "solid"
+            ],
+            "version": "^1.0.0-rc.2"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@testing-library/svelte",
+            "variants": [
+              "svelte"
+            ],
+            "version": "^5.2"
+          },
+          {
+            "dev": true,
+            "ecosystem": "npm",
+            "name": "@vue/test-utils",
+            "variants": [
+              "vue"
+            ],
+            "version": "^2.4"
+          },
+          {
+            "dev": null,
+            "ecosystem": "pub",
+            "name": "material_ui",
+            "variants": [
+              "flutter"
+            ],
+            "version": "^1.1.0"
+          }
+        ],
+        "description": "A distinct section of an interface built from molecules, such as a header.",
+        "examples": [
+          {
+            "files": [
+              "src/ui/organisms/site-header/index.ts",
+              "src/ui/organisms/site-header/site-header.css",
+              "src/ui/organisms/site-header/site-header.html",
+              "src/ui/organisms/site-header/site-header.spec.ts",
+              "src/ui/organisms/site-header/site-header.ts"
+            ],
+            "variant": "angular"
+          },
+          {
+            "files": [
+              "src/ui/organisms/site-header/index.ts",
+              "src/ui/organisms/site-header/site-header.css",
+              "src/ui/organisms/site-header/site-header.test.tsx",
+              "src/ui/organisms/site-header/site-header.tsx"
+            ],
+            "variant": "qwik"
+          },
+          {
+            "files": [
+              "src/ui/organisms/site-header/index.ts",
+              "src/ui/organisms/site-header/site-header.module.css",
+              "src/ui/organisms/site-header/site-header.test.tsx",
+              "src/ui/organisms/site-header/site-header.tsx"
+            ],
+            "variant": "solid"
+          },
+          {
+            "files": [
+              "src/ui/organisms/site-header/index.ts",
+              "src/ui/organisms/site-header/site-header.astro",
+              "src/ui/organisms/site-header/site-header.test.ts"
+            ],
+            "variant": "astro"
+          },
+          {
+            "files": [
+              "src/ui/organisms/site-header/index.ts",
+              "src/ui/organisms/site-header/site-header.svelte",
+              "src/ui/organisms/site-header/site-header.svelte.test.ts"
+            ],
+            "variant": "svelte"
+          },
+          {
+            "files": [
+              "src/ui/organisms/site-header/index.ts",
+              "src/ui/organisms/site-header/site-header.test.ts",
+              "src/ui/organisms/site-header/site-header.vue"
+            ],
+            "variant": "vue"
+          },
+          {
+            "files": [
+              "src/ui/organisms/site-header/index.ts",
+              "src/ui/organisms/site-header/site-header.module.css",
+              "src/ui/organisms/site-header/site-header.test.tsx",
+              "src/ui/organisms/site-header/site-header.tsx"
+            ],
+            "variant": "react"
+          },
+          {
+            "files": [
+              "src/ui/organisms/site-header/index.ts",
+              "src/ui/organisms/site-header/site-header.test.ts",
+              "src/ui/organisms/site-header/site-header.ts"
+            ],
+            "variant": "lit"
+          },
+          {
+            "files": [
+              "src/ui/organisms/site_header.rs"
+            ],
+            "variant": "leptos"
+          },
+          {
+            "files": [
+              "src/ui/organisms/site_header.rs"
+            ],
+            "variant": "dioxus"
+          },
+          {
+            "files": [
+              "src/ui/organisms/site_header.rs"
+            ],
+            "variant": "yew"
+          },
+          {
+            "files": [
+              "lib/ui/organisms/site_header.dart",
+              "test/ui/organisms/site_header_test.dart"
+            ],
+            "variant": "flutter"
+          },
+          {
+            "files": [
+              "shared/src/commonMain/kotlin/com/example/app/ui/organisms/SiteHeader.kt",
+              "shared/src/jvmTest/kotlin/com/example/app/ui/organisms/SiteHeaderTest.kt"
+            ],
+            "variant": "compose-multiplatform"
+          },
+          {
+            "files": [
+              "app/src/main/java/com/example/app/ui/organisms/SiteHeader.kt",
+              "app/src/test/java/com/example/app/ui/organisms/SiteHeaderTest.kt"
+            ],
+            "variant": "compose"
+          },
+          {
+            "files": [
+              "Sources/App/UI/Organisms/SiteHeader.swift",
+              "Tests/AppTests/UI/Organisms/SiteHeaderTests.swift"
+            ],
+            "variant": "swiftui-package"
+          },
+          {
+            "files": [
+              "App/UI/Organisms/SiteHeader.swift",
+              "AppTests/UI/Organisms/SiteHeaderTests.swift"
+            ],
+            "variant": "swiftui"
+          }
+        ],
+        "inputs": [
+          {
+            "default": null,
+            "description": "Component name, e.g. `site-header`.",
+            "example": "ExampleOrganism",
+            "name": "name",
+            "required": true,
+            "translations": {
+              "es-mx": {
+                "description": "Nombre del componente, p. ej. `site-header`."
+              }
+            },
+            "type": "string"
+          },
+          {
+            "default": null,
+            "description": "Add a test file; on by default when the project can run it.",
+            "example": null,
+            "name": "tests",
+            "required": false,
+            "translations": {
+              "es-mx": {
+                "description": "Agrega un archivo de pruebas; se activa por defecto cuando el proyecto puede correrlo."
+              }
+            },
+            "type": "bool"
+          },
+          {
+            "default": "app",
+            "description": "App name: the SwiftUI app folder or the Flutter package.",
+            "example": "ExampleApp",
+            "name": "app",
+            "required": false,
+            "translations": {
+              "es-mx": {
+                "description": "Nombre de la app: la carpeta de la app de SwiftUI o el paquete de Flutter."
+              }
+            },
+            "type": "string"
+          },
+          {
+            "default": "com.example.app",
+            "description": "Kotlin package for Jetpack Compose.",
+            "example": "com.example.app",
+            "name": "package",
+            "required": false,
+            "translations": {
+              "es-mx": {
+                "description": "Paquete de Kotlin para Jetpack Compose."
+              }
+            },
+            "type": "string"
+          }
+        ],
+        "kind": "piece",
+        "name": "organism",
+        "needs": [],
+        "target": "src/ui/organisms",
+        "translations": {
+          "es-mx": {
+            "description": "Una sección propia de una interfaz, hecha de moléculas, como un encabezado."
+          }
+        },
+        "variants": [
+          "angular",
+          "qwik",
+          "solid",
+          "astro",
+          "svelte",
+          "vue",
+          "react",
+          "lit",
+          "leptos",
+          "dioxus",
+          "yew",
+          "flutter",
+          "compose-multiplatform",
+          "compose",
+          "swiftui-package",
+          "swiftui"
+        ]
+      }
+    ],
+    "source": "official:ui",
+    "translations": {
+      "es-mx": {
+        "description": "Piezas de UI de diseño atómico (átomos, moléculas y organismos) para Svelte, Astro, Leptos, Dioxus, Yew, SwiftUI y otros stacks web y nativos."
+      }
+    },
+    "version": "0.2.0"
+  }
+]

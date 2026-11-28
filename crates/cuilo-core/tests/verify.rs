@@ -69,6 +69,7 @@ fn plan_page(engine: &Engine, pack: &Pack) -> Result<cuilo_core::plan::Plan<cuil
 		target: None,
 		granted: None,
 		force: false,
+		wire: false,
 	})
 }
 
@@ -147,6 +148,7 @@ fn verify_should_refuse_a_plan_that_writes_into_linked_dependencies() -> TestRes
 		target: None,
 		granted: None,
 		force: false,
+		wire: false,
 	})?;
 
 	let error = engine

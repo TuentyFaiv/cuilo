@@ -1,0 +1,19 @@
+---
+source: crates/cuilo-core/tests/official_packs.rs
+expression: "create_hono(\"x-basic\", \"app/server.ts\", false)?"
+---
+x-basic: app/server.ts
+→ Register the error handler in the file that creates your Hono app, with `app.onError(errorHandler)`.
+→ Mount the routes in the file that creates your Hono app, with `app.route("/status-badges", statusBadgeRoutes(new StatusBadgeService(new InMemoryStatusBadgeRepository())))`.
+! src/index.ts: none of `src/index.ts` or `src/index.tsx` exists; wire it by hand
+→ Register the middleware in the file that creates your Hono app, before your routes, with `app.use(statusBadge)`.
+! src/index.ts: none of `src/index.ts` or `src/index.tsx` exists; wire it by hand
+---
+import { showRoutes } from 'hono/dev'
+import { createApp } from 'honox/server'
+
+const app = createApp()
+
+showRoutes(app)
+
+export default app

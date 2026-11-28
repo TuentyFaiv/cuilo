@@ -1,0 +1,24 @@
+---
+source: crates/cuilo-core/tests/official_packs.rs
+expression: "format!(\"{listing}---\\n{}\", String::from_utf8_lossy(&main))"
+---
+→ Set `DATABASE_URL` to your PostgreSQL connection string.
+→ Enable the sqlx features the code uses with `cargo add sqlx --features runtime-tokio,tls-rustls,postgres,uuid,chrono`.
+→ Connect in `main` with `database::connect().await` and give the `PgPool` to your repositories.
+→ Create the `status_badges` table with `sqlx migrate add create_status_badges`, writing `CREATE TABLE status_badges (id uuid PRIMARY KEY, name text NOT NULL, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL)`, then apply it with `sqlx migrate run`.
+→ Nest the routes before your router's layers with `.nest("/status-badges", status_badges::routes(Arc::new(StatusBadgeService::new(PgStatusBadgeRepository::new(pool)))))`, importing them from `status_badges`, where `pool` is your `PgPool`, such as the one `database::connect()` from `cuilo add backend/database` returns.
+---
+use axum::{Router, routing::get};
+
+mod database;
+
+mod error;
+
+mod status_badges;
+
+#[tokio::main]
+async fn main() {
+    let app = Router::new().route("/", get(|| async { "Hello, World!" }));
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    axum::serve(listener, app).await.unwrap();
+}

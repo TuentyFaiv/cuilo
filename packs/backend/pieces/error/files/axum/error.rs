@@ -1,4 +1,5 @@
 //! Application errors, sent to clients as RFC 9457 problem details.
+#![allow(dead_code, reason = "the app's handlers use each part of this API as they need it")]
 
 use axum::Json;
 use axum::http::{StatusCode, header};

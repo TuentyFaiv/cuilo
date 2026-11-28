@@ -1,6 +1,8 @@
 //! Repository automation: `cargo xtask <task>`, running the same checks as CI.
 
+mod docs;
 mod release;
+mod verify;
 
 use std::env;
 use std::fmt;
@@ -18,10 +20,17 @@ Tasks:
   js      Check JS/JSON formatting and lints with Biome (requires bun)
   ci      Run fmt, lint, doc, test, deny and js in order
   schema  Regenerate the JSON Schemas in schemas/
+  docs    Regenerate the docs site's CLI and schema reference and pack data;
+          with --check, fail if they differ from the code instead
+  verify-packs [options]
+          Add every official piece, in each variant, to its stack's fixture and
+          run that ecosystem's checks and tests; `verify-packs --help` lists
+          the options
 
 Release tasks:
   version                   Print the version every channel ships
   release-check             Check that every channel agrees, and nothing still blocks a release
+  release-notes             Print this version's changelog section, for the GitHub Release
   download-url              Print the download host the channels fetch from
   channels <latest> <pre>   Print the channel files this version moves forward, given the
                             versions they name now (empty for none)
@@ -192,6 +201,7 @@ fn release_task(name: &str, args: &[String]) -> Option<Result<(), String>> {
 				Err(problems.join("\n"))
 			}
 		}),
+		"release-notes" => release::notes().map(|notes| print!("{notes}")),
 		"download-url" => release::download_url().map(|url| println!("{url}")),
 		"channels" => {
 			let current = |index: usize| args.get(index).map_or("", String::as_str);
@@ -224,7 +234,14 @@ fn main() -> ExitCode {
 		return ExitCode::FAILURE;
 	};
 
-	if let Some(result) = release_task(&name, &args[1..]) {
+	let result = if name == "docs" {
+		Some(docs::run(args.get(1).is_some_and(|flag| flag == "--check")))
+	} else if name == "verify-packs" {
+		Some(verify::run(&args[1..]))
+	} else {
+		release_task(&name, &args[1..])
+	};
+	if let Some(result) = result {
 		return match result {
 			Ok(()) => ExitCode::SUCCESS,
 			Err(error) => {

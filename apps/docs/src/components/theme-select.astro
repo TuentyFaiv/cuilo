@@ -1,0 +1,102 @@
+---
+import type { LucideName } from "./lucide-icons";
+
+import LucideIcon from "./lucide-icon.astro";
+import SelectMenu from "./select-menu.astro";
+
+interface Props {
+	/** Whether it is the header's icon button; otherwise it is the mobile menu's segmented control. */
+	compact?: boolean;
+}
+
+const { compact = false } = Astro.props;
+const label = Astro.locals.t("themeSelect.accessibleLabel");
+/** The themes in Starlight's order, with the icon each shows. */
+const themes: { value: string; label: string; icon: LucideName }[] = [
+	{ value: "dark", label: Astro.locals.t("themeSelect.dark"), icon: "moon" },
+	{ value: "light", label: Astro.locals.t("themeSelect.light"), icon: "sun" },
+	{ value: "auto", label: Astro.locals.t("themeSelect.auto"), icon: "monitor" },
+];
+/** The segmented control's order, from the design: light, dark, then the system's. */
+const segments = ["light", "dark", "auto"].flatMap((value) => themes.filter((theme) => theme.value === value));
+const segmentIconSize = 16;
+---
+
+<div class="cu-theme" data-theme-picker data-choice="auto">
+	{compact ? (
+		<SelectMenu id="cu-theme" look="icon" label={label} options={themes} value="auto" align="end" />
+	) : (
+		<fieldset class="segments">
+			<legend class="sr-only">{label}</legend>
+			{segments.map((theme) => (
+				<label title={theme.label}>
+					<input type="radio" class="sr-only" name="cu-theme-mode" value={theme.value} checked={theme.value === "auto"}>
+					<LucideIcon name={theme.icon} size={segmentIconSize} />
+					<span class="sr-only">{theme.label}</span>
+				</label>
+			))}
+		</fieldset>
+	)}
+</div>
+
+{/* Shows the stored theme before the first paint, as Starlight's own picker does. */}
+<script
+	is:inline
+	set:html={`(() => {
+		const stored = typeof localStorage !== "undefined" && localStorage.getItem("starlight-theme");
+		const choice = stored === "light" || stored === "dark" ? stored : "auto";
+		const picker = document.currentScript && document.currentScript.previousElementSibling;
+		if (!picker) return;
+		picker.dataset.choice = choice;
+		const select = picker.querySelector("cu-select");
+		if (select) select.setAttribute("value", choice);
+		for (const icon of picker.querySelectorAll("[data-option-icon]")) icon.hidden = icon.dataset.optionIcon !== choice;
+		for (const radio of picker.querySelectorAll("input[type=radio]")) radio.checked = radio.value === choice;
+	})();`}
+/>
+
+<script>
+	import "./theme-picker.ts";
+</script>
+
+<style>
+	.cu-theme {
+		display: flex;
+	}
+
+	.segments {
+		display: flex;
+		gap: 2px;
+		padding: 3px;
+		margin: 0;
+		background: var(--cu-control-bg);
+		border: 1px solid var(--cu-control-border);
+		border-radius: var(--cu-control-radius);
+	}
+
+	.segments label {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-width: var(--cu-control-height);
+		/* Fieldset contents don't stretch: the control height less 3px padding and 1px border a side. */
+		min-height: calc(var(--cu-control-height) - 8px);
+		color: var(--cu-muted);
+		cursor: pointer;
+		border-radius: calc(var(--cu-control-radius) - 4px);
+	}
+
+	.segments label:hover {
+		color: var(--cu-ink);
+	}
+
+	.segments label:has(:checked) {
+		color: var(--cu-ink);
+		background: var(--cu-accent-soft);
+	}
+
+	.segments label:has(:focus-visible) {
+		outline: var(--cu-focus-ring);
+		outline-offset: 1px;
+	}
+</style>

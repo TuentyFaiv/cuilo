@@ -1,0 +1,7 @@
+module example.com/echo-v5-app
+
+go 1.27.4
+
+require github.com/labstack/echo/v5 v5.4.7
+
+require golang.org/x/time v0.15.0 // indirect

@@ -14,7 +14,7 @@ import (
 // ErrNotFound reports that no example item has the given id.
 var ErrNotFound = errors.New("example item not found")
 
-// Repository stores example items; the service depends on it, not on a database.
+// Repository stores example items.
 type Repository interface {
 	List(ctx context.Context, limit, offset int) ([]ExampleItem, error)
 	Get(ctx context.Context, id uuid.UUID) (ExampleItem, error)

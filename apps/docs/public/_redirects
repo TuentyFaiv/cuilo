@@ -1,0 +1,13 @@
+# Pages that moved, each with and without its trailing slash. Workers static assets apply these before serving files.
+/packs/directory /directory/ 301
+/packs/directory/ /directory/ 301
+/packs/ui /directory/ui/ 301
+/packs/ui/ /directory/ui/ 301
+/packs/backend /directory/backend/ 301
+/packs/backend/ /directory/backend/ 301
+/es-mx/packs/directory /es-mx/directory/ 301
+/es-mx/packs/directory/ /es-mx/directory/ 301
+/es-mx/packs/ui /es-mx/directory/ui/ 301
+/es-mx/packs/ui/ /es-mx/directory/ui/ 301
+/es-mx/packs/backend /es-mx/directory/backend/ 301
+/es-mx/packs/backend/ /es-mx/directory/backend/ 301

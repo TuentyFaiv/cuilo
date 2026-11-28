@@ -107,6 +107,18 @@ impl Output {
 		text
 	}
 
+	/// What the user still has to do once the plan is applied, or nothing when the plan lists nothing.
+	pub fn next_steps(self, plan: &Plan<Validated>) -> String {
+		let mut text = String::new();
+		if !plan.next_steps().is_empty() {
+			let _ = writeln!(text, "{}", self.paint("1", "Next steps:"));
+			for (number, step) in plan.next_steps().iter().enumerate() {
+				let _ = writeln!(text, "  {}. {}", number + 1, printable_line(step));
+			}
+		}
+		text
+	}
+
 	/// Each check of a verification, with the output of those that failed.
 	pub fn verification(self, verification: &Verification) -> String {
 		let mut text = String::from("Checks on a copy with the plan applied:\n");

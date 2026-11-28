@@ -44,6 +44,7 @@ fn request<'a>(pack: &'a Pack, piece: &'a str, inputs: &'a Values) -> PieceReque
 		target: None,
 		granted: None,
 		force: false,
+		wire: false,
 	}
 }
 

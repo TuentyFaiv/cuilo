@@ -26,6 +26,15 @@ description = "Go module path from `go.mod`."
 example = "example.com/app"
 default = "example.com/app"
 
+[translations.es-mx]
+description = "Un recurso REST por capas: modelo, repositorio, servicio, rutas y pruebas; agrega la pieza `error` si falta."
+
+[translations.es-mx.inputs]
+name = "Nombre en singular, p. ej. `blog-post`."
+plural = "Nombre en plural para rutas, tablas y carpetas, p. ej. `blog-posts`."
+tests = "Agrega pruebas; se activa por defecto cuando el proyecto puede correrlas."
+module = "Ruta del módulo de Go, tomada de `go.mod`."
+
 [[variants]]
 name = "hono"
 when = { framework = "hono", language = "typescript" }
@@ -54,7 +63,13 @@ target = "internal/exampleitems"
 
 [[variants]]
 name = "echo"
-when = { framework = "echo" }
+when = { framework = "echo-v4" }
+files = "files/go"
+target = "internal/exampleitems"
+
+[[variants]]
+name = "echo-v5"
+when = { framework = "echo-v5" }
 files = "files/go"
 target = "internal/exampleitems"
 
@@ -91,6 +106,10 @@ path = "tests/example_items/test_example_item_router.py"
 when = "tests"
 
 [[files]]
+path = "tests/example_items/__init__.py"
+when = "tests"
+
+[[files]]
 path = "gorm_repository.go"
 when = "stack.gorm"
 
@@ -101,6 +120,151 @@ when = "tests"
 [[files]]
 path = "handler_test.go"
 when = "tests"
+
+[[steps]]
+text = "Add the Prisma client the repository imports with `cuilo add backend/database`, unless `src/shared/database.ts` already exports it."
+variants = ["hono", "express"]
+when = "stack.prisma"
+
+[[steps]]
+text = "Add `model ExampleItem` to `schema.prisma` with `id String @id @default(uuid())`, `name String`, `createdAt DateTime @default(now())` and `updatedAt DateTime @updatedAt`, then run `prisma migrate dev --name add-example-items` and `prisma generate`."
+variants = ["hono", "express"]
+when = "stack.prisma"
+
+[[steps]]
+text = "Create the `example_items` table with `drizzle-kit generate`, then `drizzle-kit migrate`."
+variants = ["hono", "express"]
+when = "stack.drizzle"
+
+[[steps]]
+text = "Mount the routes in the file that creates your Hono app, with `app.route(\"/example-items\", exampleItemRoutes(new ExampleItemService(new InMemoryExampleItemRepository())))`."
+variants = ["hono"]
+when = "!stack.drizzle && !stack.prisma"
+
+[[steps.patches]]
+kind = "import"
+file = ["src/index.ts", "src/index.tsx"]
+import = 'import { exampleItemRoutes } from "./modules/example-items/example-item.routes";'
+
+[[steps.patches]]
+kind = "import"
+file = ["src/index.ts", "src/index.tsx"]
+import = 'import { ExampleItemService } from "./modules/example-items/example-item.service";'
+
+[[steps.patches]]
+kind = "import"
+file = ["src/index.ts", "src/index.tsx"]
+import = 'import { InMemoryExampleItemRepository } from "./modules/example-items/example-item.repository";'
+
+[[steps.patches]]
+kind = "anchor"
+file = ["src/index.ts", "src/index.tsx"]
+anchor = ["export default app", "export const handler = handle(app)", "fire(app)", "serve("]
+position = "before"
+insert = "app.route(\"/example-items\", exampleItemRoutes(new ExampleItemService(new InMemoryExampleItemRepository())));\n\n"
+
+[[steps]]
+text = "Mount the routes in the file that creates your Hono app, with `app.route(\"/example-items\", exampleItemRoutes(new ExampleItemService(new DrizzleExampleItemRepository(db))))`, where `db` is your Drizzle database, such as the one `cuilo add backend/database` writes to `src/shared/database.ts`."
+variants = ["hono"]
+when = "stack.drizzle"
+
+[[steps]]
+text = "Mount the routes in the file that creates your Hono app, with `app.route(\"/example-items\", exampleItemRoutes(new ExampleItemService(new PrismaExampleItemRepository(prisma))))`, where `prisma` is the client from `src/shared/database.ts`."
+variants = ["hono"]
+when = "stack.prisma"
+
+[[steps]]
+text = "Mount the routes after `app.use(express.json())` with `app.use(\"/example-items\", exampleItemRoutes(new ExampleItemService(new InMemoryExampleItemRepository())))`."
+variants = ["express"]
+when = "!stack.drizzle && !stack.prisma"
+
+[[steps]]
+text = "Mount the routes after `app.use(express.json())` with `app.use(\"/example-items\", exampleItemRoutes(new ExampleItemService(new DrizzleExampleItemRepository(db))))`, where `db` is your Drizzle database, such as the one `cuilo add backend/database` writes to `src/shared/database.ts`."
+variants = ["express"]
+when = "stack.drizzle"
+
+[[steps]]
+text = "Mount the routes after `app.use(express.json())` with `app.use(\"/example-items\", exampleItemRoutes(new ExampleItemService(new PrismaExampleItemRepository(prisma))))`, where `prisma` is the client from `src/shared/database.ts`."
+variants = ["express"]
+when = "stack.prisma"
+
+[[steps]]
+text = "Declare the module with `mod example_items;` in `src/main.rs`."
+variants = ["axum"]
+
+[[steps.patches]]
+kind = "anchor"
+file = "src/main.rs"
+anchor = "#[tokio::main]"
+position = "before"
+insert = "mod example_items;\n\n"
+
+[[steps]]
+text = "Nest the routes before your router's layers with `.nest(\"/example-items\", example_items::routes(Arc::new(ExampleItemService::new(InMemoryExampleItemRepository::default()))))`, importing them from `example_items`."
+variants = ["axum"]
+when = "!stack.sqlx"
+
+[[steps]]
+text = "Create the `example_items` table with `sqlx migrate add create_example_items`, writing `CREATE TABLE example_items (id uuid PRIMARY KEY, name text NOT NULL, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL)`, then apply it with `sqlx migrate run`."
+variants = ["axum"]
+when = "stack.sqlx"
+
+[[steps]]
+text = "Nest the routes before your router's layers with `.nest(\"/example-items\", example_items::routes(Arc::new(ExampleItemService::new(PgExampleItemRepository::new(pool)))))`, importing them from `example_items`, where `pool` is your `PgPool`, such as the one `database::connect()` from `cuilo add backend/database` returns."
+variants = ["axum"]
+when = "stack.sqlx"
+
+[[steps]]
+text = "Include the routes in `app/main.py` with `app.include_router(example_items_router)`, importing `router as example_items_router` from `app.example_items.router`."
+variants = ["fastapi"]
+
+[[steps.patches]]
+kind = "anchor"
+file = "app/main.py"
+anchor = "app = FastAPI()"
+position = "before"
+insert = "from app.example_items.router import router as example_items_router\n\n"
+
+[[steps.patches]]
+kind = "anchor"
+file = "app/main.py"
+anchor = "app = FastAPI()"
+insert = "app.include_router(example_items_router)"
+
+[[steps]]
+text = "Add the `app/database.py` the tables and dependencies import with `cuilo add backend/database`, unless the project already has it."
+variants = ["fastapi"]
+when = "stack.sqlalchemy"
+
+[[steps]]
+text = "Create the `example_items` table, e.g. with an Alembic migration autogenerated from `Base.metadata`."
+variants = ["fastapi"]
+when = "stack.sqlalchemy"
+
+[[steps]]
+text = "Create the `example_items` table, e.g. with `db.AutoMigrate(&exampleitems.ExampleItem{})`."
+variants = ["chi", "echo", "echo-v5"]
+when = "stack.gorm"
+
+[[steps]]
+text = "Mount the routes with `r.Mount(\"/example-items\", exampleitems.NewHandler(exampleitems.NewService(exampleitems.NewMemoryRepository())).Routes())`, importing `example.com/app/internal/exampleitems`."
+variants = ["chi"]
+when = "!stack.gorm"
+
+[[steps]]
+text = "Mount the routes with `r.Mount(\"/example-items\", exampleitems.NewHandler(exampleitems.NewService(exampleitems.NewGormRepository(db))).Routes())`, importing `example.com/app/internal/exampleitems`, where `db` is your `*gorm.DB`, such as the one `database.Open()` from `cuilo add backend/database` returns."
+variants = ["chi"]
+when = "stack.gorm"
+
+[[steps]]
+text = "Register the routes with `exampleitems.NewHandler(exampleitems.NewService(exampleitems.NewMemoryRepository())).Register(e.Group(\"/example-items\"))`, importing `example.com/app/internal/exampleitems`."
+variants = ["echo", "echo-v5"]
+when = "!stack.gorm"
+
+[[steps]]
+text = "Register the routes with `exampleitems.NewHandler(exampleitems.NewService(exampleitems.NewGormRepository(db))).Register(e.Group(\"/example-items\"))`, importing `example.com/app/internal/exampleitems`, where `db` is your `*gorm.DB`, such as the one `database.Open()` from `cuilo add backend/database` returns."
+variants = ["echo", "echo-v5"]
+when = "stack.gorm"
 
 [[dependencies]]
 ecosystem = "npm"
@@ -133,7 +297,7 @@ variants = ["axum"]
 [[dependencies]]
 ecosystem = "cargo"
 name = "uuid"
-version = "1"
+version = "1.10"
 features = ["serde", "v7"]
 variants = ["axum"]
 
@@ -183,4 +347,4 @@ when = "tests"
 ecosystem = "go"
 name = "github.com/google/uuid"
 version = "v1.6.0"
-variants = ["chi", "echo"]
+variants = ["chi", "echo", "echo-v5"]

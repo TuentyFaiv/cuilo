@@ -1,0 +1,25 @@
+---
+source: crates/cuilo-core/tests/official_packs.rs
+expression: "create_hono(\"lambda-edge\", \"src/index.ts\", true)?"
+---
+lambda-edge: src/index.ts
+---
+import { Hono } from 'hono'
+import { handle } from '@hono/lambda-edge'
+import { errorHandler } from "./shared/error-handler";
+import { statusBadgeRoutes } from "./modules/status-badges/status-badge.routes";
+import { StatusBadgeService } from "./modules/status-badges/status-badge.service";
+import { InMemoryStatusBadgeRepository } from "./modules/status-badges/status-badge.repository";
+import { statusBadge } from "./shared/middleware/status-badge";
+
+const app = new Hono()
+app.use(statusBadge);
+app.onError(errorHandler);
+
+app.get('/', (c) => {
+  return c.text('Hello Hono!')
+})
+
+app.route("/status-badges", statusBadgeRoutes(new StatusBadgeService(new InMemoryStatusBadgeRepository())));
+
+export const handler = handle(app)

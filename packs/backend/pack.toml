@@ -1,9 +1,13 @@
 schema_version = 1
 name = "backend"
-version = "0.1.0"
-description = "Layered backend pieces: REST resources, problem-details errors and middleware for Hono, Express, Axum, FastAPI, chi and Echo."
+version = "0.2.0"
+description = "Layered backend pieces: REST resources, problem-details errors, middleware and database connections for Axum, Hono, Express, FastAPI, chi and Echo."
+kinds = ["backend"]
 license = "MIT"
 
 [permissions]
 write = ["src/**", "app/**", "tests/**", "internal/**"]
 dependencies = true
+
+[translations.es-mx]
+description = "Piezas de backend por capas: recursos REST, errores con problem details, middleware y conexiones a la base de datos para Axum, Hono, Express, FastAPI, chi y Echo."

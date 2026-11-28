@@ -316,9 +316,8 @@ pub(crate) fn apply(
 
 /// Undoes the last transaction; returns it, or `None` when there is nothing to undo.
 ///
-/// The journal is project state that a cloned project may carry, so it is checked before anything is
-/// written: no path may be one cuilo never writes, and every file must still hold what the
-/// transaction left there, or for an interrupted one what it found, unless `force`.
+/// A cloned project may carry the journal, so it is checked before any write: every path must be one
+/// cuilo writes, and, unless `force`, every file must still hold what the transaction left there.
 pub(crate) fn undo(
 	workspace: &Workspace,
 	force: bool,

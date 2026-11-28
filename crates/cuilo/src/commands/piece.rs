@@ -9,7 +9,7 @@ use crate::context::Context;
 use crate::inputs;
 
 impl Session {
-	pub(super) fn piece(self, context: &mut Context, args: &PieceArgs, adopt: bool) -> anyhow::Result<()> {
+	pub(super) fn piece(self, context: &mut Context, args: &PieceArgs, adopt: bool, wire: bool) -> anyhow::Result<()> {
 		let from = args
 			.from
 			.as_deref()
@@ -31,6 +31,7 @@ impl Session {
 			target: args.target.as_ref(),
 			granted: None,
 			force: args.apply.force,
+			wire,
 		};
 		let plan = if adopt {
 			context.engine.plan_adopt(&request)?

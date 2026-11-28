@@ -23,8 +23,12 @@ fn project() -> Result<tempfile::TempDir, Box<dyn Error>> {
 }
 
 fn session(root: &Path, requests: &[Value]) -> Result<Vec<Value>, Box<dyn Error>> {
+	session_with(root, UserConfig::default(), requests)
+}
+
+fn session_with(root: &Path, user: UserConfig, requests: &[Value]) -> Result<Vec<Value>, Box<dyn Error>> {
 	let input = requests.iter().map(ToString::to_string).collect::<Vec<_>>().join("\n");
-	let output = cuilo_rpc::serve_with(root, UserConfig::default(), input.as_bytes(), Vec::new())?;
+	let output = cuilo_rpc::serve_with(root, user, input.as_bytes(), Vec::new())?;
 	Ok(
 		String::from_utf8(output)?
 			.lines()
@@ -405,5 +409,112 @@ fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
 			fs::copy(entry.path(), target)?;
 		}
 	}
+	Ok(())
+}
+
+/// A Hono project holding a pack whose `page` piece has a wiring step for `src/index.ts`.
+fn wiring_project() -> Result<tempfile::TempDir, Box<dyn Error>> {
+	let dir = tempfile::tempdir()?;
+	fs::create_dir_all(dir.path().join("site/pieces/page/files"))?;
+	fs::create_dir(dir.path().join("src"))?;
+	fs::write(dir.path().join("cuilo.json"), r#"{"stack": {"framework": ["hono"]}}"#)?;
+	fs::write(dir.path().join("src/index.ts"), "const app = new Hono();\n")?;
+	fs::write(
+		dir.path().join("site/pack.toml"),
+		"schema_version = 1\nname = \"site\"\nversion = \"1.0.0\"\n[permissions]\nwrite = [\"src/**\"]\n",
+	)?;
+	fs::write(
+		dir.path().join("site/pieces/page/piece.toml"),
+		"schema_version = 1\nname = \"page\"\ntarget = \"src/pages\"\n[inputs.name]\ntype = \"string\"\nexample = \"MyPage\"\n\
+		 [[steps]]\ntext = \"Mount `myPageRoutes`.\"\n\
+		 [[steps.patches]]\nkind = \"anchor\"\nfile = \"src/index.ts\"\nanchor = \"const app = new Hono()\"\ninsert = \"app.route('/my-page', myPageRoutes);\"\n",
+	)?;
+	fs::write(
+		dir.path().join("site/pieces/page/files/my-page.ts"),
+		"export const myPageRoutes = [];\n",
+	)?;
+	Ok(dir)
+}
+
+fn create_page(id: u64, extra: &Value) -> Value {
+	let mut params = json!({ "pack": "site", "piece": "page", "inputs": { "name": format!("Page{id}") } });
+	if let (Some(params), Some(extra)) = (params.as_object_mut(), extra.as_object()) {
+		params.extend(extra.clone());
+	}
+	request(id, "plan.create", params)
+}
+
+#[test]
+fn plan_create_should_wire_when_asked_or_when_the_user_config_says_so() -> TestResult {
+	let dir = wiring_project()?;
+	let load = request(1, "pack.load", json!({ "path": dir.path().join("site") }));
+	let requests = [
+		load,
+		create_page(2, &json!({})),
+		create_page(3, &json!({ "wire": true })),
+		create_page(4, &json!({ "wire": false })),
+	];
+
+	let default = session(dir.path(), &requests)?;
+	let configured = session_with(
+		dir.path(),
+		UserConfig {
+			wire: true,
+			..UserConfig::default()
+		},
+		&requests,
+	)?;
+
+	let listed = |messages: &[Value], index: usize| {
+		responses(messages)[index]["result"]["report"]
+			.get("next_steps")
+			.is_some()
+	};
+	assert_eq!(
+		[listed(&default, 1), listed(&default, 2), listed(&default, 3)],
+		[true, false, true]
+	);
+	assert_eq!(
+		[listed(&configured, 1), listed(&configured, 2), listed(&configured, 3)],
+		[false, false, true]
+	);
+	Ok(())
+}
+
+#[test]
+fn plan_adopt_should_refuse_wire() -> TestResult {
+	let dir = wiring_project()?;
+	let messages = session(
+		dir.path(),
+		&[
+			request(1, "pack.load", json!({ "path": dir.path().join("site") })),
+			request(
+				2,
+				"plan.adopt",
+				json!({ "pack": "site", "piece": "page", "inputs": { "name": "Home" }, "wire": true }),
+			),
+		],
+	)?;
+
+	assert_eq!(responses(&messages)[1]["error"]["code"], -32602);
+	Ok(())
+}
+
+#[test]
+fn plan_apply_should_return_the_next_steps_to_relay() -> TestResult {
+	let dir = wiring_project()?;
+	let messages = session(
+		dir.path(),
+		&[
+			request(1, "pack.load", json!({ "path": dir.path().join("site") })),
+			create_page(2, &json!({})),
+			request(3, "plan.apply", json!({ "plan": 1 })),
+		],
+	)?;
+
+	assert_eq!(
+		responses(&messages)[2]["result"]["next_steps"],
+		json!(["Mount `page2Routes`."])
+	);
 	Ok(())
 }

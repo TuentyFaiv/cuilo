@@ -2,36 +2,116 @@
 source: crates/cuilo-core/tests/official_packs.rs
 expression: listing
 ---
+database · hono-drizzle
+  src/shared/database.ts
+  → Set `DATABASE_URL` to your PostgreSQL connection string.
+  → Point drizzle-kit at your tables in `drizzle.config.ts` with `export default defineConfig({ dialect: "postgresql", schema: "./src/**/*.table.ts", dbCredentials: { url: process.env.DATABASE_URL! } })`, importing `defineConfig` from `drizzle-kit`.
+database · hono-drizzle (orm)
+  src/shared/database.ts
+  → Set `DATABASE_URL` to your PostgreSQL connection string.
+  → Point drizzle-kit at your tables in `drizzle.config.ts` with `export default defineConfig({ dialect: "postgresql", schema: "./src/**/*.table.ts", dbCredentials: { url: process.env.DATABASE_URL! } })`, importing `defineConfig` from `drizzle-kit`.
+database · hono-prisma
+  src/shared/database.ts
+  → Set `DATABASE_URL` to your PostgreSQL connection string.
+  → Generate the client where `src/shared/database.ts` imports it, with `provider = "prisma-client"` and `output = "../src/generated/prisma"` in the generator of `prisma/schema.prisma`, as `prisma init` writes it, then run `prisma generate`.
+database · hono-prisma (orm)
+  src/shared/database.ts
+  → Set `DATABASE_URL` to your PostgreSQL connection string.
+  → Generate the client where `src/shared/database.ts` imports it, with `provider = "prisma-client"` and `output = "../src/generated/prisma"` in the generator of `prisma/schema.prisma`, as `prisma init` writes it, then run `prisma generate`.
+database · express-drizzle
+  src/shared/database.ts
+  → Set `DATABASE_URL` to your PostgreSQL connection string.
+  → Point drizzle-kit at your tables in `drizzle.config.ts` with `export default defineConfig({ dialect: "postgresql", schema: "./src/**/*.table.ts", dbCredentials: { url: process.env.DATABASE_URL! } })`, importing `defineConfig` from `drizzle-kit`.
+database · express-drizzle (orm)
+  src/shared/database.ts
+  → Set `DATABASE_URL` to your PostgreSQL connection string.
+  → Point drizzle-kit at your tables in `drizzle.config.ts` with `export default defineConfig({ dialect: "postgresql", schema: "./src/**/*.table.ts", dbCredentials: { url: process.env.DATABASE_URL! } })`, importing `defineConfig` from `drizzle-kit`.
+database · express-prisma
+  src/shared/database.ts
+  → Set `DATABASE_URL` to your PostgreSQL connection string.
+  → Generate the client where `src/shared/database.ts` imports it, with `provider = "prisma-client"` and `output = "../src/generated/prisma"` in the generator of `prisma/schema.prisma`, as `prisma init` writes it, then run `prisma generate`.
+database · express-prisma (orm)
+  src/shared/database.ts
+  → Set `DATABASE_URL` to your PostgreSQL connection string.
+  → Generate the client where `src/shared/database.ts` imports it, with `provider = "prisma-client"` and `output = "../src/generated/prisma"` in the generator of `prisma/schema.prisma`, as `prisma init` writes it, then run `prisma generate`.
+database · axum
+  src/database.rs
+  → Set `DATABASE_URL` to your PostgreSQL connection string.
+  → Declare the module with `mod database;` in `src/main.rs`.
+  → Enable the sqlx features the code uses with `cargo add sqlx --features runtime-tokio,tls-rustls,postgres,uuid,chrono`.
+  → Connect in `main` with `database::connect().await` and give the `PgPool` to your repositories.
+database · axum (orm)
+  src/database.rs
+  → Set `DATABASE_URL` to your PostgreSQL connection string.
+  → Declare the module with `mod database;` in `src/main.rs`.
+  → Enable the sqlx features the code uses with `cargo add sqlx --features runtime-tokio,tls-rustls,postgres,uuid,chrono`.
+  → Connect in `main` with `database::connect().await` and give the `PgPool` to your repositories.
 database · fastapi
   app/database.py
+  → Set `DATABASE_URL` to an async SQLAlchemy URL, e.g. one that starts with `postgresql+asyncpg://`, and add its driver, such as `asyncpg`.
 database · fastapi (orm)
   app/database.py
+  → Set `DATABASE_URL` to an async SQLAlchemy URL, e.g. one that starts with `postgresql+asyncpg://`, and add its driver, such as `asyncpg`.
+database · chi
+  internal/database/database.go
+  → Set `DATABASE_URL` to your PostgreSQL connection string.
+  → Open the connection in `main` with `db, err := database.Open()` from your module's `internal/database` package, and give `db` to your repositories.
+database · chi (orm)
+  internal/database/database.go
+  → Set `DATABASE_URL` to your PostgreSQL connection string.
+  → Open the connection in `main` with `db, err := database.Open()` from your module's `internal/database` package, and give `db` to your repositories.
+database · echo
+  internal/database/database.go
+  → Set `DATABASE_URL` to your PostgreSQL connection string.
+  → Open the connection in `main` with `db, err := database.Open()` from your module's `internal/database` package, and give `db` to your repositories.
+database · echo (orm)
+  internal/database/database.go
+  → Set `DATABASE_URL` to your PostgreSQL connection string.
+  → Open the connection in `main` with `db, err := database.Open()` from your module's `internal/database` package, and give `db` to your repositories.
+database · echo-v5
+  internal/database/database.go
+  → Set `DATABASE_URL` to your PostgreSQL connection string.
+  → Open the connection in `main` with `db, err := database.Open()` from your module's `internal/database` package, and give `db` to your repositories.
+database · echo-v5 (orm)
+  internal/database/database.go
+  → Set `DATABASE_URL` to your PostgreSQL connection string.
+  → Open the connection in `main` with `db, err := database.Open()` from your module's `internal/database` package, and give `db` to your repositories.
 error · hono
   src/shared/error-handler.ts
   src/shared/errors.test.ts
   src/shared/errors.ts
+  → Register the error handler in the file that creates your Hono app, with `app.onError(errorHandler)`.
 error · hono (orm)
   src/shared/error-handler.ts
   src/shared/errors.test.ts
   src/shared/errors.ts
+  → Register the error handler in the file that creates your Hono app, with `app.onError(errorHandler)`.
 error · express
   src/shared/error-handler.ts
   src/shared/errors.test.ts
   src/shared/errors.ts
+  → Register the error handler after all your routes with `app.use(errorHandler)`.
 error · express (orm)
   src/shared/error-handler.ts
   src/shared/errors.test.ts
   src/shared/errors.ts
+  → Register the error handler after all your routes with `app.use(errorHandler)`.
 error · axum
   src/error.rs
+  → Declare the module with `mod error;` in `src/main.rs`.
 error · axum (orm)
   src/error.rs
+  → Declare the module with `mod error;` in `src/main.rs`.
 error · fastapi
   app/errors.py
+  tests/__init__.py
   tests/test_errors.py
+  → Register the error handlers in `app/main.py` with `register_error_handlers(app)`, imported from `app.errors`.
 error · fastapi (orm)
   app/errors.py
+  tests/__init__.py
   tests/test_errors.py
+  → Register the error handlers in `app/main.py` with `register_error_handlers(app)`, imported from `app.errors`.
 error · chi
   internal/apperror/apperror.go
   internal/apperror/apperror_test.go
@@ -41,43 +121,77 @@ error · chi (orm)
 error · echo
   internal/apperror/apperror.go
   internal/apperror/apperror_test.go
+  → Send errors as problem details with `e.HTTPErrorHandler = apperror.Handler`.
 error · echo (orm)
   internal/apperror/apperror.go
   internal/apperror/apperror_test.go
+  → Send errors as problem details with `e.HTTPErrorHandler = apperror.Handler`.
+error · echo-v5
+  internal/apperror/apperror.go
+  internal/apperror/apperror_test.go
+  → Send errors as problem details with `e.HTTPErrorHandler = apperror.Handler`.
+error · echo-v5 (orm)
+  internal/apperror/apperror.go
+  internal/apperror/apperror_test.go
+  → Send errors as problem details with `e.HTTPErrorHandler = apperror.Handler`.
 middleware · hono
   src/shared/middleware/status-badge.test.ts
   src/shared/middleware/status-badge.ts
+  → Register the middleware in the file that creates your Hono app, before your routes, with `app.use(statusBadge)`.
 middleware · hono (orm)
   src/shared/middleware/status-badge.test.ts
   src/shared/middleware/status-badge.ts
+  → Register the middleware in the file that creates your Hono app, before your routes, with `app.use(statusBadge)`.
 middleware · express
   src/shared/middleware/status-badge.test.ts
   src/shared/middleware/status-badge.ts
+  → Register the middleware before your routes with `app.use(statusBadge)`.
 middleware · express (orm)
   src/shared/middleware/status-badge.test.ts
   src/shared/middleware/status-badge.ts
+  → Register the middleware before your routes with `app.use(statusBadge)`.
 middleware · axum
   src/middleware/status_badge.rs
+  → Declare the module with `pub mod status_badge;` in `src/middleware/mod.rs` and `mod middleware;` in `src/main.rs`, then add it to your router with `.layer(axum::middleware::from_fn(middleware::status_badge::status_badge))`.
 middleware · axum (orm)
   src/middleware/status_badge.rs
+  → Declare the module with `pub mod status_badge;` in `src/middleware/mod.rs` and `mod middleware;` in `src/main.rs`, then add it to your router with `.layer(axum::middleware::from_fn(middleware::status_badge::status_badge))`.
 middleware · fastapi
   app/middleware/status_badge.py
+  tests/__init__.py
+  tests/middleware/__init__.py
   tests/middleware/test_status_badge.py
+  → Add the middleware in `app/main.py` with `app.add_middleware(StatusBadgeMiddleware)`, imported from `app.middleware.status_badge`.
 middleware · fastapi (orm)
   app/middleware/status_badge.py
+  tests/__init__.py
+  tests/middleware/__init__.py
   tests/middleware/test_status_badge.py
+  → Add the middleware in `app/main.py` with `app.add_middleware(StatusBadgeMiddleware)`, imported from `app.middleware.status_badge`.
 middleware · chi
   internal/middleware/status_badge.go
   internal/middleware/status_badge_test.go
+  → Add the middleware to your router with `r.Use(middleware.StatusBadge)`.
 middleware · chi (orm)
   internal/middleware/status_badge.go
   internal/middleware/status_badge_test.go
+  → Add the middleware to your router with `r.Use(middleware.StatusBadge)`.
 middleware · echo
   internal/middleware/status_badge.go
   internal/middleware/status_badge_test.go
+  → Add the middleware with `e.Use(middleware.StatusBadge())`.
 middleware · echo (orm)
   internal/middleware/status_badge.go
   internal/middleware/status_badge_test.go
+  → Add the middleware with `e.Use(middleware.StatusBadge())`.
+middleware · echo-v5
+  internal/middleware/status_badge.go
+  internal/middleware/status_badge_test.go
+  → Add the middleware with `e.Use(middleware.StatusBadge())`.
+middleware · echo-v5 (orm)
+  internal/middleware/status_badge.go
+  internal/middleware/status_badge_test.go
+  → Add the middleware with `e.Use(middleware.StatusBadge())`.
 resource · hono
   src/modules/status-badges/status-badge.model.ts
   src/modules/status-badges/status-badge.repository.ts
@@ -88,6 +202,8 @@ resource · hono
   src/shared/error-handler.ts
   src/shared/errors.test.ts
   src/shared/errors.ts
+  → Register the error handler in the file that creates your Hono app, with `app.onError(errorHandler)`.
+  → Mount the routes in the file that creates your Hono app, with `app.route("/status-badges", statusBadgeRoutes(new StatusBadgeService(new InMemoryStatusBadgeRepository())))`.
 resource · hono (orm)
   src/modules/status-badges/status-badge.drizzle-repository.ts
   src/modules/status-badges/status-badge.model.ts
@@ -101,6 +217,12 @@ resource · hono (orm)
   src/shared/error-handler.ts
   src/shared/errors.test.ts
   src/shared/errors.ts
+  → Register the error handler in the file that creates your Hono app, with `app.onError(errorHandler)`.
+  → Add the Prisma client the repository imports with `cuilo add backend/database`, unless `src/shared/database.ts` already exports it.
+  → Add `model StatusBadge` to `schema.prisma` with `id String @id @default(uuid())`, `name String`, `createdAt DateTime @default(now())` and `updatedAt DateTime @updatedAt`, then run `prisma migrate dev --name add-status-badges` and `prisma generate`.
+  → Create the `status_badges` table with `drizzle-kit generate`, then `drizzle-kit migrate`.
+  → Mount the routes in the file that creates your Hono app, with `app.route("/status-badges", statusBadgeRoutes(new StatusBadgeService(new DrizzleStatusBadgeRepository(db))))`, where `db` is your Drizzle database, such as the one `cuilo add backend/database` writes to `src/shared/database.ts`.
+  → Mount the routes in the file that creates your Hono app, with `app.route("/status-badges", statusBadgeRoutes(new StatusBadgeService(new PrismaStatusBadgeRepository(prisma))))`, where `prisma` is the client from `src/shared/database.ts`.
 resource · express
   src/modules/status-badges/status-badge.model.ts
   src/modules/status-badges/status-badge.repository.ts
@@ -111,6 +233,8 @@ resource · express
   src/shared/error-handler.ts
   src/shared/errors.test.ts
   src/shared/errors.ts
+  → Register the error handler after all your routes with `app.use(errorHandler)`.
+  → Mount the routes after `app.use(express.json())` with `app.use("/status-badges", statusBadgeRoutes(new StatusBadgeService(new InMemoryStatusBadgeRepository())))`.
 resource · express (orm)
   src/modules/status-badges/status-badge.drizzle-repository.ts
   src/modules/status-badges/status-badge.model.ts
@@ -124,6 +248,12 @@ resource · express (orm)
   src/shared/error-handler.ts
   src/shared/errors.test.ts
   src/shared/errors.ts
+  → Register the error handler after all your routes with `app.use(errorHandler)`.
+  → Add the Prisma client the repository imports with `cuilo add backend/database`, unless `src/shared/database.ts` already exports it.
+  → Add `model StatusBadge` to `schema.prisma` with `id String @id @default(uuid())`, `name String`, `createdAt DateTime @default(now())` and `updatedAt DateTime @updatedAt`, then run `prisma migrate dev --name add-status-badges` and `prisma generate`.
+  → Create the `status_badges` table with `drizzle-kit generate`, then `drizzle-kit migrate`.
+  → Mount the routes after `app.use(express.json())` with `app.use("/status-badges", statusBadgeRoutes(new StatusBadgeService(new DrizzleStatusBadgeRepository(db))))`, where `db` is your Drizzle database, such as the one `cuilo add backend/database` writes to `src/shared/database.ts`.
+  → Mount the routes after `app.use(express.json())` with `app.use("/status-badges", statusBadgeRoutes(new StatusBadgeService(new PrismaStatusBadgeRepository(prisma))))`, where `prisma` is the client from `src/shared/database.ts`.
 resource · axum
   src/error.rs
   src/status_badges/mod.rs
@@ -131,6 +261,9 @@ resource · axum
   src/status_badges/repository.rs
   src/status_badges/routes.rs
   src/status_badges/service.rs
+  → Declare the module with `mod error;` in `src/main.rs`.
+  → Declare the module with `mod status_badges;` in `src/main.rs`.
+  → Nest the routes before your router's layers with `.nest("/status-badges", status_badges::routes(Arc::new(StatusBadgeService::new(InMemoryStatusBadgeRepository::default()))))`, importing them from `status_badges`.
 resource · axum (orm)
   src/error.rs
   src/status_badges/mod.rs
@@ -138,6 +271,10 @@ resource · axum (orm)
   src/status_badges/repository.rs
   src/status_badges/routes.rs
   src/status_badges/service.rs
+  → Declare the module with `mod error;` in `src/main.rs`.
+  → Declare the module with `mod status_badges;` in `src/main.rs`.
+  → Create the `status_badges` table with `sqlx migrate add create_status_badges`, writing `CREATE TABLE status_badges (id uuid PRIMARY KEY, name text NOT NULL, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL)`, then apply it with `sqlx migrate run`.
+  → Nest the routes before your router's layers with `.nest("/status-badges", status_badges::routes(Arc::new(StatusBadgeService::new(PgStatusBadgeRepository::new(pool)))))`, importing them from `status_badges`, where `pool` is your `PgPool`, such as the one `database::connect()` from `cuilo add backend/database` returns.
 resource · fastapi
   app/errors.py
   app/status_badges/__init__.py
@@ -147,9 +284,13 @@ resource · fastapi
   app/status_badges/router.py
   app/status_badges/schemas.py
   app/status_badges/service.py
+  tests/__init__.py
+  tests/status_badges/__init__.py
   tests/status_badges/test_status_badge_router.py
   tests/status_badges/test_status_badge_service.py
   tests/test_errors.py
+  → Register the error handlers in `app/main.py` with `register_error_handlers(app)`, imported from `app.errors`.
+  → Include the routes in `app/main.py` with `app.include_router(status_badges_router)`, importing `router as status_badges_router` from `app.status_badges.router`.
 resource · fastapi (orm)
   app/errors.py
   app/status_badges/__init__.py
@@ -160,9 +301,15 @@ resource · fastapi (orm)
   app/status_badges/schemas.py
   app/status_badges/service.py
   app/status_badges/tables.py
+  tests/__init__.py
+  tests/status_badges/__init__.py
   tests/status_badges/test_status_badge_router.py
   tests/status_badges/test_status_badge_service.py
   tests/test_errors.py
+  → Register the error handlers in `app/main.py` with `register_error_handlers(app)`, imported from `app.errors`.
+  → Include the routes in `app/main.py` with `app.include_router(status_badges_router)`, importing `router as status_badges_router` from `app.status_badges.router`.
+  → Add the `app/database.py` the tables and dependencies import with `cuilo add backend/database`, unless the project already has it.
+  → Create the `status_badges` table, e.g. with an Alembic migration autogenerated from `Base.metadata`.
 resource · chi
   internal/apperror/apperror.go
   internal/apperror/apperror_test.go
@@ -172,6 +319,7 @@ resource · chi
   internal/statusbadges/repository.go
   internal/statusbadges/service.go
   internal/statusbadges/service_test.go
+  → Mount the routes with `r.Mount("/status-badges", statusbadges.NewHandler(statusbadges.NewService(statusbadges.NewMemoryRepository())).Routes())`, importing `github.com/acme/shop/internal/statusbadges`.
 resource · chi (orm)
   internal/apperror/apperror.go
   internal/apperror/apperror_test.go
@@ -182,6 +330,8 @@ resource · chi (orm)
   internal/statusbadges/repository.go
   internal/statusbadges/service.go
   internal/statusbadges/service_test.go
+  → Create the `status_badges` table, e.g. with `db.AutoMigrate(&statusbadges.StatusBadge{})`.
+  → Mount the routes with `r.Mount("/status-badges", statusbadges.NewHandler(statusbadges.NewService(statusbadges.NewGormRepository(db))).Routes())`, importing `github.com/acme/shop/internal/statusbadges`, where `db` is your `*gorm.DB`, such as the one `database.Open()` from `cuilo add backend/database` returns.
 resource · echo
   internal/apperror/apperror.go
   internal/apperror/apperror_test.go
@@ -191,6 +341,8 @@ resource · echo
   internal/statusbadges/repository.go
   internal/statusbadges/service.go
   internal/statusbadges/service_test.go
+  → Send errors as problem details with `e.HTTPErrorHandler = apperror.Handler`.
+  → Register the routes with `statusbadges.NewHandler(statusbadges.NewService(statusbadges.NewMemoryRepository())).Register(e.Group("/status-badges"))`, importing `github.com/acme/shop/internal/statusbadges`.
 resource · echo (orm)
   internal/apperror/apperror.go
   internal/apperror/apperror_test.go
@@ -201,3 +353,30 @@ resource · echo (orm)
   internal/statusbadges/repository.go
   internal/statusbadges/service.go
   internal/statusbadges/service_test.go
+  → Send errors as problem details with `e.HTTPErrorHandler = apperror.Handler`.
+  → Create the `status_badges` table, e.g. with `db.AutoMigrate(&statusbadges.StatusBadge{})`.
+  → Register the routes with `statusbadges.NewHandler(statusbadges.NewService(statusbadges.NewGormRepository(db))).Register(e.Group("/status-badges"))`, importing `github.com/acme/shop/internal/statusbadges`, where `db` is your `*gorm.DB`, such as the one `database.Open()` from `cuilo add backend/database` returns.
+resource · echo-v5
+  internal/apperror/apperror.go
+  internal/apperror/apperror_test.go
+  internal/statusbadges/handler.go
+  internal/statusbadges/handler_test.go
+  internal/statusbadges/model.go
+  internal/statusbadges/repository.go
+  internal/statusbadges/service.go
+  internal/statusbadges/service_test.go
+  → Send errors as problem details with `e.HTTPErrorHandler = apperror.Handler`.
+  → Register the routes with `statusbadges.NewHandler(statusbadges.NewService(statusbadges.NewMemoryRepository())).Register(e.Group("/status-badges"))`, importing `github.com/acme/shop/internal/statusbadges`.
+resource · echo-v5 (orm)
+  internal/apperror/apperror.go
+  internal/apperror/apperror_test.go
+  internal/statusbadges/gorm_repository.go
+  internal/statusbadges/handler.go
+  internal/statusbadges/handler_test.go
+  internal/statusbadges/model.go
+  internal/statusbadges/repository.go
+  internal/statusbadges/service.go
+  internal/statusbadges/service_test.go
+  → Send errors as problem details with `e.HTTPErrorHandler = apperror.Handler`.
+  → Create the `status_badges` table, e.g. with `db.AutoMigrate(&statusbadges.StatusBadge{})`.
+  → Register the routes with `statusbadges.NewHandler(statusbadges.NewService(statusbadges.NewGormRepository(db))).Register(e.Group("/status-badges"))`, importing `github.com/acme/shop/internal/statusbadges`, where `db` is your `*gorm.DB`, such as the one `database.Open()` from `cuilo add backend/database` returns.

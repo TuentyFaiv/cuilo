@@ -17,7 +17,7 @@ const pageSchema = z.object({
 });
 
 // @cuilo if stack.hono
-/** HTTP routes for example items; mount them with `app.route("/example-items", exampleItemRoutes(service))`. */
+/** HTTP routes for example items. */
 export function exampleItemRoutes(service: ExampleItemService) {
 	return new Hono()
 		.get("/", async (c) => c.json(await service.list(validate(pageSchema, c.req.query()))))
@@ -37,7 +37,7 @@ export function exampleItemRoutes(service: ExampleItemService) {
 		});
 }
 // @cuilo else
-/** HTTP routes for example items; mount them after `express.json()` with `app.use("/example-items", …)`. */
+/** HTTP routes for example items. */
 export function exampleItemRoutes(service: ExampleItemService): Router {
 	return Router()
 		.get("/", async (request, response) => {

@@ -7,6 +7,7 @@ use std::path::Path;
 
 use cuilo_core::engine::{FileState, UpdateRequest};
 use cuilo_core::migrate::{AstGrep, MigrateError};
+use cuilo_core::model::Fact;
 use cuilo_core::plan::{Action, OnConflict, Pick, ProblemKind, SelectError, Selection};
 use cuilo_core::{Engine, EngineError, Pack, PieceRequest, RelPath, UserConfig, Value, Values};
 
@@ -65,6 +66,7 @@ fn generated(pack: &Pack) -> Result<(tempfile::TempDir, Engine), Box<dyn Error>>
 		target: None,
 		granted: None,
 		force: false,
+		wire: false,
 	})?)?;
 	Ok((dir, engine))
 }
@@ -196,6 +198,96 @@ fn update_should_rebuild_the_original_from_the_old_pack_when_the_cache_is_gone()
 	};
 	assert!(rejected.problems[0].message.contains("not available"), "{rejected}");
 	assert_eq!(read(&dir, "src/pages/home.ts")?, "ONE\ntwo\nthree\nfour\nFIVE\n");
+	Ok(())
+}
+
+const HELPER: (&str, &str) = ("my-page.helper.ts", "export const helper = 1;\n");
+
+/// The import style the lockfile recorded for the first instance.
+fn recorded_style(engine: &Engine) -> Result<Vec<String>, Box<dyn Error>> {
+	let lock = engine.lockfile()?;
+	let instance = lock.instances.first().ok_or("no instance")?;
+	Ok(instance.stack.values(Fact::ImportStyle).map(str::to_owned).collect())
+}
+
+#[test]
+fn update_should_keep_the_import_style_the_piece_was_generated_with() -> TestResult {
+	let page_v1 = "import { helper } from \"./my-page.helper\";\n\nexport const page = helper;\n";
+	let page_v2 = "import { helper } from \"./my-page.helper\";\n\nexport const page = helper + 1;\n";
+	let (old, new) = (
+		pack("1.0.0", &[("my-page.ts", page_v1), HELPER], &[])?,
+		pack("1.1.0", &[("my-page.ts", page_v2), HELPER], &[])?,
+	);
+	let dir = tempfile::tempdir()?;
+	fs::write(dir.path().join("package.json"), r#"{"type": "module"}"#)?;
+	fs::write(
+		dir.path().join("tsconfig.json"),
+		r#"{"compilerOptions": {"module": "NodeNext"}}"#,
+	)?;
+	let engine = open(dir.path())?;
+	let values = name();
+	engine.apply(engine.plan(&PieceRequest {
+		pack: &old,
+		piece: "page",
+		inputs: &values,
+		variant: None,
+		target: None,
+		granted: None,
+		force: false,
+		wire: false,
+	})?)?;
+	assert_eq!(
+		read(&dir, "src/pages/home.ts")?,
+		"import { helper } from \"./home.helper.js\";\n\nexport const page = helper;\n"
+	);
+	assert_eq!(recorded_style(&engine)?, ["imports-js"]);
+
+	fs::write(
+		dir.path().join("src/pages/home.ts"),
+		"// mine\nimport { helper } from \"./home.helper.js\";\n\nexport const page = helper;\n",
+	)?;
+	fs::write(
+		dir.path().join("tsconfig.json"),
+		r#"{"compilerOptions": {"moduleResolution": "bundler"}}"#,
+	)?;
+	fs::remove_dir_all(dir.path().join(".cuilo/objects"))?;
+	let engine = open(dir.path())?;
+	engine.apply(engine.plan_update(&update(&new, OnConflict::Refuse), &[old][..])?)?;
+
+	assert_eq!(
+		read(&dir, "src/pages/home.ts")?,
+		"// mine\nimport { helper } from \"./home.helper.js\";\n\nexport const page = helper + 1;\n"
+	);
+	assert_eq!(recorded_style(&engine)?, ["imports-js"]);
+	Ok(())
+}
+
+#[test]
+fn update_should_keep_extensionless_imports_for_pieces_recorded_without_a_style() -> TestResult {
+	let page_v1 = "import { helper } from \"./my-page.helper\";\n\nexport const page = helper;\n";
+	let page_v2 = "import { helper } from \"./my-page.helper\";\n\nexport const page = helper + 1;\n";
+	let (old, new) = (
+		pack("1.0.0", &[("my-page.ts", page_v1), HELPER], &[])?,
+		pack("1.1.0", &[("my-page.ts", page_v2), HELPER], &[])?,
+	);
+	let (dir, engine) = generated(&old)?;
+	fs::write(dir.path().join("package.json"), r#"{"type": "module"}"#)?;
+	fs::write(
+		dir.path().join("tsconfig.json"),
+		r#"{"compilerOptions": {"module": "NodeNext"}}"#,
+	)?;
+	let engine = {
+		drop(engine);
+		open(dir.path())?
+	};
+
+	engine.apply(engine.plan_update(&update(&new, OnConflict::Refuse), &[old][..])?)?;
+
+	assert_eq!(
+		read(&dir, "src/pages/home.ts")?,
+		"import { helper } from \"./home.helper\";\n\nexport const page = helper + 1;\n"
+	);
+	assert_eq!(recorded_style(&engine)?, Vec::<String>::new());
 	Ok(())
 }
 
@@ -401,6 +493,7 @@ fn a_skipped_new_file_should_not_be_written_or_recorded() -> TestResult {
 		target: None,
 		granted: None,
 		force: false,
+		wire: false,
 	})?;
 	let css = RelPath::new("src/pages/home.css")?;
 	assert_eq!(

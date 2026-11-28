@@ -1,13 +1,7 @@
-//! Pack sources for `cuilo`: official packs built into the binary, folders, GitHub tags, HTTPS
-//! tarballs and git repositories, each verified against the hash the lockfile pinned and, when
-//! signed, against the minisign keys the user trusts.
+//! Pack sources for `cuilo`: official packs, folders, GitHub tags, HTTPS tarballs and git repositories,
+//! verified against the lockfile hash and the user's trusted minisign keys.
 //!
-//! Network sources need the default `remote` feature; without it the HTTPS crates are left out,
-//! `git:` is refused, and remote sources load only from the cache.
-//!
-//! Layers, each using only those above it: `error` and `spec` (source strings), `transport`
-//! (downloads, git, credentials), `format` (archives, registry items), `signing`, `store` (cache,
-//! official packs, library) and `resolver`.
+//! Network sources need the default `remote` feature; without it they load only from the cache.
 
 mod error;
 mod format;

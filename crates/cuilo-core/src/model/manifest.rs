@@ -84,28 +84,164 @@ impl JsonSchema for Name {
 	}
 }
 
-/// `pack.toml`.
+/// A language tag that translations are keyed by: lowercase, such as `es-mx` or `pt-br`.
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Locale(String);
+
+/// Why a locale was rejected.
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+#[error(
+	"`{0}` must be a lowercase language tag such as `es-mx`: a 2- or 3-letter language, then `-` parts of 2 to 8 letters or digits"
+)]
+pub struct LocaleError(String);
+
+impl Locale {
+	/// Validates `locale`.
+	pub fn new(locale: &str) -> Result<Self, LocaleError> {
+		let mut parts = locale.split('-');
+		let language = parts
+			.next()
+			.is_some_and(|part| (2..=3).contains(&part.len()) && part.bytes().all(|byte| byte.is_ascii_lowercase()));
+		let rest = parts.all(|part| {
+			(2..=8).contains(&part.len())
+				&& part
+					.bytes()
+					.all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+		});
+		if language && rest && locale.len() <= 35 {
+			Ok(Self(locale.to_owned()))
+		} else {
+			Err(LocaleError(locale.to_owned()))
+		}
+	}
+
+	/// The tag as written.
+	#[must_use]
+	pub fn as_str(&self) -> &str {
+		&self.0
+	}
+}
+
+impl fmt::Display for Locale {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.write_str(&self.0)
+	}
+}
+
+impl fmt::Debug for Locale {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		fmt::Debug::fmt(&self.0, f)
+	}
+}
+
+impl Serialize for Locale {
+	fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+		serializer.serialize_str(&self.0)
+	}
+}
+
+impl<'de> Deserialize<'de> for Locale {
+	fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+		let text = Cow::<str>::deserialize(deserializer)?;
+		Self::new(&text).map_err(serde::de::Error::custom)
+	}
+}
+
+impl JsonSchema for Locale {
+	fn schema_name() -> Cow<'static, str> {
+		"Locale".into()
+	}
+
+	fn json_schema(_: &mut SchemaGenerator) -> Schema {
+		json_schema!({
+			"description": "A lowercase language tag, such as `es-mx` for Mexican Spanish or `pt-br` for Brazilian Portuguese.",
+			"type": "string",
+			"pattern": "^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$",
+			"maxLength": 35
+		})
+	}
+}
+
+/// `pack.toml`: a pack's name, version and permissions.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PackManifest {
 	/// Manifest format version; must be `1`.
 	pub schema_version: u32,
-	/// Pack name.
+	/// Lowercase letters, digits and `-`, starting with a letter.
 	pub name: Name,
 	/// Semantic version of the pack.
 	pub version: Version,
 	/// One-line summary.
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub description: Option<String>,
+	/// What the pack is for, as many as apply: `ui`, `backend`, `mobile` or `desktop`, each once, e.g.
+	/// `["ui", "mobile"]`. The pack directory lists the pack under each kind.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	#[schemars(extend("uniqueItems" = true))]
+	pub kinds: Vec<PackKind>,
 	/// SPDX license expression.
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub license: Option<String>,
 	/// What the pack may do in a project.
 	#[serde(default)]
 	pub permissions: Permissions,
-	/// Changes to project code that updates crossing a version make.
+	/// Code changes applied when an update crosses a version.
 	#[serde(default, skip_serializing_if = "Vec::is_empty")]
 	pub migrations: Vec<Migration>,
+	/// The pack's text in other languages, by locale, e.g. `[translations.es-mx]`. Readers in that locale see it,
+	/// and the English text where it gives none.
+	#[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+	pub translations: BTreeMap<Locale, PackTranslation>,
+}
+
+/// What a pack is for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PackKind {
+	/// User interface code, such as components, screens and their styles, on any platform.
+	Ui,
+	/// Server code, such as HTTP routes, middleware, errors and database access.
+	Backend,
+	/// Code for phone and tablet apps, e.g. with Swift, Flutter or Jetpack Compose.
+	Mobile,
+	/// Code for desktop apps on Windows, macOS or Linux, e.g. with Flutter, Compose Multiplatform or Dioxus.
+	Desktop,
+}
+
+impl PackKind {
+	/// The kind as `pack.toml` writes it.
+	#[must_use]
+	pub fn as_str(self) -> &'static str {
+		match self {
+			Self::Ui => "ui",
+			Self::Backend => "backend",
+			Self::Mobile => "mobile",
+			Self::Desktop => "desktop",
+		}
+	}
+}
+
+/// A pack's text in one locale.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PackTranslation {
+	/// The pack's `description` in this locale; the pack must have a `description`.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub description: Option<String>,
+}
+
+/// A piece's text in one locale.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PieceTranslation {
+	/// The piece's `description` in this locale; the piece must have a `description`.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub description: Option<String>,
+	/// Input descriptions in this locale, by input name, e.g. ``name = "Nombre del componente, p. ej.
+	/// `status-badge`."``. Each must name an input of the piece that has a `description`.
+	#[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+	pub inputs: BTreeMap<String, String>,
 }
 
 /// A change to project code made when an update crosses `to`, shown in the plan like any other change.
@@ -126,13 +262,13 @@ pub struct Migration {
 	pub ast_grep: Option<String>,
 }
 
-/// An identifier rename.
+/// Old and new identifier.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Rename {
-	/// The old name.
+	/// Identifier to replace.
 	pub from: String,
-	/// The new name.
+	/// Its replacement.
 	pub to: String,
 }
 
@@ -151,13 +287,13 @@ pub struct Permissions {
 	pub dependencies: bool,
 }
 
-/// `piece.toml`.
+/// `piece.toml`: one piece's inputs, templates and patches.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PieceManifest {
 	/// Manifest format version; must be `1`.
 	pub schema_version: u32,
-	/// Piece name; must match its folder.
+	/// Must match its folder; lowercase letters, digits and `-`.
 	pub name: Name,
 	/// What the piece is for.
 	#[serde(default)]
@@ -179,12 +315,20 @@ pub struct PieceManifest {
 	/// Edits to existing project files.
 	#[serde(default, skip_serializing_if = "Vec::is_empty")]
 	pub patches: Vec<PatchSpec>,
+	/// Setup the user does after `cuilo add`, such as mounting new routes; listed as next steps unless
+	/// cuilo applies the step's own patches.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub steps: Vec<Step>,
 	/// Pieces of the same pack this one builds on; added first when the project lacks them.
 	#[serde(default, skip_serializing_if = "Vec::is_empty")]
 	pub requires: Vec<Name>,
 	/// Packages the generated code imports.
 	#[serde(default, skip_serializing_if = "Vec::is_empty")]
 	pub dependencies: Vec<Dependency>,
+	/// The piece's description and input descriptions in other languages, by locale, e.g.
+	/// `[translations.es-mx]`. Readers in that locale see them, and the English text where they give none.
+	#[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+	pub translations: BTreeMap<Locale, PieceTranslation>,
 }
 
 /// What a piece is for.
@@ -209,7 +353,7 @@ pub enum Input {
 		/// Shown in help and schemas.
 		#[serde(default, skip_serializing_if = "Option::is_none")]
 		description: Option<String>,
-		/// Interactive prompt.
+		/// Question asked when no value is given.
 		#[serde(default, skip_serializing_if = "Option::is_none")]
 		prompt: Option<String>,
 		/// Text in the templates that this input replaces.
@@ -224,7 +368,7 @@ pub enum Input {
 		/// Shown in help and schemas.
 		#[serde(default, skip_serializing_if = "Option::is_none")]
 		description: Option<String>,
-		/// Interactive prompt.
+		/// Question asked when no value is given.
 		#[serde(default, skip_serializing_if = "Option::is_none")]
 		prompt: Option<String>,
 		/// Value used when none is given.
@@ -239,7 +383,7 @@ pub enum Input {
 		/// Shown in help and schemas.
 		#[serde(default, skip_serializing_if = "Option::is_none")]
 		description: Option<String>,
-		/// Interactive prompt.
+		/// Question asked when no value is given.
 		#[serde(default, skip_serializing_if = "Option::is_none")]
 		prompt: Option<String>,
 		/// Allowed values.
@@ -253,7 +397,7 @@ pub enum Input {
 		/// Shown in help and schemas.
 		#[serde(default, skip_serializing_if = "Option::is_none")]
 		description: Option<String>,
-		/// Interactive prompt.
+		/// Question asked when no value is given.
 		#[serde(default, skip_serializing_if = "Option::is_none")]
 		prompt: Option<String>,
 		/// Number in the templates that this input replaces.
@@ -288,7 +432,7 @@ impl Input {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Variant {
-	/// Variant name.
+	/// Recorded in the lockfile; lowercase letters, digits and `-`.
 	pub name: Name,
 	/// Project facts that must all hold, e.g. `{ framework = "react" }`.
 	#[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -296,9 +440,11 @@ pub struct Variant {
 	/// Template folder inside the piece; defaults to `files/<name>`.
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub files: Option<String>,
-	/// Output folder instead of the piece's `target`, e.g. `lib/ui` for Flutter.
+	/// Output folder instead of the piece's `target`, e.g. `lib/ui` for Flutter. A list gives alternatives in order
+	/// of preference, none of them the root: the first folder the project has is used, or the first alternative when
+	/// it has none, e.g. `["shared", "composeApp"]`.
 	#[serde(default, skip_serializing_if = "Option::is_none")]
-	pub target: Option<String>,
+	pub target: Option<Targets>,
 }
 
 /// A kind of project fact.
@@ -322,6 +468,10 @@ pub enum Fact {
 	Testing,
 	/// Formatters and fixing linters the project uses, e.g. `biome`, `prettier`, `eslint`, `ruff`, `rustfmt`.
 	Formatter,
+	/// How generated JavaScript and TypeScript write relative imports: `imports-extensionless` (`./foo`),
+	/// `imports-js` (`./foo.js`) or `imports-ts` (`./foo.ts`), from the `tsconfig.json` that governs the
+	/// output folder, or Deno.
+	ImportStyle,
 }
 
 impl Fact {
@@ -337,15 +487,35 @@ impl Fact {
 			Self::PackageManager => "package_manager",
 			Self::Testing => "testing",
 			Self::Formatter => "formatter",
+			Self::ImportStyle => "import_style",
 		}
 	}
+}
+
+/// Setup the user does after adding a piece; with `patches`, a wiring step cuilo applies when wiring is on.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Step {
+	/// The next step shown after `cuilo add`, e.g. ``Mount the routes with `app.route("/example-items", routes)`.``;
+	/// may contain examples.
+	pub text: String,
+	/// Variants it applies to; empty for every variant.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub variants: Vec<Name>,
+	/// Condition on inputs or stack facts, e.g. `stack.vitest`.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub when: Option<String>,
+	/// Edits that do the step, applied all or none, and only with `cuilo add --wire` or `wire = true` in the
+	/// user config; the same kinds and fields as `patches`.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub patches: Vec<PatchSpec>,
 }
 
 /// A package the generated code imports.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Dependency {
-	/// Package registry.
+	/// Registry, which also decides the project file the package is added to.
 	pub ecosystem: Ecosystem,
 	/// Package name, e.g. `zod` or `github.com/google/uuid`.
 	pub name: String,
@@ -370,19 +540,19 @@ pub struct Dependency {
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum Ecosystem {
-	/// npm, also used by Bun, pnpm, Yarn and Deno.
+	/// npm (`package.json`), also used by Bun, pnpm, Yarn and Deno.
 	Npm,
-	/// crates.io.
+	/// crates.io (`Cargo.toml`).
 	Cargo,
-	/// The Python Package Index.
+	/// The Python Package Index (`pyproject.toml`).
 	Pypi,
-	/// Go modules.
+	/// Go modules (`go.mod`).
 	Go,
-	/// pub.dev.
+	/// pub.dev (`pubspec.yaml`).
 	Pub,
-	/// The Ruby gem registry.
+	/// The Ruby gem registry (`Gemfile`).
 	Rubygems,
-	/// Packagist.
+	/// Packagist (`composer.json`).
 	Packagist,
 }
 
@@ -418,10 +588,13 @@ pub struct FileRule {
 pub enum PatchSpec {
 	/// Inserts text next to an anchor line; works in every language.
 	Anchor {
-		/// Project file to edit; may contain examples.
-		file: String,
-		/// Text identifying the anchor line.
-		anchor: String,
+		/// Project file to edit, or a list of alternatives in order of preference: the first one the project has
+		/// is used. A step's patches, or the piece's own, that share a file must list the same alternatives in the
+		/// same order. May contain examples.
+		file: Files,
+		/// Text the anchor line contains, or a list of alternatives tried in order: the first one in the file
+		/// is used, and one on more than one line fails the patch without trying the rest.
+		anchor: Anchors,
 		/// Where to insert relative to the anchor line.
 		#[serde(default)]
 		position: Position,
@@ -433,8 +606,10 @@ pub enum PatchSpec {
 	},
 	/// Adds a JavaScript or TypeScript import after the existing imports.
 	Import {
-		/// Project file to edit; may contain examples.
-		file: String,
+		/// Project file to edit, or a list of alternatives in order of preference: the first one the project has
+		/// is used. A step's patches, or the piece's own, that share a file must list the same alternatives in the
+		/// same order. May contain examples.
+		file: Files,
 		/// The import statement; may contain examples.
 		import: String,
 		/// Condition that keeps the patch.
@@ -443,8 +618,10 @@ pub enum PatchSpec {
 	},
 	/// Adds CSS custom properties to a block such as `:root`, keeping values the project already set.
 	CssVars {
-		/// Project CSS file to edit; may contain examples.
-		file: String,
+		/// Project CSS file to edit, or a list of alternatives in order of preference: the first one the project
+		/// has is used. A step's patches, or the piece's own, that share a file must list the same alternatives in
+		/// the same order. May contain examples.
+		file: Files,
 		/// The block's selector or at-rule, e.g. `:root`, `.dark` or `@theme inline`.
 		selector: String,
 		/// Properties without the leading `--`, e.g. `sidebar-border = "220 13% 91%"`.
@@ -456,9 +633,9 @@ pub enum PatchSpec {
 }
 
 impl PatchSpec {
-	/// The project file the patch edits.
+	/// The project file the patch edits, or its alternatives.
 	#[must_use]
-	pub fn file(&self) -> &str {
+	pub fn file(&self) -> &Files {
 		match self {
 			Self::Anchor { file, .. } | Self::Import { file, .. } | Self::CssVars { file, .. } => file,
 		}
@@ -471,6 +648,270 @@ impl PatchSpec {
 			Self::Anchor { when, .. } | Self::Import { when, .. } | Self::CssVars { when, .. } => when.as_deref(),
 		}
 	}
+}
+
+/// The text an anchor line contains, or alternatives in order of preference; never empty.
+///
+/// Written as a string for one alternative and as a list for several.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Anchors(Vec<String>);
+
+impl Anchors {
+	/// Alternatives in order of preference; `None` when there are none.
+	#[must_use]
+	pub fn new(alternatives: Vec<String>) -> Option<Self> {
+		(!alternatives.is_empty()).then_some(Self(alternatives))
+	}
+
+	/// The alternatives in order of preference.
+	pub fn iter(&self) -> impl Iterator<Item = &str> {
+		self.0.iter().map(String::as_str)
+	}
+}
+
+impl From<&str> for Anchors {
+	fn from(anchor: &str) -> Self {
+		Self(vec![anchor.to_owned()])
+	}
+}
+
+/// The alternatives in backticks, e.g. `` `a`, `b` or `c` ``.
+impl fmt::Display for Anchors {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.write_str(&or_list(&self.0))
+	}
+}
+
+impl Serialize for Anchors {
+	fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+		serialize_alternatives(&self.0, serializer)
+	}
+}
+
+impl<'de> Deserialize<'de> for Anchors {
+	fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+		deserializer
+			.deserialize_any(AlternativesVisitor(
+				"the anchor text or a non-empty list of alternatives",
+			))
+			.map(Self)
+	}
+}
+
+impl JsonSchema for Anchors {
+	fn schema_name() -> Cow<'static, str> {
+		"Anchors".into()
+	}
+
+	fn json_schema(_: &mut SchemaGenerator) -> Schema {
+		json_schema!({
+			"description": "The text an anchor line contains, or alternatives in order of preference.",
+			"anyOf": [
+				{
+					"description": "Text that exactly one line of the file must contain.",
+					"type": "string"
+				},
+				{
+					"description": "Alternatives tried in order: the first one in the file is used, and one on more than one line fails the patch without trying the rest.",
+					"type": "array",
+					"items": { "type": "string" },
+					"minItems": 1
+				}
+			]
+		})
+	}
+}
+
+/// The project file a patch edits, or alternatives in order of preference; never empty.
+///
+/// Written as a string for one alternative and as a list for several.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Files(Vec<String>);
+
+impl Files {
+	/// Alternatives in order of preference; `None` when there are none.
+	#[must_use]
+	pub fn new(alternatives: Vec<String>) -> Option<Self> {
+		(!alternatives.is_empty()).then_some(Self(alternatives))
+	}
+
+	/// The alternatives in order of preference.
+	#[must_use]
+	pub fn as_slice(&self) -> &[String] {
+		&self.0
+	}
+}
+
+impl From<&str> for Files {
+	fn from(file: &str) -> Self {
+		Self(vec![file.to_owned()])
+	}
+}
+
+impl Serialize for Files {
+	fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+		serialize_alternatives(&self.0, serializer)
+	}
+}
+
+impl<'de> Deserialize<'de> for Files {
+	fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+		deserializer
+			.deserialize_any(AlternativesVisitor(
+				"a project file or a non-empty list of alternatives",
+			))
+			.map(Self)
+	}
+}
+
+impl JsonSchema for Files {
+	fn schema_name() -> Cow<'static, str> {
+		"Files".into()
+	}
+
+	fn json_schema(_: &mut SchemaGenerator) -> Schema {
+		json_schema!({
+			"description": "The project file a patch edits, or alternatives in order of preference.",
+			"anyOf": [
+				{
+					"description": "Path from the project root of a file the project must have.",
+					"type": "string"
+				},
+				{
+					"description": "Alternatives in order of preference: the first one the project has is used, and on `cuilo update` the one the piece already patched. A step's patches, or the piece's own, that share an alternative must list the same alternatives in the same order, so they all edit the same file.",
+					"type": "array",
+					"items": { "type": "string" },
+					"minItems": 1
+				}
+			]
+		})
+	}
+}
+
+/// A variant's output folder, or alternatives in order of preference; never empty.
+///
+/// Written as a string for one folder and as a list for several.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Targets(Vec<String>);
+
+impl Targets {
+	/// Alternatives in order of preference; `None` when there are none.
+	#[must_use]
+	pub fn new(alternatives: Vec<String>) -> Option<Self> {
+		(!alternatives.is_empty()).then_some(Self(alternatives))
+	}
+
+	/// The alternatives in order of preference.
+	#[must_use]
+	pub fn as_slice(&self) -> &[String] {
+		&self.0
+	}
+}
+
+impl From<&str> for Targets {
+	fn from(target: &str) -> Self {
+		Self(vec![target.to_owned()])
+	}
+}
+
+impl Serialize for Targets {
+	fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+		serialize_alternatives(&self.0, serializer)
+	}
+}
+
+impl<'de> Deserialize<'de> for Targets {
+	fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+		deserializer
+			.deserialize_any(AlternativesVisitor("a folder or a non-empty list of alternatives"))
+			.map(Self)
+	}
+}
+
+impl JsonSchema for Targets {
+	fn schema_name() -> Cow<'static, str> {
+		"Targets".into()
+	}
+
+	fn json_schema(_: &mut SchemaGenerator) -> Schema {
+		json_schema!({
+			"description": "The folder the variant writes into, or alternatives in order of preference.",
+			"anyOf": [
+				{
+					"description": "Path from the project root; may contain examples, and `\"\"` is the root itself.",
+					"type": "string"
+				},
+				{
+					"description": "Alternatives in order of preference, none of them the root: the first folder the project has is used, and the first alternative when it has none, e.g. `[\"shared\", \"composeApp\"]` for the two layouts of Compose Multiplatform. `cuilo.lock` records the folder used, so updates keep it.",
+					"type": "array",
+					"items": { "type": "string" },
+					"minItems": 1
+				}
+			]
+		})
+	}
+}
+
+/// Writes one alternative as a string and several as a list.
+fn serialize_alternatives<S: Serializer>(alternatives: &[String], serializer: S) -> Result<S::Ok, S::Error> {
+	match alternatives {
+		[one] => serializer.serialize_str(one),
+		several => several.serialize(serializer),
+	}
+}
+
+/// Reads a string or a non-empty list of strings; holds what it expects, for errors.
+struct AlternativesVisitor(&'static str);
+
+impl<'de> serde::de::Visitor<'de> for AlternativesVisitor {
+	type Value = Vec<String>;
+
+	fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.write_str(self.0)
+	}
+
+	fn visit_str<E: serde::de::Error>(self, text: &str) -> Result<Vec<String>, E> {
+		Ok(vec![text.to_owned()])
+	}
+
+	fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut seq: A) -> Result<Vec<String>, A::Error> {
+		let mut alternatives = Vec::new();
+		while let Some(alternative) = seq.next_element::<String>()? {
+			alternatives.push(alternative);
+		}
+		if alternatives.is_empty() {
+			return Err(serde::de::Error::invalid_length(0, &self));
+		}
+		Ok(alternatives)
+	}
+}
+
+/// `items` in backticks, e.g. `` `a`, `b` or `c` ``.
+pub(crate) fn or_list<T: fmt::Display>(items: &[T]) -> String {
+	let mut text = String::new();
+	for (i, item) in items.iter().enumerate() {
+		let separator = match i {
+			0 => "",
+			_ if i + 1 == items.len() => " or ",
+			_ => ", ",
+		};
+		text.push_str(separator);
+		text.push('`');
+		text.push_str(&item.to_string());
+		text.push('`');
+	}
+	text
+}
+
+/// A file that two different lists of alternatives in `lists` share, which could send patches meant for one
+/// file to two.
+pub(crate) fn shared_alternative<'a, T: PartialEq>(lists: &[&'a [T]]) -> Option<&'a T> {
+	lists.iter().enumerate().find_map(|(i, list)| {
+		lists[i + 1..]
+			.iter()
+			.filter(|other| other != &list)
+			.find_map(|other| list.iter().find(|file| other.contains(file)))
+	})
 }
 
 /// Where an anchor patch inserts its text.
@@ -504,6 +945,16 @@ mod tests {
 	}
 
 	#[test]
+	fn locale_should_accept_lowercase_language_tags_only() {
+		for valid in ["es", "es-mx", "pt-br", "zh-hans-cn", "sr-latn", "es-419"] {
+			assert!(Locale::new(valid).is_ok(), "{valid}");
+		}
+		for invalid in ["", "e", "espa", "es-MX", "es_mx", "es-", "-mx", "es-m", "es-abcdefghi"] {
+			assert!(Locale::new(invalid).is_err(), "{invalid}");
+		}
+	}
+
+	#[test]
 	fn piece_manifest_should_parse_tagged_inputs() {
 		let manifest: PieceManifest = toml::from_str(
 			r#"
@@ -529,6 +980,126 @@ mod tests {
 				..
 			})
 		));
+	}
+
+	fn anchor_of(patch: &str) -> Result<Anchors, toml::de::Error> {
+		let manifest: PieceManifest = toml::from_str(&format!(
+			"schema_version = 1\nname = \"x\"\ntarget = \"src\"\n[[patches]]\nkind = \"anchor\"\nfile = \"a.ts\"\ninsert = \"x\"\n{patch}\n"
+		))?;
+		match manifest.patches.into_iter().next() {
+			Some(PatchSpec::Anchor { anchor, .. }) => Ok(anchor),
+			other => panic!("expected an anchor patch, got {other:?}"),
+		}
+	}
+
+	#[test]
+	fn anchor_should_accept_one_text_and_write_it_back_as_a_string() {
+		let anchor = anchor_of("anchor = \"export default app\"").unwrap();
+
+		assert_eq!(anchor.iter().collect::<Vec<_>>(), ["export default app"]);
+		assert_eq!(serde_json::to_value(&anchor).unwrap(), "export default app");
+	}
+
+	#[test]
+	fn anchor_should_accept_alternatives_in_order() {
+		let anchor = anchor_of("anchor = [\"export default app\", \"serve(\"]").unwrap();
+
+		assert_eq!(anchor.iter().collect::<Vec<_>>(), ["export default app", "serve("]);
+		assert_eq!(
+			serde_json::to_value(&anchor).unwrap(),
+			serde_json::json!(["export default app", "serve("])
+		);
+	}
+
+	#[test]
+	fn anchor_should_reject_an_empty_list() {
+		let error = anchor_of("anchor = []").unwrap_err();
+
+		assert!(error.to_string().contains("non-empty list of alternatives"), "{error}");
+	}
+
+	#[test]
+	fn anchors_should_display_as_a_backticked_list() {
+		let one = Anchors::from("a");
+		let three = Anchors::new(vec!["a".to_owned(), "b".to_owned(), "c".to_owned()]).unwrap();
+
+		assert_eq!(one.to_string(), "`a`");
+		assert_eq!(three.to_string(), "`a`, `b` or `c`");
+		assert_eq!(Anchors::new(Vec::new()), None);
+	}
+
+	fn piece_with_import(file: &str) -> Result<PieceManifest, toml::de::Error> {
+		toml::from_str(&format!(
+			"schema_version = 1\nname = \"x\"\ntarget = \"src\"\n[[patches]]\nkind = \"import\"\n{file}\nimport = \"import a from 'a';\"\n"
+		))
+	}
+
+	fn file_of(file: &str) -> Result<Files, toml::de::Error> {
+		let manifest = piece_with_import(file)?;
+		Ok(manifest.patches[0].file().clone())
+	}
+
+	#[test]
+	fn file_should_accept_one_path_and_write_it_back_as_a_string() {
+		let file = file_of("file = \"src/index.ts\"").unwrap();
+
+		assert_eq!(file.as_slice(), ["src/index.ts"]);
+		assert_eq!(serde_json::to_value(&file).unwrap(), "src/index.ts");
+	}
+
+	#[test]
+	fn file_should_accept_alternatives_in_order_and_write_them_back_as_a_list() {
+		let file = file_of("file = [\"src/index.ts\", \"src/index.tsx\"]").unwrap();
+
+		assert_eq!(file.as_slice(), ["src/index.ts", "src/index.tsx"]);
+		assert_eq!(
+			serde_json::to_value(&file).unwrap(),
+			serde_json::json!(["src/index.ts", "src/index.tsx"])
+		);
+	}
+
+	#[test]
+	fn file_should_reject_an_empty_list() {
+		let error = file_of("file = []").unwrap_err();
+
+		assert!(
+			error
+				.to_string()
+				.contains("a project file or a non-empty list of alternatives"),
+			"{error}"
+		);
+	}
+
+	#[test]
+	fn manifest_should_keep_a_single_file_a_string_when_written_back() {
+		let one = toml::to_string(&piece_with_import("file = \"src/index.ts\"").unwrap()).unwrap();
+		let two = toml::to_string(&piece_with_import("file = [\"src/index.ts\", \"src/index.tsx\"]").unwrap()).unwrap();
+
+		assert!(one.contains("file = \"src/index.ts\"\n"), "{one}");
+		assert!(two.contains("file = [\"src/index.ts\", \"src/index.tsx\"]\n"), "{two}");
+		assert_eq!(
+			piece_with_import("file = \"src/index.ts\"").unwrap(),
+			toml::from_str(&one).unwrap()
+		);
+	}
+
+	#[test]
+	fn shared_alternative_should_find_a_file_that_two_different_lists_share() {
+		let entries = ["src/index.ts", "src/index.tsx"];
+		let reversed = ["src/index.tsx", "src/index.ts"];
+
+		assert_eq!(
+			shared_alternative::<&str>(&[&entries, &entries, &["src/main.ts"]]),
+			None
+		);
+		assert_eq!(
+			shared_alternative::<&str>(&[&entries, &["src/main.ts"], &["src/index.tsx"]]),
+			Some(&"src/index.tsx")
+		);
+		assert_eq!(
+			shared_alternative::<&str>(&[&entries, &reversed]),
+			Some(&"src/index.ts")
+		);
 	}
 
 	#[test]

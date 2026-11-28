@@ -1,0 +1,8 @@
+# Security headers for every static asset Workers serves from dist/.
+# script-src is not restricted: Starlight relies on inline scripts. Test in a browser before tightening it.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+  Content-Security-Policy: frame-ancestors 'none'; base-uri 'self'; object-src 'none'

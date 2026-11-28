@@ -26,7 +26,7 @@ const fn default_limit() -> u32 {
 
 type Service<R> = State<Arc<ExampleItemService<R>>>;
 
-/// HTTP routes for example items; nest them with `Router::nest("/example-items", routes(service))`.
+/// HTTP routes for example items.
 pub fn routes<R: ExampleItemRepository>(service: Arc<ExampleItemService<R>>) -> Router {
 	Router::new()
 		.route("/", get(list::<R>).post(create::<R>))
